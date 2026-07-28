@@ -2,12 +2,22 @@ import { describe, it, expect } from 'vitest';
 import { assembleLines } from '../../src/parser/lines';
 import type { TextItem } from '../../src/parser/extract';
 
+// pageWidth is required by TextItem. assembleLines never reads it, but the
+// literals must carry it or the project stops typechecking.
+const item = (text: string, x: number, y: number): TextItem => ({
+  text,
+  x,
+  y,
+  page: 1,
+  pageWidth: 1000,
+});
+
 const wrapped: TextItem[] = [
-  { text: 'SEND 66', x: 550, y: 500, page: 1 },
-  { text: 'Computer Architecture and Assembly', x: 650, y: 500, page: 1 },
-  { text: 'Language Programming', x: 650, y: 488, page: 1 },
-  { text: '3.00', x: 950, y: 500, page: 1 },
-  { text: 'SEND 70', x: 550, y: 400, page: 1 },
+  item('SEND 66', 550, 500),
+  item('Computer Architecture and Assembly', 650, 500),
+  item('Language Programming', 650, 488),
+  item('3.00', 950, 500),
+  item('SEND 70', 550, 400),
 ];
 
 describe('assembleLines', () => {
