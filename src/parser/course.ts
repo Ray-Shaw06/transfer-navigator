@@ -7,9 +7,13 @@ export type ParsedLine =
   | { kind: 'not_articulated' }
   | { kind: 'other'; text: string };
 
-// Course code is a prefix of letters, digits and & characters, then a number
-// with an optional letter suffix. Units are the trailing decimal.
-const COURSE = /^([A-Z&][A-Z&\s]*?\s\d+[A-Z]*)\s+(.+?)\s+(\d+\.\d{2})$/;
+// A course code is one or more uppercase words, then a number with an optional
+// letter suffix. Units are the trailing decimal.
+//
+// The prefix words allow digits and ampersands because real codes include both:
+// I&C SCI 6D has an ampersand and two words, IN4MATX 43 has a digit inside the
+// prefix. A prefix class of [A-Z&] alone silently drops the latter.
+const COURSE = /^((?:[A-Z&][A-Z0-9&]*\s)+\d+[A-Z]*)\s+(.+?)\s+(\d+\.\d{2})$/;
 
 export function parseLine(line: Line): ParsedLine {
   const text = line.text.trim();

@@ -21,6 +21,19 @@ describe('parseLine', () => {
     expect(parseLine(line(word))).toEqual({ kind: 'connector', connector: word });
   });
 
+  it('handles a multi-word prefix and a digit inside the prefix', () => {
+    // Real agreements contain both shapes. A prefix pattern of [A-Z&] only
+    // drops the second one, and it drops it silently.
+    expect(parseLine(line('S&P TECH 6D Applied Widgets 4.00'))).toEqual({
+      kind: 'course',
+      course: { code: 'S&P TECH 6D', title: 'Applied Widgets', units: 4 },
+    });
+    expect(parseLine(line('AB4CDE 43 Widget Engineering 4.00'))).toEqual({
+      kind: 'course',
+      course: { code: 'AB4CDE 43', title: 'Widget Engineering', units: 4 },
+    });
+  });
+
   it('does not mistake prose for a course', () => {
     const result = parseLine(line('In fulfillment of the requirements below, a single course may be used only once.'));
     expect(result.kind).toBe('other');
