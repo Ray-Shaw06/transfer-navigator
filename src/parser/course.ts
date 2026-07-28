@@ -10,16 +10,17 @@ export type ParsedLine =
 // A course code is one or more uppercase words, then a number with an optional
 // letter suffix. Units are the trailing decimal.
 //
-// The prefix words allow digits and ampersands because real codes include both:
-// I&C SCI 6D has an ampersand and two words, IN4MATX 43 has a digit inside the
-// prefix. A prefix class of [A-Z&] alone silently drops the latter.
+// The prefix words allow digits and ampersands because real codes include both
+// shapes: a two word prefix joined by an ampersand, as in X&Y ZZZ 6D, and a
+// digit inside the prefix word, as in AB4CDE 43. A prefix class of [A-Z&]
+// alone silently drops the second.
 //
 // Two guards against matching an all-caps header instead of a course:
-// the prefix is at most two words, which covers every real shape including
-// I&C SCI, and the title must contain a lowercase letter, which every real
-// course title does and shouty header text does not. When in doubt this
-// returns other, which becomes an unreadable row the student is told to
-// verify. Inventing a course from a header is the failure we cannot have.
+// the prefix is at most two words, which covers every real shape seen, and
+// the title must contain a lowercase letter, which every real course title
+// does and shouty header text does not. When in doubt this returns other,
+// which becomes an unreadable row the student is told to verify. Inventing a
+// course from a header is the failure we cannot have.
 const COURSE = /^((?:[A-Z&][A-Z0-9&]*\s){1,2}\d+[A-Z]*)\s+((?=.*[a-z]).+?)\s+(\d+\.\d{2})$/;
 
 export function parseLine(line: Line): ParsedLine {
