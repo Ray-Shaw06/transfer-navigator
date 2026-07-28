@@ -39,4 +39,8 @@ describe('parseRequirement', () => {
     const result = parseRequirement(lines('SEND 2 Intro 4.00', 'see counselor for details'));
     expect(result).toEqual({ kind: 'unreadable', text: ['see counselor for details'] });
   });
+
+  it('treats an empty block as unreadable rather than as zero options', () => {
+    expect(parseRequirement([])).toEqual({ kind: 'unreadable', text: [] });
+  });
 });

@@ -15,9 +15,14 @@ export type Requirement =
 // block, because a confident wrong answer costs a student more than an
 // honest "check ASSIST" does.
 export function parseRequirement(lines: Line[]): Requirement {
+  // An empty block means the band claimed nothing. Returning zero options
+  // would read downstream as a requirement satisfiable by nothing, and the
+  // planner would then index an empty array. Unreadable is the safe failure.
+  if (lines.length === 0) return { kind: 'unreadable', text: [] };
+
   const parsed = lines.map(parseLine);
 
-  if (parsed.length > 0 && parsed.every((p) => p.kind === 'not_articulated')) {
+  if (parsed.every((p) => p.kind === 'not_articulated')) {
     return { kind: 'not_articulated' };
   }
 
