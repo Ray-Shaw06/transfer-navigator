@@ -40,6 +40,14 @@ export function parseRequirement(lines: Line[]): Requirement {
     }
   }
   options.push({ kind: 'and', courses: current });
+  const nonEmpty = options.filter((o) => o.courses.length > 0);
 
-  return { kind: 'options', options: options.filter((o) => o.courses.length > 0) };
+  // A block that parsed cleanly but produced no course at all, for example a
+  // stray connector banded on its own, is not a requirement satisfiable by
+  // nothing. Same safe failure as the empty block above.
+  if (nonEmpty.length === 0) {
+    return { kind: 'unreadable', text: lines.map((l) => l.text) };
+  }
+
+  return { kind: 'options', options: nonEmpty };
 }

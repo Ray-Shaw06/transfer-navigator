@@ -43,4 +43,22 @@ describe('parseRequirement', () => {
   it('treats an empty block as unreadable rather than as zero options', () => {
     expect(parseRequirement([])).toEqual({ kind: 'unreadable', text: [] });
   });
+
+  it('treats a block with no course at all as unreadable', () => {
+    expect(parseRequirement(lines('AND'))).toEqual({
+      kind: 'unreadable',
+      text: ['AND'],
+    });
+    expect(parseRequirement(lines('OR'))).toEqual({
+      kind: 'unreadable',
+      text: ['OR'],
+    });
+  });
+
+  it('treats a not articulated and connector mix as unreadable', () => {
+    expect(parseRequirement(lines('No Course Articulated', 'OR'))).toEqual({
+      kind: 'unreadable',
+      text: ['No Course Articulated', 'OR'],
+    });
+  });
 });
