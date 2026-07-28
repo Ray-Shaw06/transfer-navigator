@@ -61,4 +61,24 @@ describe('parseRequirement', () => {
       text: ['No Course Articulated', 'OR'],
     });
   });
+
+  it('does not drop a not articulated marker sitting inside a group', () => {
+    // Presenting this as satisfiable by SEND 2 alone would be a confident
+    // wrong answer: the other half of the AND has no equivalent.
+    expect(
+      parseRequirement(lines('SEND 2 Intro 4.00', 'AND', 'No Course Articulated')),
+    ).toEqual({
+      kind: 'unreadable',
+      text: ['SEND 2 Intro 4.00', 'AND', 'No Course Articulated'],
+    });
+  });
+
+  it('does not drop a not articulated marker offered as one alternative', () => {
+    expect(
+      parseRequirement(lines('No Course Articulated', 'OR', 'SEND 9 Widgets 5.00')),
+    ).toEqual({
+      kind: 'unreadable',
+      text: ['No Course Articulated', 'OR', 'SEND 9 Widgets 5.00'],
+    });
+  });
 });

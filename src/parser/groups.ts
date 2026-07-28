@@ -26,6 +26,17 @@ export function parseRequirement(lines: Line[]): Requirement {
     return { kind: 'not_articulated' };
   }
 
+  // A block mixing real courses with a not-articulated marker. Dropping the
+  // marker would present an alternative as achievable when one of its parts
+  // has no equivalent at the sending school. The precise semantics of this
+  // shape are unverified against real data, so take the safe reading. Task 7
+  // asserts no row on the real agreement is unreadable, so if this ever fires
+  // there, that test surfaces it immediately and it can be refined against
+  // evidence instead of guessed at now.
+  if (parsed.some((p) => p.kind === 'not_articulated')) {
+    return { kind: 'unreadable', text: lines.map((l) => l.text.trim()) };
+  }
+
   const junk = parsed.filter((p) => p.kind === 'other') as Array<{ kind: 'other'; text: string }>;
   if (junk.length > 0) return { kind: 'unreadable', text: junk.map((j) => j.text) };
 
@@ -46,7 +57,7 @@ export function parseRequirement(lines: Line[]): Requirement {
   // stray connector banded on its own, is not a requirement satisfiable by
   // nothing. Same safe failure as the empty block above.
   if (nonEmpty.length === 0) {
-    return { kind: 'unreadable', text: lines.map((l) => l.text) };
+    return { kind: 'unreadable', text: lines.map((l) => l.text.trim()) };
   }
 
   return { kind: 'options', options: nonEmpty };
