@@ -1,0 +1,40 @@
+import type { Line } from './lines';
+import type { Course } from './types';
+import { parseLine } from './course';
+
+export type AndGroup = { kind: 'and'; courses: Course[] };
+export type Requirement =
+  | { kind: 'options'; options: AndGroup[] }
+  | { kind: 'not_articulated' }
+  | { kind: 'unreadable'; text: string[] };
+
+// A block is a list of alternatives separated by OR, each alternative a set
+// of courses joined by AND. Any line that is not a course, a connector, or
+// a not-articulated marker makes the whole requirement unreadable: this
+// project never reconstructs a requirement from a partially understood
+// block, because a confident wrong answer costs a student more than an
+// honest "check ASSIST" does.
+export function parseRequirement(lines: Line[]): Requirement {
+  const parsed = lines.map(parseLine);
+
+  if (parsed.length > 0 && parsed.every((p) => p.kind === 'not_articulated')) {
+    return { kind: 'not_articulated' };
+  }
+
+  const junk = parsed.filter((p) => p.kind === 'other') as Array<{ kind: 'other'; text: string }>;
+  if (junk.length > 0) return { kind: 'unreadable', text: junk.map((j) => j.text) };
+
+  const options: AndGroup[] = [];
+  let current: Course[] = [];
+
+  for (const item of parsed) {
+    if (item.kind === 'course') current.push(item.course);
+    if (item.kind === 'connector' && item.connector === 'OR') {
+      options.push({ kind: 'and', courses: current });
+      current = [];
+    }
+  }
+  options.push({ kind: 'and', courses: current });
+
+  return { kind: 'options', options: options.filter((o) => o.courses.length > 0) };
+}
