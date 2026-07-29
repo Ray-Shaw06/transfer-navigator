@@ -48,4 +48,23 @@ describe.skipIf(!existsSync(FIXTURE))('parseAgreement, real PCC to UCI CS 2025-2
     const unreadable = agreement.rows.filter((r) => r.sending.kind === 'unreadable');
     expect(unreadable).toEqual([]);
   });
+
+  it('marks the two routes through the linear algebra requirement as one group', async () => {
+    const agreement = await parseAgreement(new Uint8Array(readFileSync(FIXTURE)));
+
+    const sixN = agreement.rows.find((r) => r.receiving.some((c) => c.code === 'I&C SCI 6N'));
+    const threeA = agreement.rows.find((r) => r.receiving.some((c) => c.code === 'MATH 3A'));
+
+    expect(sixN).toBeDefined();
+    expect(threeA).toBeDefined();
+    expect(sixN!.orGroup).toBeDefined();
+    expect(sixN!.orGroup).toBe(threeA!.orGroup);
+  });
+
+  it('leaves independent requirements without a group', async () => {
+    const agreement = await parseAgreement(new Uint8Array(readFileSync(FIXTURE)));
+    const row = agreement.rows.find((r) => r.receiving.some((c) => c.code === 'I&C SCI 51'));
+
+    expect(row!.orGroup).toBeUndefined();
+  });
 });

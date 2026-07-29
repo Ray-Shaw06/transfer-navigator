@@ -1,12 +1,22 @@
 import { extractItems } from './extract';
 import { splitColumns } from './columns';
 import { assembleLines } from './lines';
-import { parseLine } from './course';
+import { parseLine, type ParsedLine } from './course';
 import { bandRows, type RawRow } from './rows';
 import { parseRequirement, type Requirement } from './groups';
 import type { Course } from './types';
 
-export type ArticulationRow = { receiving: Course[]; sending: Requirement };
+export type ArticulationRow = {
+  receiving: Course[];
+  sending: Requirement;
+  // Rows sharing an orGroup are alternative paths through one requirement,
+  // coming from an OR connector in the receiving column. Satisfying any one
+  // member satisfies the group. Without this the planner cannot tell "two
+  // separate requirements" from "one requirement, two routes", and will tell
+  // a student to somehow obtain a course that nothing articulates to when a
+  // sibling route is wide open.
+  orGroup?: number;
+};
 export type Agreement = {
   academicYear: string;
   major: string;
@@ -45,23 +55,40 @@ function afterPrefix(lines: string[], marker: RegExp): string {
 // row with real options, which is exactly the mixed shape parseRequirement
 // treats as unreadable, and it would make I&C SCI 6N vanish as its own
 // not-articulated row.
-function groupReceivingRows(rawRows: RawRow[]): RawRow[] {
-  const merged: RawRow[] = [];
+// RawRow.receiving is typed as an array but bandRows always fills it with
+// exactly one line; nothing at the type level guarantees that. Reading
+// receiving[0] straight up would throw on an empty array instead of falling
+// through to the "other" handling every caller below already expects, so
+// route every read through here.
+function firstAnchor(row: RawRow): ParsedLine {
+  return row.receiving.length > 0 ? parseLine(row.receiving[0]) : { kind: 'other', text: '' };
+}
+
+type GroupedRow = RawRow & { orGroup?: number };
+
+function groupReceivingRows(rawRows: RawRow[]): GroupedRow[] {
+  const merged: GroupedRow[] = [];
+  let orGroupCounter = 0;
+  // Set right after a group that ends in a receiving-side OR, so the group
+  // starting immediately after the (dropped) connector row picks up the same
+  // id. A chain of more than two OR-joined anchors keeps re-setting this, so
+  // every anchor in the chain lands on one shared id.
+  let pendingOrGroup: number | undefined;
   let i = 0;
 
   while (i < rawRows.length) {
-    const anchor = parseLine(rawRows[i].receiving[0]);
+    const anchor = firstAnchor(rawRows[i]);
     if (anchor.kind !== 'course') {
       merged.push(rawRows[i]);
       i += 1;
       continue;
     }
 
-    const group: RawRow = { receiving: [...rawRows[i].receiving], sending: [...rawRows[i].sending] };
+    const group: GroupedRow = { receiving: [...rawRows[i].receiving], sending: [...rawRows[i].sending] };
     let j = i + 1;
     while (j + 1 < rawRows.length) {
-      const connector = parseLine(rawRows[j].receiving[0]);
-      const next = parseLine(rawRows[j + 1].receiving[0]);
+      const connector = firstAnchor(rawRows[j]);
+      const next = firstAnchor(rawRows[j + 1]);
       if (connector.kind === 'connector' && connector.connector === 'AND' && next.kind === 'course') {
         group.receiving.push(...rawRows[j].receiving, ...rawRows[j + 1].receiving);
         group.sending.push(...rawRows[j].sending, ...rawRows[j + 1].sending);
@@ -70,6 +97,19 @@ function groupReceivingRows(rawRows: RawRow[]): RawRow[] {
         break;
       }
     }
+
+    if (pendingOrGroup !== undefined) {
+      group.orGroup = pendingOrGroup;
+      pendingOrGroup = undefined;
+    }
+
+    const trailing = j < rawRows.length ? firstAnchor(rawRows[j]) : { kind: 'other' as const, text: '' };
+    if (trailing.kind === 'connector' && trailing.connector === 'OR') {
+      const id = group.orGroup ?? ++orGroupCounter;
+      group.orGroup = id;
+      pendingOrGroup = id;
+    }
+
     merged.push(group);
     i = j;
   }
@@ -109,7 +149,7 @@ export async function parseAgreement(data: Uint8Array): Promise<Agreement> {
         .map(parseLine)
         .filter((p): p is { kind: 'course'; course: Course } => p.kind === 'course')
         .map((p) => p.course);
-      return { receiving: courses, sending: parseRequirement(raw.sending) };
+      return { receiving: courses, sending: parseRequirement(raw.sending), orGroup: raw.orGroup };
     })
     .filter((row) => row.receiving.length > 0);
 
