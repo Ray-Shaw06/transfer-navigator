@@ -1,5 +1,18 @@
 import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 
+// pdfjs-dist only supplies a default workerSrc when it detects Node (see its
+// own isNodeJS check); in a browser bundle GlobalWorkerOptions.workerSrc is
+// left unset and getDocument throws. Point it at the worker script bundled
+// alongside this module so the browser build works without reaching out to
+// a CDN. This has no effect under Vitest's node environment, where pdfjs
+// runs its Node fallback and ignores workerSrc.
+if (typeof window !== 'undefined') {
+  pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+    'pdfjs-dist/legacy/build/pdf.worker.min.mjs',
+    import.meta.url,
+  ).toString();
+}
+
 export type TextItem = {
   text: string;
   x: number;

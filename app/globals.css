@@ -1,0 +1,155 @@
+:root {
+  color-scheme: light dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  color: #1a1a1a;
+  background: #fafafa;
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    color: #e8e8e8;
+    background: #16171a;
+  }
+}
+
+main {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 2rem 1.25rem 4rem;
+}
+
+h1 {
+  margin-bottom: 0.25rem;
+}
+
+.tagline {
+  color: #555;
+  margin-top: 0;
+}
+
+@media (prefers-color-scheme: dark) {
+  .tagline {
+    color: #aaa;
+  }
+}
+
+.dropzone,
+.course-input {
+  margin: 1.25rem 0;
+  padding: 1rem;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .dropzone,
+  .course-input {
+    border-color: #333;
+  }
+}
+
+.dropzone label,
+.course-input label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.course-input input {
+  width: 100%;
+  padding: 0.5rem;
+  font-size: 1rem;
+}
+
+.privacy-note {
+  font-size: 0.9rem;
+  color: #555;
+  margin-bottom: 0;
+}
+
+@media (prefers-color-scheme: dark) {
+  .privacy-note {
+    color: #aaa;
+  }
+}
+
+.error,
+.warning {
+  color: #8a1f11;
+  background: #fdecea;
+  border: 1px solid #f5c2c0;
+  padding: 0.75rem;
+  border-radius: 6px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .error,
+  .warning {
+    color: #ffb4ab;
+    background: #3a1a17;
+    border-color: #5c2b26;
+  }
+}
+
+.agreement-header {
+  font-weight: 600;
+}
+
+.unit-note {
+  color: #444;
+}
+
+@media (prefers-color-scheme: dark) {
+  .unit-note {
+    color: #bbb;
+  }
+}
+
+.status-list {
+  list-style: none;
+  padding: 0;
+}
+
+.status-row {
+  padding: 0.6rem 0.75rem;
+  margin-bottom: 0.5rem;
+  border-radius: 6px;
+  border-left: 4px solid #999;
+  background: #f2f2f2;
+}
+
+@media (prefers-color-scheme: dark) {
+  .status-row {
+    background: #1f2023;
+  }
+}
+
+.status-satisfied {
+  border-left-color: #2e7d32;
+}
+
+.status-remaining {
+  border-left-color: #1565c0;
+}
+
+.status-not-articulated {
+  border-left-color: #c62828;
+}
+
+.status-alternative {
+  border-left-color: #9e9e9e;
+  opacity: 0.8;
+}
+
+.status-unreadable {
+  border-left-color: #ef6c00;
+}
