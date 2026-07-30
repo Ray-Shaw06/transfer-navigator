@@ -117,4 +117,76 @@ describe('buildPlan', () => {
       [course('SEND 5', 4)],
     ]);
   });
+
+  it('does not let one course satisfy two requirements', () => {
+    const shared: Agreement = {
+      ...agreement,
+      rows: [
+        {
+          receiving: [course('RECV 60', 4)],
+          sending: { kind: 'options', options: [{ kind: 'and', courses: [course('SEND 8', 4)] }] },
+        },
+        {
+          receiving: [course('RECV 70', 4)],
+          sending: { kind: 'options', options: [{ kind: 'and', courses: [course('SEND 8', 4)] }] },
+        },
+      ],
+    };
+
+    const plan = buildPlan(shared, ['SEND 8']);
+
+    expect(plan.statuses[0].state).toBe('satisfied');
+    expect(plan.statuses[1].state).toBe('remaining');
+    expect(plan.remainingUnits).toBe(4);
+  });
+
+  it('still satisfies both when the student took both courses', () => {
+    const shared: Agreement = {
+      ...agreement,
+      rows: [
+        {
+          receiving: [course('RECV 60', 4)],
+          sending: { kind: 'options', options: [{ kind: 'and', courses: [course('SEND 8', 4)] }] },
+        },
+        {
+          receiving: [course('RECV 70', 4)],
+          sending: {
+            kind: 'options',
+            options: [
+              { kind: 'and', courses: [course('SEND 8', 4)] },
+              { kind: 'and', courses: [course('SEND 9', 5)] },
+            ],
+          },
+        },
+      ],
+    };
+
+    const plan = buildPlan(shared, ['SEND 8', 'SEND 9']);
+
+    expect(plan.statuses.map((s) => s.state)).toEqual(['satisfied', 'satisfied']);
+    expect(plan.remainingUnits).toBe(0);
+  });
+
+  it('picks the option that is cheapest given what the student already has', () => {
+    const rows: Agreement = {
+      ...agreement,
+      rows: [
+        {
+          receiving: [course('RECV 80', 4)],
+          sending: {
+            kind: 'options',
+            options: [
+              { kind: 'and', courses: [course('SEND 1', 3), course('SEND 2', 3)] },
+              { kind: 'and', courses: [course('SEND 3', 5)] },
+            ],
+          },
+        },
+      ],
+    };
+
+    const plan = buildPlan(rows, ['SEND 1']);
+
+    expect(plan.statuses[0].cheapestOption.map((c) => c.code)).toEqual(['SEND 1', 'SEND 2']);
+    expect(plan.statuses[0].remainingUnits).toBe(3);
+  });
 });
