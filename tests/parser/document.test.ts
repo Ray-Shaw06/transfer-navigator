@@ -110,4 +110,39 @@ describe.skipIf(!existsSync(FIXTURE))('parseAgreement, real PCC to UCI CS 2025-2
 
     expect(row!.orGroup).toBeUndefined();
   });
+
+  it('assigns the eight optional requirements to a choose-one section', async () => {
+    const agreement = await parseAgreement(new Uint8Array(readFileSync(FIXTURE)));
+
+    const chooseSections = agreement.sections.filter((s) => s.rule.kind === 'choose');
+    expect(chooseSections.length).toBeGreaterThanOrEqual(2);
+
+    const optional = agreement.rows.filter((r) => {
+      const section = r.section === undefined ? undefined : agreement.sections[r.section];
+      return section?.rule.kind === 'choose' && section.label.startsWith('Complete at least');
+    });
+
+    expect(optional.map((r) => r.receiving[0].code).sort()).toEqual(
+      [
+        'I&C SCI 45C',
+        'I&C SCI 46',
+        'I&C SCI 51',
+        'I&C SCI 53',
+        'I&C SCI 6B',
+        'I&C SCI 6D',
+        'IN4MATX 43',
+        'STATS 67',
+      ].sort(),
+    );
+  });
+
+  it('keeps the calculus and programming requirements outside any choose section', async () => {
+    const agreement = await parseAgreement(new Uint8Array(readFileSync(FIXTURE)));
+
+    for (const code of ['I&C SCI 31', 'MATH 2A', 'MATH 2B']) {
+      const row = agreement.rows.find((r) => r.receiving.some((c) => c.code === code));
+      const section = row!.section === undefined ? undefined : agreement.sections[row!.section];
+      expect(section?.rule.kind ?? 'all').toBe('all');
+    }
+  });
 });

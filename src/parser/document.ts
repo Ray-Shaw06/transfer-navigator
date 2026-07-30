@@ -4,6 +4,7 @@ import { assembleLines } from './lines';
 import { parseLine, type ParsedLine } from './course';
 import { bandRows, type RawRow } from './rows';
 import { parseRequirement, type Requirement } from './groups';
+import { parseSectionHeader, type Section } from './sections';
 import type { Course } from './types';
 
 export type ArticulationRow = {
@@ -16,6 +17,10 @@ export type ArticulationRow = {
   // a student to somehow obtain a course that nothing articulates to when a
   // sibling route is wide open.
   orGroup?: number;
+  // Indexes into Agreement.sections. Which section a row belongs to decides
+  // whether it is required outright or one of several alternatives under a
+  // choose-at-least quantifier; see assignSections below.
+  section?: number;
 };
 export type Agreement = {
   academicYear: string;
@@ -23,6 +28,7 @@ export type Agreement = {
   receivingInstitution: string;
   sendingInstitution: string;
   rows: ArticulationRow[];
+  sections: Section[];
 };
 
 // Thrown instead of returning an agreement with no rows and no recognisable
@@ -129,6 +135,61 @@ function groupReceivingRows(rawRows: RawRow[]): GroupedRow[] {
   return merged;
 }
 
+type SectionedRow = GroupedRow & { section: number };
+
+// Everything before the first recognised header belongs to this synthetic
+// section: unlabelled, and required like any other row that carries no
+// quantifier of its own.
+const UNSECTIONED: Section = { label: '', rule: { kind: 'all' } };
+
+// Walks the grouped rows in the document order groupReceivingRows already
+// produced them in (page then y, never reordered) and tags each with the
+// section open at that point. A line that parses as a section header closes
+// the current section and opens a new one instead of being tagged itself;
+// it carries no course, so it is dropped by the caller's final filter either
+// way.
+//
+// The real agreement's page 3 has "2 Complete at least 1 course from the
+// following" immediately followed by a second "REQUIRED FOR ADMISSION" line
+// and then "Minimum grade required: B or better", before any row of the new
+// section appears. Read plainly with parseSectionHeader, that second line is
+// itself a valid header, all required. Letting it take effect would replace
+// the choose-at-least quantifier just opened with "all required" before that
+// quantifier ever governed a single row, and the eight requirements on the
+// following page would be tagged all-required instead of choose-one:
+// exactly the bug Task 12 exists to fix, just moved one line later.
+//
+// The rule adopted here: a header only takes effect once the section it
+// would replace has claimed at least one row (real or not; a page-header
+// line counts, since the point is only "something happened before you tried
+// to open another section"). The synthetic section 0 is exempt, since it
+// never governs a real requirement and must always yield to the first
+// header the document has. That lets "REQUIRED FOR ADMISSION" open section 1
+// on page 2 with nothing yet under section 0, while the second "REQUIRED FOR
+// ADMISSION" on page 3, arriving with nothing yet under section 2, is
+// ignored and the choose-at-least section it interrupted stays open.
+function assignSections(rows: GroupedRow[]): { rows: SectionedRow[]; sections: Section[] } {
+  const sections: Section[] = [UNSECTIONED];
+  let current = 0;
+  let currentRowCount = 0;
+
+  const tagged = rows.map((row): SectionedRow => {
+    const header = parseSectionHeader(row.receiving[0].text);
+
+    if (header && (current === 0 || currentRowCount > 0)) {
+      sections.push(header);
+      current = sections.length - 1;
+      currentRowCount = 0;
+      return { ...row, section: current };
+    }
+
+    currentRowCount += 1;
+    return { ...row, section: current };
+  });
+
+  return { rows: tagged, sections };
+}
+
 export async function parseAgreement(data: Uint8Array): Promise<Agreement> {
   const items = await extractItems(data);
   const { receiving, sending } = splitColumns(items);
@@ -155,13 +216,19 @@ export async function parseAgreement(data: Uint8Array): Promise<Agreement> {
   const majorLine = leftHeaderLines.find((l) => /,\s*B\.[AS]\.$/.test(l)) ?? '';
 
   const rawRows = bandRows(assembleLines(receiving), assembleLines(sending));
-  const rows = groupReceivingRows(rawRows)
+  const { rows: sectionedRows, sections } = assignSections(groupReceivingRows(rawRows));
+  const rows = sectionedRows
     .map((raw) => {
       const courses = raw.receiving
         .map(parseLine)
         .filter((p): p is { kind: 'course'; course: Course } => p.kind === 'course')
         .map((p) => p.course);
-      return { receiving: courses, sending: parseRequirement(raw.sending), orGroup: raw.orGroup };
+      return {
+        receiving: courses,
+        sending: parseRequirement(raw.sending),
+        orGroup: raw.orGroup,
+        section: raw.section,
+      };
     })
     .filter((row) => row.receiving.length > 0);
 
@@ -181,5 +248,6 @@ export async function parseAgreement(data: Uint8Array): Promise<Agreement> {
     receivingInstitution: afterPrefix(leftHeaderLines, /^To:\s*/),
     sendingInstitution: afterPrefix(rightHeaderLines, /^From:\s*/),
     rows,
+    sections,
   };
 }

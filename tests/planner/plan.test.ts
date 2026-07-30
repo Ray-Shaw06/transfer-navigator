@@ -9,6 +9,7 @@ const agreement: Agreement = {
   major: 'Widgetry, B.S.',
   receivingInstitution: 'Test University',
   sendingInstitution: 'Test College',
+  sections: [],
   rows: [
     {
       receiving: [course('RECV 10', 4)],
