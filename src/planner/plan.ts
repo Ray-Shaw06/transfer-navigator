@@ -1,14 +1,23 @@
 import type { Agreement, ArticulationRow } from '../parser/document';
 import type { AndGroup } from '../parser/groups';
+import type { SectionRule } from '../parser/sections';
 import type { Course } from '../parser/types';
 
 export type RowStatus = {
   receiving: Course[];
   orGroup?: number;
-  state: 'satisfied' | 'remaining' | 'not_articulated' | 'unreadable' | 'alternative';
+  state: 'satisfied' | 'remaining' | 'not_articulated' | 'unreadable' | 'alternative' | 'optional';
   satisfiedBy: Course[];
   cheapestOption: Course[];
   remainingUnits: number;
+};
+
+export type SectionStatus = {
+  label: string;
+  rule: SectionRule;
+  satisfiedCount: number;
+  needed: number;
+  met: boolean;
 };
 
 export type Plan = {
@@ -16,6 +25,7 @@ export type Plan = {
   remainingUnits: number;
   terms: Course[][];
   notArticulated: Course[];
+  sections: SectionStatus[];
 };
 
 const total = (courses: Course[]) => courses.reduce((sum, c) => sum + c.units, 0);
@@ -83,44 +93,156 @@ function baseStatus(row: ArticulationRow, done: Set<string>, consumed: Set<strin
   };
 }
 
-// Rows sharing an orGroup are routes through one requirement, so exactly one
-// of them should count. Losing routes become 'alternative', which keeps them
-// visible in the UI without adding units, and keeps a route with nothing
-// articulated out of the blocker list when a sibling route is open.
-function resolveGroups(statuses: RowStatus[]): void {
-  const groups = new Map<number, RowStatus[]>();
-  for (const status of statuses) {
-    if (status.orGroup === undefined) continue;
-    const members = groups.get(status.orGroup) ?? [];
-    members.push(status);
-    groups.set(status.orGroup, members);
+// A choose group is either an explicit section with rule 'choose', or the
+// legacy orGroup (a receiving-side OR between two routes through one
+// requirement). Both reduce to the same question: of these members, do
+// enough already count, and if not, which of the rest are worth pursuing.
+// `capWinners` is what distinguishes them: an orGroup represents exactly one
+// requirement, so even if two of its routes independently come out
+// 'satisfied', only one may count, chosen by document order the same way it
+// always was. A 'choose' section has no such cap: two independently
+// satisfied members both legitimately count toward its N.
+type ChooseGroup = {
+  indices: number[];
+  least: number;
+  loserState: 'optional' | 'alternative';
+  capWinners: boolean;
+};
+
+// Sections subsume orGroup rather than sitting beside it: a row already
+// grouped by an explicit 'choose' section is not also grouped by its legacy
+// orGroup, so the two mechanisms never compete over the same row. On the
+// real agreement this matters for the linear algebra requirement, which
+// carries both an orGroup (from the receiving-column OR) and a 'choose'
+// section tag (from "3 Select A or B"); the section wins and orGroup is
+// simply not consulted for it.
+function buildGroups(agreement: Agreement): ChooseGroup[] {
+  const groups: ChooseGroup[] = [];
+  const handled = new Set<number>();
+
+  const bySection = new Map<number, number[]>();
+  agreement.rows.forEach((row, i) => {
+    if (row.section === undefined) return;
+    const section = agreement.sections[row.section];
+    if (!section || section.rule.kind !== 'choose') return;
+    const members = bySection.get(row.section) ?? [];
+    members.push(i);
+    bySection.set(row.section, members);
+    handled.add(i);
+  });
+  for (const [sectionIndex, indices] of bySection) {
+    const rule = agreement.sections[sectionIndex].rule;
+    if (rule.kind !== 'choose') continue;
+    groups.push({ indices, least: rule.least, loserState: 'optional', capWinners: false });
   }
 
-  for (const members of groups.values()) {
-    const winner =
-      members.find((m) => m.state === 'satisfied') ??
-      [...members]
-        .filter((m) => m.state === 'remaining')
-        .sort((a, b) => a.remainingUnits - b.remainingUnits)[0];
+  const byOrGroup = new Map<number, number[]>();
+  agreement.rows.forEach((row, i) => {
+    if (row.orGroup === undefined || handled.has(i)) return;
+    const members = byOrGroup.get(row.orGroup) ?? [];
+    members.push(i);
+    byOrGroup.set(row.orGroup, members);
+  });
+  for (const indices of byOrGroup.values()) {
+    groups.push({ indices, least: 1, loserState: 'alternative', capWinners: true });
+  }
 
-    // No route is achievable. Leave every member as it is so the student sees
-    // the real situation rather than an arbitrary pick.
-    if (!winner) continue;
+  return groups;
+}
 
-    for (const member of members) {
-      if (member === winner) continue;
-      member.state = 'alternative';
-      member.remainingUnits = 0;
+// Resolves one choose group in place against `statuses`, and returns the
+// indices of any member demoted away from 'satisfied' so buildPlan can
+// release the courses it had claimed.
+//
+// The rule, folded into one pass: members already 'satisfied' count first
+// (capped at one, in document order, for a capWinners group where more than
+// one route happened to be independently complete). If that is already
+// enough to reach `least`, every member not counted is demoted. Otherwise
+// the cheapest `remaining` members needed to reach `least` are kept too, and
+// everything else is demoted. If there are not enough achievable members to
+// reach `least` at all, nothing is touched: a real not_articulated blocker
+// must surface as one rather than being hidden behind an unmeetable quantifier.
+function resolveChooseGroup(group: ChooseGroup, statuses: RowStatus[], demoted: number[]): void {
+  const members = group.indices.map((i) => ({ i, status: statuses[i] }));
+
+  let satisfied = members.filter((m) => m.status.state === 'satisfied');
+  if (group.capWinners && satisfied.length > 1) {
+    for (const loser of satisfied.slice(1)) {
+      loser.status.state = group.loserState;
+      loser.status.satisfiedBy = [];
+      loser.status.remainingUnits = 0;
+      demoted.push(loser.i);
     }
+    satisfied = satisfied.slice(0, 1);
   }
+
+  const needed = Math.max(group.least - satisfied.length, 0);
+  const cheapestRemaining = members
+    .filter((m) => m.status.state === 'remaining')
+    .sort((a, b) => a.status.remainingUnits - b.status.remainingUnits)
+    .slice(0, needed);
+
+  if (cheapestRemaining.length < needed) return;
+
+  const keep = new Set([...satisfied.map((m) => m.i), ...cheapestRemaining.map((m) => m.i)]);
+  for (const m of members) {
+    if (keep.has(m.i)) continue;
+    m.status.state = group.loserState;
+    m.status.remainingUnits = 0;
+  }
+}
+
+function resolveSections(
+  agreement: Agreement,
+  statuses: RowStatus[],
+): { sections: SectionStatus[]; demoted: number[] } {
+  const demoted: number[] = [];
+  for (const group of buildGroups(agreement)) {
+    resolveChooseGroup(group, statuses, demoted);
+  }
+
+  const sections: SectionStatus[] = agreement.sections.map((section, index) => {
+    const members = statuses.filter((_, i) => agreement.rows[i].section === index);
+    const satisfiedCount = members.filter((m) => m.state === 'satisfied').length;
+    const needed = section.rule.kind === 'choose' ? section.rule.least : members.length;
+    return { label: section.label, rule: section.rule, satisfiedCount, needed, met: satisfiedCount >= needed };
+  });
+
+  return { sections, demoted };
 }
 
 export function buildPlan(agreement: Agreement, completed: string[], unitsPerTerm = 15): Plan {
   const done = new Set(completed.map((c) => c.toUpperCase()));
-  const consumed = new Set<string>();
 
-  const statuses: RowStatus[] = agreement.rows.map((row) => baseStatus(row, done, consumed));
-  resolveGroups(statuses);
+  // A row in `excluded` keeps whatever status `fixed` already gave it
+  // (baseStatus is not re-run for it, and it claims nothing from `consumed`
+  // this pass) rather than being recomputed. That is what lets a demoted
+  // route's courses actually become available again: simply removing them
+  // from a shared `consumed` set after the fact would not undo the rows that
+  // already ran and found them taken, since baseStatus commits `consumed`
+  // as it walks. Skipping the demoted row entirely on the next walk is what
+  // frees the course for whatever later row wants it.
+  const computeStatuses = (excluded: Set<number>, fixed: RowStatus[]): RowStatus[] => {
+    const consumed = new Set<string>();
+    return agreement.rows.map((row, i) => (excluded.has(i) ? fixed[i] : baseStatus(row, done, consumed)));
+  };
+
+  // resolveSections can demote a member that baseStatus had already marked
+  // 'satisfied' (see resolveChooseGroup's capWinners cap). That releases the
+  // courses it claimed, so the whole document is walked again with that
+  // member excluded, letting a later row claim them. A newly satisfied row
+  // from that recompute could itself belong to another group, so the loop
+  // repeats until a pass demotes nothing new. `excluded` only grows and is
+  // bounded by the row count, so this always terminates.
+  let excluded = new Set<number>();
+  let statuses = computeStatuses(excluded, []);
+  let resolved = resolveSections(agreement, statuses);
+
+  for (let i = 0; i < agreement.rows.length && resolved.demoted.some((d) => !excluded.has(d)); i++) {
+    for (const d of resolved.demoted) excluded.add(d);
+    statuses = computeStatuses(excluded, statuses);
+    resolved = resolveSections(agreement, statuses);
+  }
 
   const queue = statuses
     .filter((s) => s.state === 'remaining')
@@ -144,5 +266,6 @@ export function buildPlan(agreement: Agreement, completed: string[], unitsPerTer
     notArticulated: statuses
       .filter((s) => s.state === 'not_articulated')
       .flatMap((s) => s.receiving),
+    sections: resolved.sections,
   };
 }

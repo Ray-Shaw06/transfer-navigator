@@ -190,4 +190,169 @@ describe('buildPlan', () => {
     expect(plan.statuses[0].cheapestOption.map((c) => c.code)).toEqual(['SEND 1', 'SEND 2']);
     expect(plan.statuses[0].remainingUnits).toBe(3);
   });
+
+  it('releases a demoted routes courses so a later row can claim them', () => {
+    // Review finding folded into this task: baseStatus commits `consumed`
+    // before the group winner is picked, so a losing route's courses used to
+    // stay marked consumed even after the route was demoted. Reproduced
+    // here: routes A and B are both independently satisfied, A wins on
+    // document order, B is demoted, and a third, unrelated row also needs
+    // B's course. Before the fix that third row wrongly showed 'remaining'
+    // for a course the student actually holds.
+    const grouped: Agreement = {
+      ...agreement,
+      rows: [
+        {
+          receiving: [course('RECV 40', 4)],
+          sending: { kind: 'options', options: [{ kind: 'and', courses: [course('SEND 6', 4)] }] },
+          orGroup: 1,
+        },
+        {
+          receiving: [course('RECV 50', 4)],
+          sending: { kind: 'options', options: [{ kind: 'and', courses: [course('SEND 7', 4)] }] },
+          orGroup: 1,
+        },
+        {
+          receiving: [course('RECV 90', 4)],
+          sending: { kind: 'options', options: [{ kind: 'and', courses: [course('SEND 7', 4)] }] },
+        },
+      ],
+    };
+
+    const plan = buildPlan(grouped, ['SEND 6', 'SEND 7']);
+
+    expect(plan.statuses[0].state).toBe('satisfied');
+    expect(plan.statuses[1].state).toBe('alternative');
+    expect(plan.statuses[1].satisfiedBy).toEqual([]);
+    expect(plan.statuses[2].state).toBe('satisfied');
+    expect(plan.remainingUnits).toBe(0);
+  });
+
+  it('needs only the cheapest member of a choose-one section', () => {
+    const sectioned: Agreement = {
+      ...agreement,
+      sections: [{ label: 'Complete at least 1 course from the following', rule: { kind: 'choose', least: 1 } }],
+      rows: [
+        {
+          receiving: [course('RECV 10', 4)],
+          section: 0,
+          sending: { kind: 'options', options: [{ kind: 'and', courses: [course('SEND 1', 3)] }] },
+        },
+        {
+          receiving: [course('RECV 20', 4)],
+          section: 0,
+          sending: { kind: 'options', options: [{ kind: 'and', courses: [course('SEND 2', 5)] }] },
+        },
+        { receiving: [course('RECV 30', 4)], section: 0, sending: { kind: 'not_articulated' } },
+      ],
+    };
+
+    const plan = buildPlan(sectioned, []);
+
+    expect(plan.statuses[0].state).toBe('remaining');
+    expect(plan.statuses[1].state).toBe('optional');
+    expect(plan.statuses[2].state).toBe('optional');
+    expect(plan.remainingUnits).toBe(3);
+    expect(plan.notArticulated).toEqual([]);
+  });
+
+  it('needs two members of a choose-two section', () => {
+    const sectioned: Agreement = {
+      ...agreement,
+      sections: [{ label: 'Complete at least 2 courses from the following', rule: { kind: 'choose', least: 2 } }],
+      rows: [
+        {
+          receiving: [course('RECV 10', 4)],
+          section: 0,
+          sending: { kind: 'options', options: [{ kind: 'and', courses: [course('SEND 1', 3)] }] },
+        },
+        {
+          receiving: [course('RECV 20', 4)],
+          section: 0,
+          sending: { kind: 'options', options: [{ kind: 'and', courses: [course('SEND 2', 4)] }] },
+        },
+        {
+          receiving: [course('RECV 30', 4)],
+          section: 0,
+          sending: { kind: 'options', options: [{ kind: 'and', courses: [course('SEND 3', 9)] }] },
+        },
+      ],
+    };
+
+    const plan = buildPlan(sectioned, []);
+
+    expect(plan.statuses.map((s) => s.state)).toEqual(['remaining', 'remaining', 'optional']);
+    expect(plan.remainingUnits).toBe(7);
+  });
+
+  it('counts a choose section as done once enough members are satisfied', () => {
+    const sectioned: Agreement = {
+      ...agreement,
+      sections: [{ label: 'Complete at least 1 course from the following', rule: { kind: 'choose', least: 1 } }],
+      rows: [
+        {
+          receiving: [course('RECV 10', 4)],
+          section: 0,
+          sending: { kind: 'options', options: [{ kind: 'and', courses: [course('SEND 1', 3)] }] },
+        },
+        {
+          receiving: [course('RECV 20', 4)],
+          section: 0,
+          sending: { kind: 'options', options: [{ kind: 'and', courses: [course('SEND 2', 5)] }] },
+        },
+      ],
+    };
+
+    const plan = buildPlan(sectioned, ['SEND 2']);
+
+    expect(plan.statuses[1].state).toBe('satisfied');
+    expect(plan.statuses[0].state).toBe('optional');
+    expect(plan.remainingUnits).toBe(0);
+  });
+
+  it('reports blockers when a choose section cannot be met at all', () => {
+    const sectioned: Agreement = {
+      ...agreement,
+      sections: [{ label: 'Complete at least 1 course from the following', rule: { kind: 'choose', least: 1 } }],
+      rows: [
+        { receiving: [course('RECV 10', 4)], section: 0, sending: { kind: 'not_articulated' } },
+        { receiving: [course('RECV 20', 4)], section: 0, sending: { kind: 'not_articulated' } },
+      ],
+    };
+
+    const plan = buildPlan(sectioned, []);
+
+    expect(plan.notArticulated.map((c) => c.code)).toEqual(['RECV 10', 'RECV 20']);
+  });
+
+  it('summarises a choose section for the UI', () => {
+    const sectioned: Agreement = {
+      ...agreement,
+      sections: [{ label: 'Complete at least 1 course from the following', rule: { kind: 'choose', least: 1 } }],
+      rows: [
+        {
+          receiving: [course('RECV 10', 4)],
+          section: 0,
+          sending: { kind: 'options', options: [{ kind: 'and', courses: [course('SEND 1', 3)] }] },
+        },
+        {
+          receiving: [course('RECV 20', 4)],
+          section: 0,
+          sending: { kind: 'options', options: [{ kind: 'and', courses: [course('SEND 2', 5)] }] },
+        },
+      ],
+    };
+
+    const plan = buildPlan(sectioned, []);
+
+    expect(plan.sections).toEqual([
+      {
+        label: 'Complete at least 1 course from the following',
+        rule: { kind: 'choose', least: 1 },
+        satisfiedCount: 0,
+        needed: 1,
+        met: false,
+      },
+    ]);
+  });
 });
