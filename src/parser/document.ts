@@ -29,6 +29,16 @@ export type Agreement = {
   sendingInstitution: string;
   rows: ArticulationRow[];
   sections: Section[];
+  // Page 1 advisory prose in the receiving campus's own words: admission
+  // competitiveness, minimum grade requirements, sequence-splitting
+  // warnings, and the like. None of this has a structure this parser can
+  // read (no course codes, no quantifiers), so it is captured verbatim by
+  // line rather than interpreted, and nothing downstream (the planner
+  // included) ever reads it back in. It exists only to be displayed.
+  // Optional on the type only so the hand-built Agreement literals in
+  // tests/planner/plan.test.ts, written before this field existed, keep
+  // typechecking unchanged; parseAgreement itself always sets it.
+  notes?: string[];
 };
 
 // Thrown instead of returning an agreement with no rows and no recognisable
@@ -51,6 +61,28 @@ export class UnrecognisedAgreementError extends Error {
 function afterPrefix(lines: string[], marker: RegExp): string {
   const line = lines.find((l) => marker.test(l));
   return line ? line.replace(marker, '').trim() : '';
+}
+
+// The real page 1 has a fixed shape above the receiving column's fold: page
+// header, ASSIST's own generic disclaimer, then the year/major/institution
+// block, then "IMPORTANT MAJOR INFORMATION" opens the campus's own advisory
+// text (competitive admission, minimum grade, sequence-splitting, and so
+// on), which runs to the page footer. "IMPORTANT MAJOR INFORMATION" itself
+// is the one heading common to every UCI agreement page 1, the same way
+// "REQUIRED FOR ADMISSION" is common to every requirements page, so it is
+// used here as the start marker the same way that marker is used in
+// parseSectionHeader. Everything at or before it (the header fields already
+// pulled out above, plus ASSIST's boilerplate) is not this campus's text.
+// The footer is a single bare URL, dropped by pattern rather than position
+// so this keeps working if a future agreement adds or removes a footer line.
+function extractNotes(headerLines: string[]): string[] {
+  const start = headerLines.findIndex((l) => /^IMPORTANT MAJOR INFORMATION$/i.test(l.trim()));
+  if (start === -1) return [];
+
+  return headerLines
+    .slice(start + 1)
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0 && !/^https?:\/\//i.test(l));
 }
 
 // A block is a run of receiving anchors joined end to end by an "AND" line
@@ -249,5 +281,6 @@ export async function parseAgreement(data: Uint8Array): Promise<Agreement> {
     sendingInstitution: afterPrefix(rightHeaderLines, /^From:\s*/),
     rows,
     sections,
+    notes: extractNotes(leftHeaderLines),
   };
 }

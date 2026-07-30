@@ -153,3 +153,51 @@ h1 {
 .status-unreadable {
   border-left-color: #ef6c00;
 }
+
+.status-optional {
+  border-left-color: #6a1b9a;
+  opacity: 0.8;
+}
+
+.limits-note {
+  font-size: 0.9rem;
+  color: #444;
+  background: #f2f2f2;
+  border-radius: 6px;
+  padding: 0.75rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  .limits-note {
+    color: #bbb;
+    background: #1f2023;
+  }
+}
+
+.section-group {
+  margin-bottom: 1.25rem;
+}
+
+.section-group h4 {
+  margin-bottom: 0.25rem;
+}
+
+.section-rule {
+  font-weight: 600;
+  margin-top: 0;
+}
+
+.option-list-intro {
+  margin: 0.5rem 0 0.25rem;
+  font-size: 0.9rem;
+}
+
+.option-list {
+  margin: 0;
+  padding-left: 1.25rem;
+  font-size: 0.9rem;
+}
+
+.option-chosen {
+  font-weight: 600;
+}

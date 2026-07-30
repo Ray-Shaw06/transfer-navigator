@@ -6,9 +6,23 @@ import type { Course } from '../parser/types';
 export type RowStatus = {
   receiving: Course[];
   orGroup?: number;
+  // Index into Agreement.sections / Plan.sections, carried through from
+  // ArticulationRow.section so the UI can group a flat statuses array back
+  // under the section headings it came from without needing the Agreement
+  // itself. Undefined only for hand-built rows (tests) that never set a
+  // section; real parsed agreements always tag one.
+  section?: number;
   state: 'satisfied' | 'remaining' | 'not_articulated' | 'unreadable' | 'alternative' | 'optional';
   satisfiedBy: Course[];
   cheapestOption: Course[];
+  // Every accepted alternative for this requirement, not just the one the
+  // planner suggested. cheapestOption is a single pick optimised for unit
+  // count, and unit count is not the same as fit for a student's major; the
+  // UI needs the full list so a student can see, and choose among, every
+  // option genuinely articulated, not just the cheapest one. Populated
+  // straight from the row's own options and never cleared on demotion, so it
+  // stays correct even for an 'optional' or 'alternative' row.
+  allOptions: AndGroup[];
   remainingUnits: number;
 };
 
@@ -26,6 +40,11 @@ export type Plan = {
   terms: Course[][];
   notArticulated: Course[];
   sections: SectionStatus[];
+  // Page 1 advisory prose, carried through from Agreement.notes untouched.
+  // Nothing in this file reads it: it is not parsed, not matched against
+  // anything the student has done, and never influences a status, a unit
+  // total, or a term. It exists on Plan purely so the UI can display it.
+  notes: string[];
 };
 
 const total = (courses: Course[]) => courses.reduce((sum, c) => sum + c.units, 0);
@@ -50,8 +69,15 @@ function baseStatus(row: ArticulationRow, done: Set<string>, consumed: Set<strin
   const base = {
     receiving: row.receiving,
     orGroup: row.orGroup,
+    section: row.section,
     satisfiedBy: [] as Course[],
     cheapestOption: [] as Course[],
+    // Shared array reference with row.sending.options, not a copy. That lets
+    // the UI mark "this is the one the planner chose" by identity
+    // (option.courses === status.cheapestOption / satisfiedBy) instead of a
+    // second comparison by course code. For not_articulated/unreadable rows
+    // there are no options to list.
+    allOptions: row.sending.kind === 'options' ? row.sending.options : ([] as AndGroup[]),
     remainingUnits: 0,
   };
 
@@ -267,5 +293,9 @@ export function buildPlan(agreement: Agreement, completed: string[], unitsPerTer
       .filter((s) => s.state === 'not_articulated')
       .flatMap((s) => s.receiving),
     sections: resolved.sections,
+    // Passed through, not read. agreement.notes is optional on the type only
+    // because hand-built test fixtures predate it; parseAgreement always
+    // populates it for a real agreement.
+    notes: agreement.notes ?? [],
   };
 }
