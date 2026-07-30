@@ -25,6 +25,18 @@ export type Agreement = {
   rows: ArticulationRow[];
 };
 
+// Thrown instead of returning an agreement with no rows and no recognisable
+// header. Without this, a PDF that is not an agreement (the wrong file, or a
+// scan with no text layer) parses cleanly to an empty Agreement, and the page
+// reports 0 units remaining and nothing left to schedule: it tells a student
+// who has done nothing that they are finished transferring.
+export class UnrecognisedAgreementError extends Error {
+  constructor() {
+    super('That file does not look like an ASSIST articulation agreement.');
+    this.name = 'UnrecognisedAgreementError';
+  }
+}
+
 // The line right after a marker line was a guess about the print layout.
 // On the real page 1, "To:" and the institution name are one text item, for
 // example "To: University of California, Irvine", with the catalog term on
@@ -153,9 +165,19 @@ export async function parseAgreement(data: Uint8Array): Promise<Agreement> {
     })
     .filter((row) => row.receiving.length > 0);
 
+  const academicYear = year ? year[1] : '';
+  const major = majorLine.trim();
+
+  // No rows, or no year and no major, means nothing usable came out of this
+  // PDF. Rather than guess a repair, reject it so the caller can tell the
+  // student to check the file instead of showing them an empty plan.
+  if (rows.length === 0 || (!academicYear && !major)) {
+    throw new UnrecognisedAgreementError();
+  }
+
   return {
-    academicYear: year ? year[1] : '',
-    major: majorLine.trim(),
+    academicYear,
+    major,
     receivingInstitution: afterPrefix(leftHeaderLines, /^To:\s*/),
     sendingInstitution: afterPrefix(rightHeaderLines, /^From:\s*/),
     rows,

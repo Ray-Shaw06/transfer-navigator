@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { parseAgreement, type Agreement } from '../src/parser/document';
+import { parseAgreement, UnrecognisedAgreementError, type Agreement } from '../src/parser/document';
 import { buildPlan, type Plan } from '../src/planner/plan';
 import { Dropzone } from './components/Dropzone';
 import { CourseInput } from './components/CourseInput';
@@ -21,9 +21,13 @@ export default function Home() {
       setError('');
       const bytes = new Uint8Array(await file.arrayBuffer());
       setAgreement(await parseAgreement(bytes));
-    } catch {
+    } catch (err) {
       setAgreement(null);
-      setError('Could not read that PDF. Download the agreement again from assist.org and retry.');
+      setError(
+        err instanceof UnrecognisedAgreementError
+          ? 'That file does not look like an ASSIST articulation agreement. Download yours from assist.org and try again. A scanned or photographed agreement will not work, it needs to be the PDF assist.org gives you.'
+          : 'Could not read that PDF. Download the agreement again from assist.org and retry.',
+      );
     }
   }
 
