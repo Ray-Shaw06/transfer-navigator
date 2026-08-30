@@ -15,9 +15,11 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # Build first: next-env.d.ts is generated, not committed, and without
+      # it tsc cannot resolve the side-effect import of globals.css.
+      - run: npm run build
       - run: npx tsc --noEmit
       # The ASSIST acceptance gate needs saved real responses, which are not
       # committed. It skips here and says so loudly in the output rather than
       # letting a green check imply it ran.
       - run: npm test
-      - run: npm run build
