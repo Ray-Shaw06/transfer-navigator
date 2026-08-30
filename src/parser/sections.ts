@@ -1,4 +1,23 @@
-export type SectionRule = { kind: 'all' } | { kind: 'choose'; least: number };
+// 'all' and 'choose' are what a PDF section header can say. The other three
+// exist because the ASSIST API states rules the printed header only implies:
+// a unit target rather than a course count, a choice between whole routes
+// rather than between single rows, and shapes this project has decided not
+// to evaluate. See docs/plans/2026-08-29-assist-api-v2.md for the counts.
+export type SectionRule =
+  | { kind: 'all' }
+  | { kind: 'choose'; least: number }
+  // Pick enough options to reach `least` SENDING units. ASSIST states these
+  // as NFromArea with amountUnitType 'Unit'.
+  | { kind: 'choose_units'; least: number }
+  // The section's rows are divided into routes by ArticulationRow.route, and
+  // completing any one whole route satisfies the section. This is the
+  // multi-row generalisation of ArticulationRow.orGroup.
+  | { kind: 'choose_route' }
+  // A rule this project can read but has chosen not to act on, carrying the
+  // receiving campus's own words for it. Planned as if every row were
+  // required, which overstates the work rather than hiding a requirement,
+  // and displayed with the text so the student can see what was not applied.
+  | { kind: 'advisory'; text: string };
 export type Section = { label: string; rule: SectionRule };
 
 // Headers carry a leading section number. "Select A or B" is the same rule as

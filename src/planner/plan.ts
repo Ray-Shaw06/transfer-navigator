@@ -23,14 +23,25 @@ export type RowStatus = {
   // straight from the row's own options and never cleared on demotion, so it
   // stays correct even for an 'optional' or 'alternative' row.
   allOptions: AndGroup[];
+  // Carried through from a not_articulated requirement so the UI can show
+  // the campus's own reason instead of one generic sentence. Undefined for
+  // every other state, and for an agreement read from a PDF.
+  notArticulatedReason?: string;
   remainingUnits: number;
 };
 
 export type SectionStatus = {
   label: string;
   rule: SectionRule;
+  // Counted in members, not rows. For every rule except 'choose_route' a
+  // member is one row, so these are row counts; for 'choose_route' a member
+  // is a whole route and these count routes.
   satisfiedCount: number;
   needed: number;
+  // Sending units already covered by the satisfied members. Only a
+  // 'choose_units' section is judged on this; it is reported for every
+  // section so the UI never has to recompute it.
+  satisfiedUnits: number;
   met: boolean;
 };
 
@@ -81,7 +92,8 @@ function baseStatus(row: ArticulationRow, done: Set<string>, consumed: Set<strin
     remainingUnits: 0,
   };
 
-  if (row.sending.kind === 'not_articulated') return { ...base, state: 'not_articulated' };
+  if (row.sending.kind === 'not_articulated')
+    return { ...base, state: 'not_articulated', notArticulatedReason: row.sending.reason };
   if (row.sending.kind === 'unreadable') return { ...base, state: 'unreadable' };
 
   const available = (code: string) => done.has(code) && !consumed.has(code);
@@ -119,24 +131,42 @@ function baseStatus(row: ArticulationRow, done: Set<string>, consumed: Set<strin
   };
 }
 
-// A choose group is either an explicit section with rule 'choose', or the
-// legacy orGroup (a receiving-side OR between two routes through one
-// requirement). Both reduce to the same question: of these members, do
-// enough already count, and if not, which of the rest are worth pursuing.
-// `capWinners` is what distinguishes them: an orGroup represents exactly one
-// requirement, so even if two of its routes independently come out
-// 'satisfied', only one may count, chosen by document order the same way it
-// always was. A 'choose' section has no such cap: two independently
-// satisfied members both legitimately count toward its N.
+// A choose group is a set of members competing to satisfy one quantifier.
+// Four things reduce to it: a 'choose' section (pick N rows), a
+// 'choose_units' section (pick rows totalling N units), a 'choose_route'
+// section (complete one whole route), and the legacy orGroup (a
+// receiving-side OR between two single-row routes through one requirement).
+//
+// `members` is a list of row-index groups rather than a list of row indices.
+// A member is satisfied only when every row in it is satisfied, costs the
+// sum of its rows' remaining units, and is demoted as a unit. For every case
+// except 'choose_route' each member holds exactly one row, which is what the
+// orGroup and 'choose' cases were before routes existed, so their behaviour
+// is unchanged.
+//
+// `capWinners` distinguishes an orGroup from a section: an orGroup
+// represents exactly one requirement, so even if two of its routes
+// independently come out 'satisfied', only one may count, chosen by document
+// order. A section has no such cap: two independently satisfied members both
+// legitimately count toward its N.
+//
+// `unitTarget` switches the quantifier from counting members to summing the
+// sending units they cover, for 'choose_units'. `least` is then read as a
+// unit total rather than a member count.
 type ChooseGroup = {
-  indices: number[];
+  members: number[][];
   least: number;
+  unitTarget: boolean;
   loserState: 'optional' | 'alternative';
   capWinners: boolean;
 };
 
+// Which section rules create a group at all. 'all' and 'advisory' do not:
+// every row under them is required, an advisory section deliberately so.
+const QUANTIFIED = new Set(['choose', 'choose_units', 'choose_route']);
+
 // Sections subsume orGroup rather than sitting beside it: a row already
-// grouped by an explicit 'choose' section is not also grouped by its legacy
+// grouped by a quantified section is not also grouped by its legacy
 // orGroup, so the two mechanisms never compete over the same row. On the
 // real agreement this matters for the linear algebra requirement, which
 // carries both an orGroup (from the receiving-column OR) and a 'choose'
@@ -150,71 +180,164 @@ function buildGroups(agreement: Agreement): ChooseGroup[] {
   agreement.rows.forEach((row, i) => {
     if (row.section === undefined) return;
     const section = agreement.sections[row.section];
-    if (!section || section.rule.kind !== 'choose') return;
-    const members = bySection.get(row.section) ?? [];
-    members.push(i);
-    bySection.set(row.section, members);
+    if (!section || !QUANTIFIED.has(section.rule.kind)) return;
+    const rows = bySection.get(row.section) ?? [];
+    rows.push(i);
+    bySection.set(row.section, rows);
     handled.add(i);
   });
-  for (const [sectionIndex, indices] of bySection) {
+
+  for (const [sectionIndex, rows] of bySection) {
     const rule = agreement.sections[sectionIndex].rule;
-    if (rule.kind !== 'choose') continue;
-    groups.push({ indices, least: rule.least, loserState: 'optional', capWinners: false });
+
+    // One member per route. A row in a 'choose_route' section with no route
+    // tag is its own single-row route rather than being dropped: an
+    // untagged row must still be reachable, and a route of one is the
+    // conservative reading of a row that claims no companions.
+    if (rule.kind === 'choose_route') {
+      const byRoute = new Map<number, number[]>();
+      let synthetic = -1;
+      for (const i of rows) {
+        const key = agreement.rows[i].route ?? synthetic--;
+        const route = byRoute.get(key) ?? [];
+        route.push(i);
+        byRoute.set(key, route);
+      }
+      groups.push({
+        members: [...byRoute.values()],
+        least: 1,
+        unitTarget: false,
+        loserState: 'alternative',
+        capWinners: false,
+      });
+      continue;
+    }
+
+    if (rule.kind === 'choose' || rule.kind === 'choose_units') {
+      groups.push({
+        members: rows.map((i) => [i]),
+        least: rule.least,
+        unitTarget: rule.kind === 'choose_units',
+        loserState: 'optional',
+        capWinners: false,
+      });
+    }
   }
 
   const byOrGroup = new Map<number, number[]>();
   agreement.rows.forEach((row, i) => {
     if (row.orGroup === undefined || handled.has(i)) return;
-    const members = byOrGroup.get(row.orGroup) ?? [];
-    members.push(i);
-    byOrGroup.set(row.orGroup, members);
+    const rows = byOrGroup.get(row.orGroup) ?? [];
+    rows.push(i);
+    byOrGroup.set(row.orGroup, rows);
   });
-  for (const indices of byOrGroup.values()) {
-    groups.push({ indices, least: 1, loserState: 'alternative', capWinners: true });
+  for (const rows of byOrGroup.values()) {
+    groups.push({
+      members: rows.map((i) => [i]),
+      least: 1,
+      unitTarget: false,
+      loserState: 'alternative',
+      capWinners: true,
+    });
   }
 
   return groups;
 }
 
+type Member = {
+  rows: number[];
+  statuses: RowStatus[];
+  // Satisfied only when every row in the member is. A route half-finished is
+  // not a route the student can stop working on.
+  satisfied: boolean;
+  // Sending units still open across the whole member, the cost of choosing
+  // it. Zero for a satisfied member.
+  cost: number;
+  // Units this member covers once complete, which is what a 'choose_units'
+  // quantifier counts. Read from the option the planner picked, so it is the
+  // units actually being credited rather than a sticker total.
+  units: number;
+  // False when any row is not_articulated or unreadable, meaning the student
+  // cannot finish this member at their college however much they want to.
+  achievable: boolean;
+};
+
+const memberUnits = (statuses: RowStatus[]) =>
+  statuses.reduce(
+    (sum, s) => sum + total(s.state === 'satisfied' ? s.satisfiedBy : s.cheapestOption),
+    0,
+  );
+
+function describeMember(rows: number[], statuses: RowStatus[]): Member {
+  const own = rows.map((i) => statuses[i]);
+  return {
+    rows,
+    statuses: own,
+    satisfied: own.every((s) => s.state === 'satisfied'),
+    cost: own.reduce((sum, s) => sum + s.remainingUnits, 0),
+    units: memberUnits(own),
+    achievable: own.every((s) => s.state === 'satisfied' || s.state === 'remaining'),
+  };
+}
+
 // Resolves one choose group in place against `statuses`, and returns the
-// indices of any member demoted away from 'satisfied' so buildPlan can
-// release the courses it had claimed.
+// indices of any row demoted away from 'satisfied' so buildPlan can release
+// the courses it had claimed.
 //
-// The rule, folded into one pass: members already 'satisfied' count first
+// The rule, folded into one pass: members already satisfied count first
 // (capped at one, in document order, for a capWinners group where more than
 // one route happened to be independently complete). If that is already
-// enough to reach `least`, every member not counted is demoted. Otherwise
-// the cheapest `remaining` members needed to reach `least` are kept too, and
-// everything else is demoted. If there are not enough achievable members to
-// reach `least` at all, nothing is touched: a real not_articulated blocker
-// must surface as one rather than being hidden behind an unmeetable quantifier.
+// enough to meet the quantifier, every member not counted is demoted.
+// Otherwise the cheapest achievable members needed to meet it are kept too,
+// and everything else is demoted. If the quantifier cannot be met at all,
+// nothing is touched: a real not_articulated blocker must surface as one
+// rather than being hidden behind an unmeetable quantifier.
 function resolveChooseGroup(group: ChooseGroup, statuses: RowStatus[], demoted: number[]): void {
-  const members = group.indices.map((i) => ({ i, status: statuses[i] }));
+  const members = group.members.map((rows) => describeMember(rows, statuses));
 
-  let satisfied = members.filter((m) => m.status.state === 'satisfied');
-  if (group.capWinners && satisfied.length > 1) {
-    for (const loser of satisfied.slice(1)) {
-      loser.status.state = group.loserState;
-      loser.status.satisfiedBy = [];
-      loser.status.remainingUnits = 0;
-      demoted.push(loser.i);
+  const demote = (m: Member, releaseSatisfied: boolean) => {
+    for (const [k, status] of m.statuses.entries()) {
+      if (releaseSatisfied && status.state === 'satisfied') demoted.push(m.rows[k]);
+      status.state = group.loserState;
+      status.satisfiedBy = [];
+      status.remainingUnits = 0;
     }
+  };
+
+  let satisfied = members.filter((m) => m.satisfied);
+  if (group.capWinners && satisfied.length > 1) {
+    for (const loser of satisfied.slice(1)) demote(loser, true);
     satisfied = satisfied.slice(0, 1);
   }
 
-  const needed = Math.max(group.least - satisfied.length, 0);
-  const cheapestRemaining = members
-    .filter((m) => m.status.state === 'remaining')
-    .sort((a, b) => a.status.remainingUnits - b.status.remainingUnits)
-    .slice(0, needed);
+  // A unit quantifier counts what the satisfied members actually cover; a
+  // member quantifier counts the members themselves. Both then ask the same
+  // question of the rest: how much more is still owed.
+  const covered = group.unitTarget
+    ? satisfied.reduce((sum, m) => sum + m.units, 0)
+    : satisfied.length;
 
-  if (cheapestRemaining.length < needed) return;
+  const candidates = members
+    .filter((m) => !m.satisfied && m.achievable)
+    .sort((a, b) => a.cost - b.cost);
 
-  const keep = new Set([...satisfied.map((m) => m.i), ...cheapestRemaining.map((m) => m.i)]);
+  const keep = new Set<Member>(satisfied);
+  let running = covered;
+  for (const m of candidates) {
+    if (running >= group.least) break;
+    keep.add(m);
+    running += group.unitTarget ? m.units : 1;
+  }
+
+  // Not enough achievable members exist to meet the quantifier. Demoting
+  // anything here would hide the shortfall behind a tidier-looking plan, so
+  // every member keeps the state it already has and the blockers stay
+  // visible.
+  if (running < group.least) return;
+
   for (const m of members) {
-    if (keep.has(m.i)) continue;
-    m.status.state = group.loserState;
-    m.status.remainingUnits = 0;
+    if (keep.has(m)) continue;
+    demote(m, true);
   }
 }
 
@@ -228,10 +351,47 @@ function resolveSections(
   }
 
   const sections: SectionStatus[] = agreement.sections.map((section, index) => {
-    const members = statuses.filter((_, i) => agreement.rows[i].section === index);
-    const satisfiedCount = members.filter((m) => m.state === 'satisfied').length;
-    const needed = section.rule.kind === 'choose' ? section.rule.least : members.length;
-    return { label: section.label, rule: section.rule, satisfiedCount, needed, met: satisfiedCount >= needed };
+    const rows = agreement.rows
+      .map((row, i) => (row.section === index ? i : -1))
+      .filter((i) => i >= 0);
+
+    // A 'choose_route' section is counted in routes, everything else in
+    // rows, so that "1 of 2" means one of two routes and not one of the
+    // five rows those routes happen to contain.
+    const groupRows =
+      section.rule.kind === 'choose_route'
+        ? [...rows.reduce((map, i) => {
+            const key = agreement.rows[i].route ?? -1 - i;
+            map.set(key, [...(map.get(key) ?? []), i]);
+            return map;
+          }, new Map<number, number[]>()).values()]
+        : rows.map((i) => [i]);
+
+    const members = groupRows.map((r) => describeMember(r, statuses));
+    const satisfied = members.filter((m) => m.satisfied);
+    const satisfiedCount = satisfied.length;
+    const satisfiedUnits = satisfied.reduce((sum, m) => sum + m.units, 0);
+
+    let needed: number;
+    let met: boolean;
+    if (section.rule.kind === 'choose') {
+      needed = section.rule.least;
+      met = satisfiedCount >= needed;
+    } else if (section.rule.kind === 'choose_units') {
+      // A unit target has no fixed member count, so `needed` reports how
+      // many members it currently takes to get there and `met` is judged on
+      // the units alone.
+      needed = satisfiedCount;
+      met = satisfiedUnits >= section.rule.least;
+    } else if (section.rule.kind === 'choose_route') {
+      needed = 1;
+      met = satisfiedCount >= 1;
+    } else {
+      needed = members.length;
+      met = satisfiedCount >= needed;
+    }
+
+    return { label: section.label, rule: section.rule, satisfiedCount, needed, satisfiedUnits, met };
   });
 
   return { sections, demoted };

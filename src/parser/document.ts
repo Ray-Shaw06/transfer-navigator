@@ -21,6 +21,11 @@ export type ArticulationRow = {
   // whether it is required outright or one of several alternatives under a
   // choose-at-least quantifier; see assignSections below.
   section?: number;
+  // Which route within a 'choose_route' section this row belongs to. Rows
+  // sharing a route must all be completed together, and completing any one
+  // route satisfies the section. Only the ASSIST API sets this; the PDF
+  // parser cannot see routes and leaves it undefined.
+  route?: number;
 };
 export type Agreement = {
   academicYear: string;

@@ -5,7 +5,13 @@ import { parseLine } from './course';
 export type AndGroup = { kind: 'and'; courses: Course[] };
 export type Requirement =
   | { kind: 'options'; options: AndGroup[] }
-  | { kind: 'not_articulated' }
+  // `reason` is the receiving campus's own words for why nothing is
+  // articulated, which is not always the same advice: "No Course
+  // Articulated" and "This course must be taken at the university after
+  // transfer" mean different things to a student deciding what to do next.
+  // Only the ASSIST API states it; the PDF prints a single marker, so
+  // parseRequirement leaves it undefined.
+  | { kind: 'not_articulated'; reason?: string }
   | { kind: 'unreadable'; text: string[] };
 
 // A block is a list of alternatives separated by OR, each alternative a set

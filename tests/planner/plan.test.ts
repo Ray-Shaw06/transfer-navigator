@@ -351,8 +351,179 @@ describe('buildPlan', () => {
         rule: { kind: 'choose', least: 1 },
         satisfiedCount: 0,
         needed: 1,
+        satisfiedUnits: 0,
         met: false,
       },
     ]);
+  });
+  it('completes one whole route and stands the other down', () => {
+    // Two routes through one section. Route 0 takes two courses, route 1
+    // takes one expensive course. Both are achievable, so the cheaper route
+    // wins and every row of the loser goes quiet.
+    const routed: Agreement = {
+      ...agreement,
+      sections: [{ label: 'Complete A or B', rule: { kind: 'choose_route' } }],
+      rows: [
+        {
+          receiving: [course('RECV 10', 4)],
+          section: 0,
+          route: 0,
+          sending: { kind: 'options', options: [{ kind: 'and', courses: [course('SEND 1', 3)] }] },
+        },
+        {
+          receiving: [course('RECV 11', 4)],
+          section: 0,
+          route: 0,
+          sending: { kind: 'options', options: [{ kind: 'and', courses: [course('SEND 2', 3)] }] },
+        },
+        {
+          receiving: [course('RECV 20', 4)],
+          section: 0,
+          route: 1,
+          sending: { kind: 'options', options: [{ kind: 'and', courses: [course('SEND 9', 9)] }] },
+        },
+      ],
+    };
+
+    const plan = buildPlan(routed, []);
+
+    expect(plan.statuses.map((s) => s.state)).toEqual(['remaining', 'remaining', 'alternative']);
+    expect(plan.remainingUnits).toBe(6);
+    expect(plan.sections[0]).toMatchObject({ satisfiedCount: 0, needed: 1, met: false });
+  });
+
+  it('does not treat a half finished route as a finished one', () => {
+    const routed: Agreement = {
+      ...agreement,
+      sections: [{ label: 'Complete A or B', rule: { kind: 'choose_route' } }],
+      rows: [
+        {
+          receiving: [course('RECV 10', 4)],
+          section: 0,
+          route: 0,
+          sending: { kind: 'options', options: [{ kind: 'and', courses: [course('SEND 1', 3)] }] },
+        },
+        {
+          receiving: [course('RECV 11', 4)],
+          section: 0,
+          route: 0,
+          sending: { kind: 'options', options: [{ kind: 'and', courses: [course('SEND 2', 3)] }] },
+        },
+        {
+          receiving: [course('RECV 20', 4)],
+          section: 0,
+          route: 1,
+          sending: { kind: 'options', options: [{ kind: 'and', courses: [course('SEND 9', 9)] }] },
+        },
+      ],
+    };
+
+    // SEND 1 alone finishes half of route 0. The section is not met, and the
+    // route is still the cheaper one to finish, so route 1 stays stood down.
+    const plan = buildPlan(routed, ['SEND 1']);
+
+    expect(plan.statuses.map((s) => s.state)).toEqual(['satisfied', 'remaining', 'alternative']);
+    expect(plan.sections[0].met).toBe(false);
+    expect(plan.remainingUnits).toBe(3);
+  });
+
+  it('avoids a route it cannot finish even when that route looks cheaper', () => {
+    const routed: Agreement = {
+      ...agreement,
+      sections: [{ label: 'Complete A or B', rule: { kind: 'choose_route' } }],
+      rows: [
+        { receiving: [course('RECV 10', 4)], section: 0, route: 0, sending: { kind: 'not_articulated' } },
+        {
+          receiving: [course('RECV 20', 4)],
+          section: 0,
+          route: 1,
+          sending: { kind: 'options', options: [{ kind: 'and', courses: [course('SEND 9', 9)] }] },
+        },
+      ],
+    };
+
+    const plan = buildPlan(routed, []);
+
+    expect(plan.statuses[1].state).toBe('remaining');
+    expect(plan.remainingUnits).toBe(9);
+    expect(plan.notArticulated).toEqual([]);
+  });
+
+  it('keeps taking options until a unit target is reached', () => {
+    // 8 units wanted. The two cheapest options are 3 and 4 units, which is 7,
+    // so a third has to be kept as well.
+    const unitTarget: Agreement = {
+      ...agreement,
+      sections: [{ label: 'Complete at least 8 units from the following', rule: { kind: 'choose_units', least: 8 } }],
+      rows: [3, 4, 5, 6].map((units, i) => ({
+        receiving: [course(`RECV ${(i + 1) * 10}`, 4)],
+        section: 0,
+        sending: {
+          kind: 'options' as const,
+          options: [{ kind: 'and' as const, courses: [course(`SEND ${units}`, units)] }],
+        },
+      })),
+    };
+
+    const plan = buildPlan(unitTarget, []);
+
+    expect(plan.statuses.map((s) => s.state)).toEqual([
+      'remaining',
+      'remaining',
+      'remaining',
+      'optional',
+    ]);
+    expect(plan.remainingUnits).toBe(12);
+    expect(plan.sections[0]).toMatchObject({ satisfiedUnits: 0, met: false });
+  });
+
+  it('counts units already completed toward a unit target', () => {
+    const unitTarget: Agreement = {
+      ...agreement,
+      sections: [{ label: 'Complete at least 8 units from the following', rule: { kind: 'choose_units', least: 8 } }],
+      rows: [3, 4, 5, 6].map((units, i) => ({
+        receiving: [course(`RECV ${(i + 1) * 10}`, 4)],
+        section: 0,
+        sending: {
+          kind: 'options' as const,
+          options: [{ kind: 'and' as const, courses: [course(`SEND ${units}`, units)] }],
+        },
+      })),
+    };
+
+    const plan = buildPlan(unitTarget, ['SEND 5', 'SEND 6']);
+
+    expect(plan.sections[0]).toMatchObject({ satisfiedUnits: 11, met: true });
+    expect(plan.remainingUnits).toBe(0);
+  });
+
+  it('treats an advisory section as fully required rather than dropping its rule', () => {
+    // The tool cannot evaluate "up to 2 courses", so it must not pretend to.
+    // Every row stays required, which overstates the work, and the rule text
+    // survives on the section for the UI to print.
+    const advisory: Agreement = {
+      ...agreement,
+      sections: [
+        { label: 'Additional courses', rule: { kind: 'advisory', text: 'Complete up to 2 courses from the following' } },
+      ],
+      rows: [
+        {
+          receiving: [course('RECV 10', 4)],
+          section: 0,
+          sending: { kind: 'options', options: [{ kind: 'and', courses: [course('SEND 1', 3)] }] },
+        },
+        {
+          receiving: [course('RECV 20', 4)],
+          section: 0,
+          sending: { kind: 'options', options: [{ kind: 'and', courses: [course('SEND 2', 5)] }] },
+        },
+      ],
+    };
+
+    const plan = buildPlan(advisory, []);
+
+    expect(plan.statuses.map((s) => s.state)).toEqual(['remaining', 'remaining']);
+    expect(plan.remainingUnits).toBe(8);
+    expect(plan.sections[0]).toMatchObject({ needed: 2, met: false });
   });
 });
