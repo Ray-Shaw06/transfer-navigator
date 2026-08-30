@@ -1,0 +1,25 @@
+name: Canary
+
+# ASSIST is not ours. If they change a route, rename an enum value, or alter
+# the antiforgery handshake, this site breaks silently for every visitor. A
+# scheduled run turns that into a failed workflow and an email.
+on:
+  schedule:
+    # 14:00 UTC, which is early morning in California.
+    - cron: '0 14 * * *'
+  workflow_dispatch:
+    inputs:
+      base:
+        description: 'Base URL to check'
+        required: false
+        default: 'https://transfer-navigator.vercel.app'
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/canary.mjs "${{ github.event.inputs.base || 'https://transfer-navigator.vercel.app' }}"

@@ -121,6 +121,18 @@ npm run build && npm start
 
 `next dev` is not used here; see `next.config.ts`.
 
+### Monitoring
+
+`scripts/canary.mjs` checks that the deployed site can still read ASSIST end
+to end, and runs daily from `.github/workflows/canary.yml`. Everything it
+touches is derived rather than pinned: agreement keys carry a UUID that
+changes whenever an agreement is republished, so a hardcoded key would fail
+every summer for a reason that is not a bug. Point it anywhere:
+
+```bash
+node scripts/canary.mjs http://localhost:3100
+```
+
 ### The ASSIST acceptance gate
 
 `tests/assist/acceptance.test.ts` runs the mapper over real saved ASSIST
@@ -133,7 +145,12 @@ ASSIST_CACHE_DIR=/path/to/saved/responses npm test
 ```
 
 Without it the gate skips and prints a warning saying so, so a green check
-never implies it ran.
+never implies it ran. The parser is not left unchecked in CI either:
+`tests/parser/synthetic.test.ts` builds an agreement PDF from scratch, with
+invented institutions and course codes, and runs the whole pipeline over it
+including pdfjs. It carries the shapes that have caused real bugs here: a
+receiving-side AND, a cell with nothing articulated, a choose-at-least
+section, a receiving-side OR, and a section spanning a page break.
 
 ## Layout
 
