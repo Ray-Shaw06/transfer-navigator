@@ -6,6 +6,7 @@ import type { Agreement } from '../src/parser/agreement';
 import { buildPlan } from '../src/planner/plan';
 import { buildSchedule, currentTerm } from '../src/planner/schedule';
 import { geStatus } from '../src/planner/ge';
+import { PATTERNS, patternFor, type Destination, type PatternKey } from '../src/planner/patterns';
 import { Dropzone } from './components/Dropzone';
 import { CourseChooser } from './components/CourseChooser';
 import { sendingCourses } from '../src/planner/catalog';
@@ -59,6 +60,11 @@ export default function Home() {
   // the one the link asked for, so it is handed back exactly once.
   const restoredMajor = useRef(initial.major);
 
+  // Cal-GETC replaced the other two from Fall 2025, but a student with
+  // catalog rights before then may still be certified in IGETC or CSU
+  // GE-Breadth, so the pattern follows the catalog year and stays changeable.
+  const [pattern, setPattern] = useState<PatternKey | null>(null);
+
   const [uploaded, setUploaded] = useState<Agreement | null>(null);
   const [uploadError, setUploadError] = useState('');
 
@@ -67,7 +73,21 @@ export default function Home() {
   const years = yearsFor(partners, campus, catalog?.academicYears ?? []);
   const { majors, state: majorsState, failure: majorsFailure } = useMajors(college, campus, year);
   const { agreement: fetched, loading, failure: agreementFailure } = useAgreement(major);
-  const ge = useGeneralEducation(college, year);
+  // The year label decides the default: 2025-2026 onward is Cal-GETC.
+  const yearLabel = (catalog?.academicYears ?? []).find((y) => y.id === year)?.label ?? '';
+  const defaultPattern: PatternKey =
+    yearLabel && Number(yearLabel.slice(0, 4)) >= 2025 ? 'CALGETC' : 'IGETC';
+  const activePattern = pattern ?? defaultPattern;
+
+  const ge = useGeneralEducation(college, year, patternFor(activePattern).listType);
+
+  // IGETC asks different things of a student depending on where they are
+  // going: Oral Communication is a CSU requirement, Language Other Than
+  // English a UC one. The campus already chosen answers that.
+  const destination: Destination | null = (() => {
+    const system = (catalog?.campuses ?? []).find((c) => c.id === campus)?.system;
+    return system === 'UC' || system === 'CSU' ? system : null;
+  })();
 
   const agreement = uploaded ?? fetched;
   const failure = catalogFailure ?? majorsFailure ?? agreementFailure;
@@ -124,9 +144,15 @@ export default function Home() {
   );
 
   const geView = useMemo(() => {
-    if (!ge || !plan || ge.areas.length === 0) return null;
-    return geStatus(ge, completed, plan.remainingGroups.flatMap((g) => g.courses));
-  }, [ge, plan, completed]);
+    if (!ge || !plan || ge.byCourse.length === 0) return null;
+    return geStatus(
+      ge,
+      patternFor(activePattern),
+      destination,
+      completed,
+      plan.remainingGroups.flatMap((g) => g.courses),
+    );
+  }, [ge, plan, completed, activePattern, destination]);
 
   // Mirror the plan into the address bar. replaceState rather than pushState:
   // ticking a course is not a navigation, and filling the back button with
@@ -276,8 +302,24 @@ export default function Home() {
               <div className="panel-head">
                 <h2>General education</h2>
                 <p>
-                  {geView.pattern} at {agreement.sendingInstitution} · {geView.academicYear}
+                  {agreement.sendingInstitution} · {geView.academicYear}
                 </p>
+              </div>
+
+              <div className="field pattern-pick">
+                <label htmlFor="pattern">Certification pattern</label>
+                <select
+                  id="pattern"
+                  value={activePattern}
+                  onChange={(e) => setPattern(e.target.value as PatternKey)}
+                >
+                  {PATTERNS.map((p) => (
+                    <option key={p.key} value={p.key}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="field-note">{patternFor(activePattern).blurb}</p>
               </div>
               <GeneralEducation
                 status={geView}

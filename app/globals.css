@@ -1222,3 +1222,5 @@ details.more[open] > summary::before { content: '–'; }
 .ge-add[open] > summary::before { content: '–'; }
 .ge-add > summary:hover { color: var(--ink); }
 .ge-add-body { margin-top: 0.875rem; }
+
+.pattern-pick { margin: 0 0 1.125rem; max-width: 24rem; }

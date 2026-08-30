@@ -94,25 +94,46 @@ certifies it, and leads with the part students most often get wrong: which
 courses in your major-prep route **also** clear a Cal-GETC area, so you do not
 take a second course you never needed.
 
-It tracks the whole pattern: 11 courses, 34 semester units, area by area. Tick
-what you have taken and it fills in.
+Three patterns, because which one applies depends on when you started:
 
-The per-area counts are not in ASSIST. They come from
-[ICAS Cal-GETC Standards 1.4](https://icas-ca.org/wp-content/uploads/2026/07/Cal-GETC_Standards_1v4_Final_r.pdf),
-section 2, transcribed in `src/planner/calgetc.ts` with its citation and
-covered by tests that assert the transcription, so a mistyped table fails the
-build rather than quietly changing what students are told to take.
+| Pattern | Who it is for | Counts |
+|---|---|---|
+| **Cal-GETC** | started Fall 2025 or later | [ICAS Standards 1.4](https://icas-ca.org/wp-content/uploads/2026/07/Cal-GETC_Standards_1v4_Final_r.pdf) §2 |
+| **IGETC** | catalog rights before Fall 2025 | [ICAS Standards 2.4](https://icas-ca.org/wp-content/uploads/2023/10/IGETC_Standards_2023_v2_4-rev1.pdf) §1.1 |
+| **CSU GE-Breadth** | before Fall 2025, transferring to a CSU | not sourced, see below |
 
-Two rules from that standard are applied rather than assumed:
+It tracks the pattern area by area. Tick what you have taken and it fills in.
+
+IGETC is really two patterns wearing one name: Oral Communication is a CSU-only
+requirement and Language Other Than English a UC-only one, so the campus you
+picked decides which areas you are shown. Its Area 3 also asks for three
+courses with at least one Arts and one Humanities, which is a different demand
+from Cal-GETC's one of each, and Area 6A is a proficiency rather than a course
+so it is never counted as work to schedule.
+
+**CSU GE-Breadth has no counts here.** They are set by the CSU General
+Education Breadth Requirements, formerly Executive Order 1100 Revised, which
+sits behind a bot check this project will not work around. The areas and the
+certified courses are shown; the requirements say so rather than being
+guessed. To finish it: get that document, transcribe the per-area counts into
+`src/planner/patterns.ts` with a citation, and the rest already works.
+
+No per-area counts are in ASSIST. Each pattern's are transcribed in
+`src/planner/patterns.ts` with the document they came from, and covered by
+tests that assert the transcription, so a mistyped table fails the build rather
+than quietly changing what students are told to take.
+
+Two rules from those standards are applied rather than assumed:
 
 - **One course, one area.** Section 9: a course listed under two areas may be
   applied to only one. Assigning each course to a single area, choosing the
   assignment that satisfies the most requirements, is a matching problem;
   crediting a course to every area it is listed under would overstate progress.
-- **The laboratory.** Area 5 asks that one of your two science courses carry a
-  one-unit lab. That is the exception the standard names, so it rides along
-  with an Area 5 course instead of consuming a slot, and you are told when
-  neither of yours has one.
+- **The documented exceptions.** Cal-GETC and IGETC both attach a one-unit
+  laboratory to one of the two Area 5 courses rather than making it a course of
+  its own, and you are told when neither of yours carries one. IGETC adds a
+  second: per UC policy a Language Other Than English course may be certified
+  in both Area 3B and Area 6A.
 
 Area 4 asks for two academic disciplines. A department is not quite a
 discipline, so that one is flagged when both courses share a department rather

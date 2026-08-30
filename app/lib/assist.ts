@@ -178,7 +178,11 @@ export function useAgreement(key: string | null): {
 // The general education pattern belongs to the college and the year, not the
 // major, so it survives a change of major. A failure is swallowed: general
 // education is additional to the plan and must not take the plan down.
-export function useGeneralEducation(college: number | null, year: number | null): GeneralEducation | null {
+export function useGeneralEducation(
+  college: number | null,
+  year: number | null,
+  listType: string,
+): GeneralEducation | null {
   const [ge, setGe] = useState<GeneralEducation | null>(null);
 
   useEffect(() => {
@@ -188,7 +192,9 @@ export function useGeneralEducation(college: number | null, year: number | null)
     }
     let live = true;
     setGe(null);
-    getJson<{ ge: GeneralEducation }>(`/api/assist/ge?college=${college}&year=${year}`)
+    getJson<{ ge: GeneralEducation }>(
+      `/api/assist/ge?college=${college}&year=${year}&pattern=${encodeURIComponent(listType)}`,
+    )
       .then((data) => live && setGe(data.ge))
       .catch(() => {
         // The panel simply does not appear.
@@ -196,7 +202,7 @@ export function useGeneralEducation(college: number | null, year: number | null)
     return () => {
       live = false;
     };
-  }, [college, year]);
+  }, [college, year, listType]);
 
   return ge;
 }

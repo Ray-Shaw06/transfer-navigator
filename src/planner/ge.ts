@@ -1,115 +1,89 @@
 import type { GeneralEducation } from '../assist/ge';
 import { normalizeCode } from './catalog';
-import {
-  LAB_AREA,
-  REQUIREMENTS,
-  STANDARD_CITATION,
-  TOTAL_COURSES,
-  TOTAL_SEMESTER_UNITS,
-  requirementFor,
-} from './calgetc';
+import { areasFor, slotsFor, type AreaRule, type Destination, type Pattern, type Slot } from './patterns';
 import type { Course } from '../parser/types';
 
-// How a student's major preparation plan lands against a general education
-// pattern.
+// How a student's coursework lands against a general education pattern.
 //
-// The one thing this is really for: a course can satisfy a major requirement
-// AND a Cal-GETC area at the same time, and students routinely miss it and
-// take a second course they never needed. That overlap is computable exactly
-// from what ASSIST publishes, so it is stated exactly.
+// Two things this is for. First, the overlap: a course can satisfy a major
+// requirement AND a general education area at the same time, and students
+// routinely miss it and take a second course they never needed. Second,
+// progress: how much of the pattern is actually done.
 //
-// How many courses each area requires does not come from ASSIST. It comes
-// from the ICAS standard, transcribed in calgetc.ts with its citation, and it
-// is applied here so a student can see how far along they are rather than only
-// which areas they have touched.
-//
-// One course, one area. The standard is explicit about it:
-//
-//   "Courses listed in more than one area can only be applied in one area
-//    (Laboratory exception, see Section 9.5.3)."   -- section 9
-//
-// Many courses are certified for two areas, so deciding which area each one
-// counts in is a matching problem, not a tally. Crediting a course to every
-// area it is listed under overstates progress, which is the direction this
-// project is least willing to be wrong in. The laboratory is the one
-// exception the standard names: a course applied to Area 5A or 5B may also
-// carry the one-unit laboratory, so 5C is never a slot to be filled.
+// One course, one area. Every pattern here says so, in its own words. So
+// deciding which area each course counts in is a matching problem rather than
+// a tally; crediting a course to every area it is listed under overstates
+// progress, which is the direction this project is least willing to be wrong
+// in. Each pattern's documented exceptions (Cal-GETC's laboratory, IGETC's
+// Language Other Than English in both 3B and 6A) are the only cases where a
+// course counts twice, and they are named on the pattern rather than assumed.
 
 export type AreaCoverage = {
-  code: string;
-  name: string;
-  // How many of the college's courses are certified for this area at all.
-  offered: number;
-  // Courses already finished that clear this area.
-  done: Course[];
-  // Courses in the major preparation route that clear this area, which the
-  // student gets for free.
-  planned: Course[];
-  // Courses the Cal-GETC standard asks for here. Zero for the laboratory,
-  // which is a property of an Area 5 course rather than a course of its own.
+  id: string;
+  label: string;
+  // Courses the pattern asks for here. Zero when the requirement is not
+  // coursework, or when the pattern's counts could not be sourced.
   required: number;
-  // Finished enough courses to satisfy the area outright.
+  // Courses at this college that could fill it.
+  offered: number;
+  done: Course[];
+  planned: Course[];
   met: boolean;
-  // Finished, or on course to, once the major preparation route is done.
   covered: boolean;
-  // The area's own wording where it asks for more than a count.
   caveat?: string;
+  notCoursework?: string;
+  onlyFor?: Destination;
 };
 
 export type GeOverlap = {
   course: Course;
   areas: string[];
-  // True when the student has already finished it rather than merely planned
-  // it, so the UI can speak in the right tense.
   finished: boolean;
 };
 
 export type GeStatus = {
   pattern: string;
+  patternKey: string;
   academicYear: string;
-  citation: string;
+  citation?: string;
+  citationUrl?: string;
+  // False when the pattern's per-area counts could not be sourced, so the
+  // interface can show the areas without pretending to know the requirements.
+  counted: boolean;
+  destination: Destination | null;
   areas: AreaCoverage[];
-  // Every course that does double duty, most areas first.
   overlap: GeOverlap[];
-  // Areas nothing in the plan touches. These are the GE a student still has
-  // to schedule on top of major preparation.
   untouched: AreaCoverage[];
-  // Progress against the standard's own totals.
   coursesDone: number;
   coursesRequired: number;
-  unitsRequired: number;
-  // Whether one of the Area 5 courses carries the required laboratory. Null
-  // while Area 5 is not finished, because the question is not yet answerable.
+  unitsRequired?: number;
+  // Whether an Area 5 course carries the laboratory. Null while Area 5 is
+  // unfinished, because the question is not yet answerable.
   lab: boolean | null;
-  // True when both Area 4 courses come from one department, which the rule
-  // asking for two academic disciplines probably does not allow. Flagged, not
-  // enforced: a department is a weaker thing than a discipline.
-  areaFourOneDepartment: boolean;
+  // True when the courses applied to the two-disciplines area all came from
+  // one department. Flagged, not enforced: a department is weaker than a
+  // discipline.
+  oneDepartment: boolean;
+  dualCertifyNote?: string;
 };
 
-// Assigns each course to at most one area slot, filling as many slots as
-// possible. Kuhn's algorithm: for every course, walk the slots it is eligible
-// for and either take a free one or bump the course already there, provided
-// that one can move somewhere else.
+type Entry = { course: Course; areas: string[]; department: string };
+
+// Assigns each course to at most one slot, filling as many as possible.
+// Kuhn's algorithm: for every course, walk the slots it is eligible for and
+// either take a free one or bump the course already there, provided that one
+// can move somewhere else.
 //
 // Maximum matching rather than a greedy pass because greedy understates: a
 // course eligible for 3B and 4 taken first can occupy the only Area 4 slot a
-// later, 4-only course needed. Maximum matching is what a counselor does by
-// hand, and it can never claim more slots than genuinely exist.
-type Slot = { area: string; index: number };
-
-function assignToAreas(
-  courses: { course: Course; areas: string[] }[],
-  slots: Slot[],
-  taken: Map<number, number>,
-): Map<number, number> {
-  // slot index -> course index
-  const owner = new Map(taken);
+// later, 4-only course needed.
+function assign(courses: Entry[], slots: Slot[]): Map<number, number> {
+  const owner = new Map<number, number>();
 
   const tryAssign = (courseIndex: number, seen: Set<number>): boolean => {
     for (const [slotIndex, slot] of slots.entries()) {
       if (seen.has(slotIndex)) continue;
-      if (!courses[courseIndex].areas.includes(slot.area)) continue;
+      if (!courses[courseIndex].areas.some((a) => slot.eligible.includes(a))) continue;
       seen.add(slotIndex);
 
       const current = owner.get(slotIndex);
@@ -121,9 +95,13 @@ function assignToAreas(
     return false;
   };
 
+  const assigned = new Set<number>();
   for (let i = 0; i < courses.length; i++) {
-    if ([...owner.values()].includes(i)) continue;
-    tryAssign(i, new Set());
+    if (assigned.has(i)) continue;
+    if (tryAssign(i, new Set())) {
+      assigned.clear();
+      for (const c of owner.values()) assigned.add(c);
+    }
   }
 
   return owner;
@@ -131,12 +109,14 @@ function assignToAreas(
 
 export function geStatus(
   ge: GeneralEducation,
+  pattern: Pattern,
+  destination: Destination | null,
   completed: Set<string>,
   planned: Course[],
 ): GeStatus {
   // Matched on the normalised code, the same way the course chooser matches,
   // so MATH 005A and MATH 5A are one course here too.
-  const byNormalised = new Map<string, { course: Course; areas: string[]; department: string }>();
+  const byNormalised = new Map<string, Entry>();
   for (const entry of ge.byCourse) {
     byNormalised.set(normalizeCode(entry.code), {
       course: { code: entry.code, title: entry.title, units: entry.units },
@@ -146,79 +126,85 @@ export function geStatus(
   }
 
   const doneCodes = new Set([...completed].map(normalizeCode));
-  const plannedByCode = new Map(planned.map((c) => [normalizeCode(c.code), c]));
+  const plannedCodes = new Map(planned.map((c) => [normalizeCode(c.code), c]));
+
+  const overlap: GeOverlap[] = [];
+  const doneEntries: Entry[] = [];
+  const plannedEntries: Entry[] = [];
+
+  for (const [normalised, entry] of byNormalised) {
+    const finished = doneCodes.has(normalised);
+    const inPlan = plannedCodes.has(normalised);
+    if (!finished && !inPlan) continue;
+
+    overlap.push({ course: entry.course, areas: entry.areas, finished });
+    (finished ? doneEntries : plannedEntries).push(entry);
+  }
+
+  overlap.sort(
+    (a, b) => b.areas.length - a.areas.length || a.course.code.localeCompare(b.course.code),
+  );
+
+  // A pattern whose counts could not be sourced still has areas: ASSIST's own,
+  // with its own labels. Showing them without requirements is more useful than
+  // showing nothing, and it is the same honest shape Cal-GETC had before the
+  // ICAS standard was in hand.
+  const rules: AreaRule[] =
+    pattern.areas.length > 0
+      ? areasFor(pattern, destination)
+      : ge.areas.map((a) => ({ id: a.code, label: a.name, courses: 0, from: [a.code] }));
 
   const coverage = new Map<string, AreaCoverage>(
-    ge.areas.map((a) => {
-      const requirement = requirementFor(a.code);
+    rules.map((rule) => {
+      const offered = ge.byCourse.filter((c) => c.areas.some((a) => rule.from.includes(a))).length;
       return [
-        a.code,
+        rule.id,
         {
-          code: a.code,
-          name: a.name,
-          offered: a.courses.length,
+          id: rule.id,
+          label: rule.label,
+          required: rule.notCoursework ? 0 : rule.courses,
+          offered,
           done: [],
           planned: [],
-          required: requirement?.courses ?? 0,
           met: false,
           covered: false,
-          caveat: requirement?.caveat,
+          caveat: rule.caveat,
+          notCoursework: rule.notCoursework,
+          onlyFor: rule.onlyFor,
         },
       ];
     }),
   );
 
-  // Departments of the Area 4 courses a student has actually taken, for the
-  // two-disciplines rule.
-  const areaFourDepartments = new Set<string>();
+  // Areas the pattern lets a course certify in on top of wherever else it
+  // counts. Those are filled without consuming the course.
+  const dual = new Set(pattern.dualCertify?.areas ?? []);
+  const consuming = slotsFor(rules).filter((s) => !s.eligible.every((e) => dual.has(e)));
 
-  const overlap: GeOverlap[] = [];
-
-  for (const [normalised, entry] of byNormalised) {
-    const finished = doneCodes.has(normalised);
-    const inPlan = plannedByCode.has(normalised);
-    if (!finished && !inPlan) continue;
-
-    overlap.push({ course: entry.course, areas: entry.areas, finished });
-
-  }
-
-  // Most areas cleared first: a course covering two areas is the one worth
-  // showing at the top, because it is the one saving the most work.
-  overlap.sort((a, b) => b.areas.length - a.areas.length || a.course.code.localeCompare(b.course.code));
-
-  // One slot per course the pattern asks for, so Area 4 has two and the rest
-  // have one. 5C is not among them.
-  const slots: Slot[] = [];
-  for (const requirement of REQUIREMENTS) {
-    for (let i = 0; i < requirement.courses; i++) {
-      slots.push({ area: requirement.code, index: i });
-    }
-  }
-
-  // Finished courses claim slots first, then the route's courses fill what is
-  // left. A course already taken should never be displaced by one merely
-  // planned.
-  const doneEntries = overlap.filter((o) => o.finished).map((o) => ({ course: o.course, areas: o.areas }));
-  const plannedEntries = overlap.filter((o) => !o.finished).map((o) => ({ course: o.course, areas: o.areas }));
-
-  const doneOwner = assignToAreas(doneEntries, slots, new Map());
-
+  const doneOwner = assign(doneEntries, consuming);
   for (const [slotIndex, courseIndex] of doneOwner) {
-    coverage.get(slots[slotIndex].area)?.done.push(doneEntries[courseIndex].course);
+    coverage.get(consuming[slotIndex].area)?.done.push(doneEntries[courseIndex].course);
   }
-  const freeSlots = slots.filter((_, i) => !doneOwner.has(i));
-  const plannedFill = assignToAreas(plannedEntries, freeSlots, new Map());
-  for (const [slotIndex, courseIndex] of plannedFill) {
+
+  const freeSlots = consuming.filter((_, i) => !doneOwner.has(i));
+  const plannedOwner = assign(plannedEntries, freeSlots);
+  for (const [slotIndex, courseIndex] of plannedOwner) {
     coverage.get(freeSlots[slotIndex].area)?.planned.push(plannedEntries[courseIndex].course);
   }
 
-  // Departments of the Area 4 courses actually applied there, for the
-  // two-disciplines rule.
-  for (const [slotIndex, courseIndex] of doneOwner) {
-    if (slots[slotIndex].area !== '4') continue;
-    const department = byNormalised.get(normalizeCode(doneEntries[courseIndex].course.code))?.department;
-    if (department) areaFourDepartments.add(department);
+  // The dual-certify areas, filled independently. IGETC's Area 6A is the real
+  // case: a Language Other Than English course counts there as well as in
+  // Area 3B, so it must not be taken out of the pool.
+  for (const rule of rules) {
+    if (!dual.has(rule.id) || rule.notCoursework) continue;
+    const area = coverage.get(rule.id);
+    if (!area) continue;
+    for (const entry of doneEntries) {
+      if (entry.areas.some((a) => rule.from.includes(a))) area.done.push(entry.course);
+    }
+    for (const entry of plannedEntries) {
+      if (entry.areas.some((a) => rule.from.includes(a))) area.planned.push(entry.course);
+    }
   }
 
   const areas = [...coverage.values()];
@@ -228,31 +214,43 @@ export function geStatus(
     area.covered = area.done.length + area.planned.length >= area.required;
   }
 
-  // Every slot a finished course was actually applied to.
-  const coursesDone = doneOwner.size;
-
-  // The laboratory. One of the two Area 5 courses must carry it, so the
-  // question only has an answer once both Area 5 areas are satisfied.
-  const areaFive = areas.filter((a) => a.code === '5A' || a.code === '5B');
+  // The laboratory rides along with an Area 5 course rather than being one.
+  const science = areas.find((a) => a.caveat?.includes('laboratory'));
   const carriesLab = (course: Course) =>
-    byNormalised.get(normalizeCode(course.code))?.areas.includes(LAB_AREA) ?? false;
-  const lab =
-    areaFive.length === 2 && areaFive.every((a) => a.met)
-      ? areaFive.some((a) => a.done.some(carriesLab))
-      : null;
+    pattern.labArea
+      ? (byNormalised.get(normalizeCode(course.code))?.areas.includes(pattern.labArea) ?? false)
+      : false;
+  const lab = science && science.met ? science.done.some(carriesLab) : null;
+
+  // The two-disciplines area, checked only on what was actually applied there.
+  const disciplineArea = areas.find((a) => a.caveat?.includes('disciplines'));
+  const departments = new Set(
+    (disciplineArea?.done ?? [])
+      .map((c) => byNormalised.get(normalizeCode(c.code))?.department)
+      .filter((d): d is string => Boolean(d)),
+  );
+
+  const counted = pattern.areas.length > 0 && pattern.citation !== undefined;
 
   return {
-    pattern: ge.pattern,
+    pattern: pattern.name,
+    patternKey: pattern.key,
     academicYear: ge.academicYear,
-    citation: STANDARD_CITATION,
+    citation: pattern.citation,
+    citationUrl: pattern.citationUrl,
+    counted,
+    destination,
     areas,
     overlap,
     untouched: areas.filter((a) => a.done.length === 0 && a.planned.length === 0),
-    coursesDone,
-    coursesRequired: TOTAL_COURSES,
-    unitsRequired: TOTAL_SEMESTER_UNITS,
+    coursesDone: areas.reduce((sum, a) => sum + Math.min(a.done.length, a.required), 0),
+    coursesRequired: areas.reduce((sum, a) => sum + a.required, 0),
+    unitsRequired: pattern.totalSemesterUnits,
     lab,
-    areaFourOneDepartment:
-      (coverage.get('4')?.done.length ?? 0) >= 2 && areaFourDepartments.size === 1,
+    oneDepartment:
+      (disciplineArea?.done.length ?? 0) >= (disciplineArea?.required ?? 0) &&
+      (disciplineArea?.required ?? 0) > 1 &&
+      departments.size === 1,
+    dualCertifyNote: pattern.dualCertify?.note,
   };
 }

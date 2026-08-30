@@ -1,5 +1,4 @@
 import type { GeStatus } from '../../src/planner/ge';
-import { STANDARD_URL } from '../../src/planner/calgetc';
 import { CourseChooser } from './CourseChooser';
 import type { Course } from '../../src/parser/types';
 
@@ -68,6 +67,17 @@ export function GeneralEducation({
         </p>
       )}
 
+      {!status.counted && (
+        <p className="notice" data-tone="caution" role="note">
+          <strong>No requirement counts for {status.pattern}</strong>
+          ASSIST publishes which of your college&apos;s courses clear which area, which is the list
+          below. How many each area takes is set by the CSU General Education Breadth Requirements,
+          which this tool could not reach, so it is not shown rather than guessed. Get the counts
+          from your counselor.
+        </p>
+      )}
+
+      {status.counted && (
       <div className="ge-progress">
         <div className="ge-bar" role="img" aria-label={`${status.coursesDone} of ${status.coursesRequired} Cal-GETC courses finished`}>
           <span style={{ width: `${(status.coursesDone / status.coursesRequired) * 100}%` }} />
@@ -76,10 +86,15 @@ export function GeneralEducation({
           <b>
             {status.coursesDone} of {status.coursesRequired} courses
           </b>{' '}
-          finished, out of the {status.unitsRequired} semester units the full pattern takes.
-          {covered.length > 0 && ` Your route touches ${covered.length} of ${status.areas.length} areas.`}
+          finished
+          {status.unitsRequired ? `, out of the ${status.unitsRequired} semester units the full pattern takes` : ''}
+          .
+          {status.destination
+            ? ` Counted for a ${status.destination} destination, which decides some of these areas.`
+            : ''}
         </p>
       </div>
+      )}
 
       {status.lab === false && (
         <p className="notice" data-tone="caution" role="note">
@@ -89,9 +104,9 @@ export function GeneralEducation({
         </p>
       )}
 
-      {status.areaFourOneDepartment && (
+      {status.oneDepartment && (
         <p className="notice" data-tone="caution" role="note">
-          <strong>Both Area 4 courses look like one department</strong>
+          <strong>Those courses look like one department</strong>
           The rule asks for two academic disciplines. Departments are not exactly disciplines, so
           this may be fine, but it is worth checking with a counselor.
         </p>
@@ -99,29 +114,33 @@ export function GeneralEducation({
 
       <div className="ge-areas-head">
         <h4>The {status.pattern} areas</h4>
-        <span className="tally">
-          {status.areas.filter((a) => a.required > 0 && a.met).length} of{' '}
-          {status.areas.filter((a) => a.required > 0).length} areas done
-        </span>
+        {status.counted && (
+          <span className="tally">
+            {status.areas.filter((a) => a.required > 0 && a.met).length} of{' '}
+            {status.areas.filter((a) => a.required > 0).length} areas done
+          </span>
+        )}
       </div>
 
       <ul className="ge-list">
         {status.areas.map((area) => {
           const taken = [...area.done, ...area.planned];
           return (
-            <li key={area.code} data-touched={taken.length > 0} data-met={area.met}>
-              <span className="ge-code">{area.code}</span>
+            <li key={area.id} data-touched={taken.length > 0} data-met={area.met}>
+              <span className="ge-code">{area.id}</span>
               <span className="ge-name">
-                {area.name}
+                {area.label}
+                {area.onlyFor && <em className="ge-caveat"> · {area.onlyFor} only</em>}
                 {area.caveat && <em className="ge-caveat"> · {area.caveat}</em>}
+                {area.notCoursework && <em className="ge-caveat"> · {area.notCoursework}</em>}
               </span>
               <span className="ge-need">
-                {area.required > 0 ? (
+                {area.notCoursework ? '—' : area.required > 0 ? (
                   <>
                     {Math.min(area.done.length, area.required)} / {area.required}
                   </>
                 ) : (
-                  <>rule</>
+                  '—'
                 )}
               </span>
               <span className="ge-count">
@@ -150,25 +169,27 @@ export function GeneralEducation({
       </details>
 
       <div className="scope">
+        {status.citation && status.citationUrl && (
+          <p>
+            <b>Where these counts come from.</b> ASSIST publishes which of your college&apos;s
+            courses clear which area. It does not publish how many each area needs. Those come from{' '}
+            <a href={status.citationUrl} target="_blank" rel="noreferrer">
+              {status.citation}
+            </a>
+            , published by the Intersegmental Committee of the Academic Senates, which sets the
+            pattern.
+          </p>
+        )}
         <p>
-          <b>Where these counts come from.</b> ASSIST publishes which of your college&apos;s courses
-          clear which area. It does not publish how many each area needs. Those come from{' '}
-          <a href={STANDARD_URL} target="_blank" rel="noreferrer">
-            {status.citation}
-          </a>
-          , published by the Intersegmental Committee of the Academic Senates, which sets the
-          pattern.
+          <b>One course, one area.</b> Every pattern here allows a course listed under two areas to
+          be applied to only one of them, so this assigns each of yours to a single area and picks
+          the assignment that satisfies the most requirements.
+          {status.dualCertifyNote ? ` ${status.dualCertifyNote}` : ''}
         </p>
         <p>
-          <b>One course, one area.</b> The standard allows a course listed under two areas to be
-          applied to only one of them, so this assigns each of yours to a single area and picks the
-          assignment that satisfies the most requirements. The laboratory is the exception the
-          standard names, and it rides along with an Area 5 course.
-        </p>
-        <p>
-          <b>Two things are not decided here.</b> Area 4 asks for two academic disciplines, and a
-          department is not quite a discipline, so that one is only flagged. Certification itself is
-          done by your college, not by this page.
+          <b>Some things are not decided here.</b> An area asking for two academic disciplines is
+          flagged when both courses share a department rather than enforced, because a department is
+          weaker than a discipline. Certification itself is done by your college, not by this page.
         </p>
         <p>
           <b>{status.pattern} is not always the right move.</b> Some majors, engineering and

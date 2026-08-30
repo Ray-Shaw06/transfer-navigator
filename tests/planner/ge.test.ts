@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { compareAreaCodes, toGeneralEducation } from '../../src/assist/ge';
 import { geStatus } from '../../src/planner/ge';
+import { patternFor } from '../../src/planner/patterns';
 import type { AssistTransferabilityList } from '../../src/assist/types';
 
 const list = (
@@ -78,6 +79,8 @@ describe('toGeneralEducation', () => {
   });
 });
 
+const CALGETC = patternFor('CALGETC');
+
 describe('geStatus', () => {
   const ge = toGeneralEducation(
     list([
@@ -91,7 +94,7 @@ describe('geStatus', () => {
   const course = (code: string, units = 3) => ({ code, title: code, units });
 
   it('finds the courses that do double duty', () => {
-    const status = geStatus(ge, new Set(), [course('MATH 005A', 5), course('CS 002', 4)]);
+    const status = geStatus(ge, CALGETC, null, new Set(), [course('MATH 005A', 5), course('CS 002', 4)]);
 
     // CS 002 clears nothing on the pattern; MATH 005A clears Area 2 for free.
     expect(status.overlap.map((o) => o.course.code)).toEqual(['MATH 005A']);
@@ -101,19 +104,19 @@ describe('geStatus', () => {
 
   it('matches a course however the student spells it', () => {
     // The whole point: MATH 5A and MATH 005A are one course.
-    const status = geStatus(ge, new Set(['MATH 5A']), []);
+    const status = geStatus(ge, CALGETC, null, new Set(['MATH 5A']), []);
     expect(status.overlap.map((o) => o.course.code)).toEqual(['MATH 005A']);
     expect(status.overlap[0].finished).toBe(true);
   });
 
   it('puts a course clearing two areas first', () => {
-    const status = geStatus(ge, new Set(), [course('MATH 005A', 5), course('HIST 001')]);
+    const status = geStatus(ge, CALGETC, null, new Set(), [course('MATH 005A', 5), course('HIST 001')]);
     expect(status.overlap.map((o) => o.course.code)).toEqual(['HIST 001', 'MATH 005A']);
   });
 
   it('separates what is finished from what is only planned', () => {
-    const status = geStatus(ge, new Set(['ENGL 001A']), [course('MATH 005A', 5)]);
-    const byCode = new Map(status.areas.map((a) => [a.code, a]));
+    const status = geStatus(ge, CALGETC, null, new Set(['ENGL 001A']), [course('MATH 005A', 5)]);
+    const byCode = new Map(status.areas.map((a) => [a.id, a]));
 
     expect(byCode.get('1A')!.done.map((c) => c.code)).toEqual(['ENGL 001A']);
     expect(byCode.get('1A')!.planned).toEqual([]);
@@ -122,13 +125,22 @@ describe('geStatus', () => {
   });
 
   it('names the areas nothing in the plan touches', () => {
-    const status = geStatus(ge, new Set(), [course('MATH 005A', 5)]);
-    expect(status.untouched.map((a) => a.code)).toEqual(['1A', '3B', '4', '5B']);
+    const status = geStatus(ge, CALGETC, null, new Set(), [course('MATH 005A', 5)]);
+    expect(status.untouched.map((a) => a.id)).toEqual(['1A', '1B', '1C', '3', '4', '5', '6']);
   });
 
   it('reports how many courses the college offers per area', () => {
-    const status = geStatus(ge, new Set(), []);
-    expect(status.areas.map((a) => `${a.code}:${a.offered}`)).toEqual(['1A:1', '2:1', '3B:1', '4:1', '5B:1']);
+    const status = geStatus(ge, CALGETC, null, new Set(), []);
+    expect(status.areas.map((a) => `${a.id}:${a.offered}`)).toEqual([
+      '1A:1',
+      '1B:0',
+      '1C:0',
+      '2:1',
+      '3:1',
+      '4:1',
+      '5:1',
+      '6:0',
+    ]);
   });
 });
 
@@ -152,7 +164,8 @@ describe('progress against the ICAS standard', () => {
     ]),
   );
 
-  const status = (done: string[]) => geStatus(pattern, new Set(done), []);
+  const status = (done: string[]) =>
+    geStatus(pattern, patternFor('CALGETC'), null, new Set(done), []);
 
   it('states how many courses the whole pattern takes', () => {
     const s = status([]);
@@ -163,11 +176,11 @@ describe('progress against the ICAS standard', () => {
 
   it('marks an area met only once its own count is reached', () => {
     const s = status(['PSYC 001']);
-    const four = s.areas.find((a) => a.code === '4')!;
+    const four = s.areas.find((a) => a.id === '4')!;
     expect(four.required).toBe(2);
     expect(four.met).toBe(false);
 
-    const both = status(['PSYC 001', 'SOC 001']).areas.find((a) => a.code === '4')!;
+    const both = status(['PSYC 001', 'SOC 001']).areas.find((a) => a.id === '4')!;
     expect(both.met).toBe(true);
   });
 
@@ -184,9 +197,9 @@ describe('progress against the ICAS standard', () => {
     // they had finished two requirements with one course.
     const s = status(['HIST 001']);
     expect(s.coursesDone).toBe(1);
-    const filled = s.areas.filter((a) => a.done.length > 0).map((a) => a.code);
+    const filled = s.areas.filter((a) => a.done.length > 0).map((a) => a.id);
     expect(filled).toHaveLength(1);
-    expect(['3B', '4']).toContain(filled[0]);
+    expect(['3', '4']).toContain(filled[0]);
   });
 
   it('assigns dual-area courses so the most requirements are met', () => {
@@ -194,9 +207,11 @@ describe('progress against the ICAS standard', () => {
     // HIST in 4 leaves 3B short when nothing else can fill it, so the
     // assignment has to look ahead.
     const s = status(['HIST 001', 'SOC 001', 'PSYC 001']);
-    const byCode = new Map(s.areas.map((a) => [a.code, a]));
+    const byCode = new Map(s.areas.map((a) => [a.id, a]));
     expect(byCode.get('4')!.met).toBe(true);
-    expect(byCode.get('3B')!.met).toBe(true);
+    // Area 3 needs one Arts and one Humanities; only the Humanities half can
+    // be filled here, so it is covered but not met.
+    expect(byCode.get('3')!.done.map((c) => c.code)).toEqual(['HIST 001']);
     expect(s.coursesDone).toBe(3);
   });
 
@@ -208,10 +223,12 @@ describe('progress against the ICAS standard', () => {
     expect(s.lab).toBe(true);
   });
 
-  it('never requires a course for the laboratory', () => {
-    const lab = status([]).areas.find((a) => a.code === '5C')!;
-    expect(lab.required).toBe(0);
-    expect(lab.met).toBe(false);
+  it('folds the laboratory into Area 5 rather than making it a course', () => {
+    // 5C is not an area of its own here: the standard attaches the lab to one
+    // of the two Area 5 courses, so Area 5 asks for two, not three.
+    const five = status([]).areas.find((a) => a.id === '5')!;
+    expect(five.required).toBe(2);
+    expect(five.caveat).toContain('laboratory');
   });
 
   it('has no answer on the laboratory until Area 5 is finished', () => {
@@ -229,8 +246,8 @@ describe('progress against the ICAS standard', () => {
   it('flags two Area 4 courses from one department', () => {
     // The rule asks for two academic disciplines. A department is a weaker
     // signal, so this is raised as a doubt rather than enforced.
-    expect(status(['PSYC 001', 'PSYC 002']).areaFourOneDepartment).toBe(true);
-    expect(status(['PSYC 001', 'SOC 001']).areaFourOneDepartment).toBe(false);
+    expect(status(['PSYC 001', 'PSYC 002']).oneDepartment).toBe(true);
+    expect(status(['PSYC 001', 'SOC 001']).oneDepartment).toBe(false);
   });
 
   it('never counts one course toward the total twice', () => {
