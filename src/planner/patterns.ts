@@ -203,17 +203,34 @@ const IGETC: Pattern = {
 
 // ------------------------------------------------------- CSU GE Breadth
 //
-// NO SOURCE FOR THE COUNTS. The areas below are the ones ASSIST tags courses
-// with, and the labels are ASSIST's own. How many courses or units each area
-// takes is set by the CSU General Education Breadth Requirements (formerly
-// Executive Order 1100 Revised), published by the CSU Chancellor's Office.
-// That document sits behind a bot check that this project will not work
-// around, so the counts are absent rather than guessed, exactly as Cal-GETC's
-// were before the ICAS standard was in hand.
+// General Education Breadth Requirements, CSU Executive Order 1100 Revised
+// (23 August 2017), Article 4 "Subject Area Distribution" and Article 2.2.1.
+// Read from the Internet Archive's copy, because calstate.edu now serves that
+// document only behind a human-verification check:
+// https://web.archive.org/web/2018/http://www.calstate.edu/EO/EO-1100-rev-8-23-17.html
 //
-// To complete this: fetch the CSU General Education Breadth Requirements,
-// transcribe the per-area counts here with the citation, and the rest of the
-// machinery already works.
+// WHY THE COUNTS BELOW ARE LOWER THAN THE ONES IN THAT DOCUMENT. EO 1100
+// states each area's FULL requirement, part of which is upper-division work
+// taken after transfer. Article 2.2.1: campus requirements "shall not exceed
+// the requirements for 39 lower-division and 9 upper-division semester-units",
+// and Article 2.2.3 puts those 9 upper-division units at 3 semester units each
+// in Areas B, C and D. A community college certifies the lower-division part,
+// which is what this pattern describes, so Areas B, C and D are each three
+// semester units smaller here than in the executive order:
+//
+//   Area A  9 units, all lower-division    -> A1, A2, A3, one course each
+//   Area B  12 - 3 upper = 9 lower         -> one each B1, B2, B4, plus the lab
+//   Area C  12 - 3 upper = 9 lower         -> three courses, one each C1 and C2
+//   Area D  12 - 3 upper = 9 lower         -> three courses, two disciplines
+//   Area E  3 units, all lower-division    -> one course
+//                                             39 lower-division units
+//
+// AREA F IS NOT IN EO 1100. Ethnic Studies was added afterwards by AB 1460
+// (2020) and is codified at California Education Code section 89032. ICAS
+// records its size in IGETC Standards 2.4 section 10.7.2: "This
+// lower-division, 3 semester (4 quarter) unit requirement fulfills CSU
+// Education Code Section 89032." So the pattern is 39 units across Areas A to
+// E plus 3 for Area F.
 
 const CSUGE: Pattern = {
   key: 'CSUGE',
@@ -221,7 +238,55 @@ const CSUGE: Pattern = {
   name: 'CSU GE-Breadth',
   blurb:
     'For students with catalog rights before Fall 2025 who are transferring to a CSU. Certified by your college and accepted by every CSU campus.',
-  areas: [],
+  citation: 'CSU EO 1100 Revised, 2017, article 4, plus Education Code 89032 for Area F',
+  citationUrl:
+    'https://web.archive.org/web/2018/http://www.calstate.edu/EO/EO-1100-rev-8-23-17.html',
+  totalCourses: 14,
+  // 39 lower-division units across Areas A to E, plus Area F's 3.
+  totalSemesterUnits: 42,
+  labArea: 'B3',
+  dualCertify: {
+    note: 'The laboratory is associated with one of the Area B science courses rather than being a course of its own.',
+    areas: ['B3'],
+  },
+  areas: [
+    { id: 'A1', label: 'Oral Communication', courses: 1, from: ['A1'] },
+    { id: 'A2', label: 'Written Communication', courses: 1, from: ['A2'] },
+    { id: 'A3', label: 'Critical Thinking', courses: 1, from: ['A3'] },
+    {
+      id: 'B',
+      label: 'Scientific Inquiry and Quantitative Reasoning',
+      courses: 3,
+      from: ['B1', 'B2', 'B4'],
+      atLeast: [
+        { code: 'B1', courses: 1 },
+        { code: 'B2', courses: 1 },
+        { code: 'B4', courses: 1 },
+      ],
+      caveat: 'one science course must carry a laboratory',
+    },
+    {
+      id: 'C',
+      label: 'Arts and Humanities',
+      courses: 3,
+      from: ['C1', 'C2'],
+      atLeast: [
+        { code: 'C1', courses: 1 },
+        { code: 'C2', courses: 1 },
+      ],
+    },
+    {
+      // ASSIST tags these with the discipline subcodes D0 to D9 as well as
+      // the bare D, which is how the two-disciplines rule is stated.
+      id: 'D',
+      label: 'Social Sciences',
+      courses: 3,
+      from: ['D', 'D0', 'D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8', 'D9'],
+      caveat: 'from at least two different disciplines',
+    },
+    { id: 'E', label: 'Lifelong Learning and Self-Development', courses: 1, from: ['E'] },
+    { id: 'F', label: 'Ethnic Studies', courses: 1, from: ['F'] },
+  ],
 };
 
 export const PATTERNS: Pattern[] = [CALGETC, IGETC, CSUGE];

@@ -90,16 +90,56 @@ describe('IGETC as ICAS states it', () => {
   });
 });
 
-describe('CSU GE-Breadth', () => {
+describe('CSU GE-Breadth as EO 1100 states it', () => {
   const pattern = patternFor('CSUGE');
 
-  it('carries no counts, because none could be sourced', () => {
-    // The CSU General Education Breadth Requirements sit behind a bot check
-    // this project will not work around. Absent beats invented: everything
-    // downstream reads `citation === undefined` as "requirements unknown".
-    expect(pattern.areas).toEqual([]);
-    expect(pattern.citation).toBeUndefined();
-    expect(pattern.totalCourses).toBeUndefined();
+  it('totals the 39 lower-division units of article 2.2.1, plus Area F', () => {
+    // EO 1100 article 2.2.1: campus requirements "shall not exceed the
+    // requirements for 39 lower-division and 9 upper-division semester-units".
+    // Area F's 3 units come from Education Code 89032, which postdates it.
+    const lowerDivision = pattern.areas
+      .filter((a) => a.id !== 'F')
+      .reduce((sum, a) => sum + a.courses * 3, 0);
+    expect(lowerDivision).toBe(39);
+    expect(pattern.totalSemesterUnits).toBe(42);
+    expect(pattern.totalCourses).toBe(14);
+  });
+
+  it('subtracts the upper-division units from Areas B, C and D', () => {
+    // Article 2.2.3 puts 3 upper-division semester units in each of B, C and
+    // D. A community college certifies only the lower-division part, so each
+    // of those areas is one course smaller here than in the executive order.
+    for (const id of ['B', 'C', 'D']) {
+      expect(pattern.areas.find((a) => a.id === id)!.courses).toBe(3);
+    }
+  });
+
+  it('asks for one course in each of the three Area B subareas', () => {
+    const b = pattern.areas.find((a) => a.id === 'B')!;
+    expect(b.atLeast).toEqual([
+      { code: 'B1', courses: 1 },
+      { code: 'B2', courses: 1 },
+      { code: 'B4', courses: 1 },
+    ]);
+    expect(b.caveat).toContain('laboratory');
+  });
+
+  it('treats the laboratory as part of a science course, not a course', () => {
+    // EO 1100 article 4: the laboratory is "associated with B1 or B2".
+    expect(pattern.labArea).toBe('B3');
+    expect(pattern.areas.some((a) => a.id === 'B3')).toBe(false);
+  });
+
+  it('asks for three Social Sciences courses from two disciplines', () => {
+    const d = pattern.areas.find((a) => a.id === 'D')!;
+    expect(d.courses).toBe(3);
+    expect(d.caveat).toContain('two different disciplines');
+    expect(d.from).toContain('D9');
+  });
+
+  it('cites both documents it needed', () => {
+    expect(pattern.citation).toContain('EO 1100');
+    expect(pattern.citation).toContain('89032');
   });
 });
 

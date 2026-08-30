@@ -100,7 +100,7 @@ Three patterns, because which one applies depends on when you started:
 |---|---|---|
 | **Cal-GETC** | started Fall 2025 or later | [ICAS Standards 1.4](https://icas-ca.org/wp-content/uploads/2026/07/Cal-GETC_Standards_1v4_Final_r.pdf) §2 |
 | **IGETC** | catalog rights before Fall 2025 | [ICAS Standards 2.4](https://icas-ca.org/wp-content/uploads/2023/10/IGETC_Standards_2023_v2_4-rev1.pdf) §1.1 |
-| **CSU GE-Breadth** | before Fall 2025, transferring to a CSU | not sourced, see below |
+| **CSU GE-Breadth** | before Fall 2025, transferring to a CSU | [CSU EO 1100 Revised](https://web.archive.org/web/2018/http://www.calstate.edu/EO/EO-1100-rev-8-23-17.html) art. 4 + Ed Code 89032 |
 
 It tracks the pattern area by area. Tick what you have taken and it fills in.
 
@@ -111,12 +111,20 @@ courses with at least one Arts and one Humanities, which is a different demand
 from Cal-GETC's one of each, and Area 6A is a proficiency rather than a course
 so it is never counted as work to schedule.
 
-**CSU GE-Breadth has no counts here.** They are set by the CSU General
-Education Breadth Requirements, formerly Executive Order 1100 Revised, which
-sits behind a bot check this project will not work around. The areas and the
-certified courses are shown; the requirements say so rather than being
-guessed. To finish it: get that document, transcribe the per-area counts into
-`src/planner/patterns.ts` with a citation, and the rest already works.
+CSU GE-Breadth needed two documents and a subtraction. EO 1100 states each
+area's **full** requirement, part of which is upper-division work taken after
+transfer; article 2.2.1 caps campus requirements at "39 lower-division and 9
+upper-division semester-units" and article 2.2.3 puts those 9 upper-division
+units at 3 each in Areas B, C and D. A community college certifies only the
+lower-division part, so Areas B, C and D are each one course smaller here than
+in the executive order. Area F is not in EO 1100 at all: Ethnic Studies was
+added by AB 1460 and codified at Education Code 89032, whose 3-unit size ICAS
+records in IGETC Standards 2.4 section 10.7.2.
+
+calstate.edu serves EO 1100 only behind a human-verification check, so it was
+read from the Internet Archive's copy. The derivation is written out in
+`src/planner/patterns.ts` and asserted by tests, so the arithmetic is
+checkable rather than trusted.
 
 No per-area counts are in ASSIST. Each pattern's are transcribed in
 `src/planner/patterns.ts` with the document they came from, and covered by
