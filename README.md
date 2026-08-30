@@ -1,10 +1,9 @@
 # Transfer Navigator
 
 Pick your California community college, where you want to transfer, and your
-major. It reads the ASSIST articulation agreement and tells you what you
-still need: which courses at your college satisfy each requirement, which
-requirements nothing at your college satisfies, and roughly how many units
-are left.
+major. It reads the ASSIST articulation agreement and builds the route: which
+courses to take, in which term, and whether you make the term you are aiming
+for. Tell it what you have already finished and the plan updates around it.
 
 Not affiliated with ASSIST or any college. [assist.org](https://assist.org)
 is the official source; this is a reading of it.
@@ -59,6 +58,18 @@ Three things keep the site inside it:
 3. When it does run out, the UI says so plainly and points at the upload
    path, which does not touch ASSIST at all.
 
+## Term planning
+
+Give it a starting term, a unit load, whether you take summers, and a term you
+want to transfer by. It packs the remaining work into named terms, gives
+summer a smaller load, and says plainly when the plan runs past your target.
+
+It keeps the courses of one requirement together, and it will not put two
+parts of a numbered sequence in the same term. That last rule is read from how
+California colleges number courses, not from the agreement, and it knows a lab
+suffix from a sequence step: CS 003BL is the lab for CS 003B and belongs in
+the same term, while MATH 005A and MATH 005B do not.
+
 ## What it will not do
 
 - **It does not know prerequisites.** Agreements do not carry them. The
@@ -102,7 +113,7 @@ never implies it ran.
 |---|---|
 | `src/assist/` | ASSIST client, response types, and the mapper into `Agreement` |
 | `src/parser/` | The PDF parser, and the `Agreement` type both paths produce |
-| `src/planner/` | `buildPlan`: section rules, routes, unit totals, term packing |
+| `src/planner/` | `buildPlan` (section rules, routes, unit totals) and `buildSchedule` (named terms) |
 | `app/api/assist/` | Cached server routes; the only code that talks to ASSIST |
 | `app/` | The UI |
 | `docs/plans/` | The plans this was built from, including what was left out |
