@@ -16,6 +16,11 @@ export type AreaRule = {
   label: string;
   // Courses the area takes in total.
   courses: number;
+  // Semester units the area takes. Usually the course count times three, but
+  // not always: an Area 5 that is two courses is seven units, because one of
+  // them carries a one-unit laboratory. Stated per area so the pattern total
+  // is derived from sourced numbers rather than hardcoded beside them.
+  semesterUnits: number;
   // ASSIST area codes whose courses can fill it. An area with subareas lists
   // all of them, because a course tagged 3A fills part of Area 3.
   from: string[];
@@ -45,8 +50,6 @@ export type Pattern = {
   // must treat that as "areas known, requirements unknown".
   citation?: string;
   citationUrl?: string;
-  totalCourses?: number;
-  totalSemesterUnits?: number;
   // The documented exception to one-course-one-area, if the pattern has one.
   dualCertify?: { note: string; areas: string[] };
   // A course carrying this area code also carries a laboratory. Cal-GETC and
@@ -72,22 +75,27 @@ const CALGETC: Pattern = {
     'The single pattern for students who started at a community college in Fall 2025 or later. Accepted by every CSU and most UC campuses and programs.',
   citation: 'ICAS Cal-GETC Standards 1.4, July 2026, section 2',
   citationUrl: 'https://icas-ca.org/wp-content/uploads/2026/07/Cal-GETC_Standards_1v4_Final_r.pdf',
-  totalCourses: 11,
-  totalSemesterUnits: 34,
   labArea: '5C',
   dualCertify: {
     note: 'A course applied to Area 5A or 5B may also carry the one-unit laboratory.',
     areas: ['5C'],
   },
   areas: [
-    { id: '1A', label: 'English Composition', courses: 1, from: ['1A'] },
-    { id: '1B', label: 'Critical Thinking and Composition', courses: 1, from: ['1B'] },
-    { id: '1C', label: 'Oral Communication', courses: 1, from: ['1C'] },
-    { id: '2', label: 'Mathematical Concepts and Quantitative Reasoning', courses: 1, from: ['2'] },
+    { id: '1A', label: 'English Composition', courses: 1, semesterUnits: 3, from: ['1A'] },
+    { id: '1B', label: 'Critical Thinking and Composition', courses: 1, semesterUnits: 3, from: ['1B'] },
+    { id: '1C', label: 'Oral Communication', courses: 1, semesterUnits: 3, from: ['1C'] },
+    {
+      id: '2',
+      label: 'Mathematical Concepts and Quantitative Reasoning',
+      courses: 1,
+      semesterUnits: 3,
+      from: ['2'],
+    },
     {
       id: '3',
       label: 'Arts and Humanities',
       courses: 2,
+      semesterUnits: 6,
       from: ['3A', '3B'],
       atLeast: [
         { code: '3A', courses: 1 },
@@ -98,6 +106,7 @@ const CALGETC: Pattern = {
       id: '4',
       label: 'Social and Behavioral Sciences',
       courses: 2,
+      semesterUnits: 6,
       from: ['4'],
       caveat: 'from two academic disciplines',
     },
@@ -105,6 +114,8 @@ const CALGETC: Pattern = {
       id: '5',
       label: 'Physical and Biological Sciences',
       courses: 2,
+      // Seven, not six: one of the two courses carries a one-unit laboratory.
+      semesterUnits: 7,
       from: ['5A', '5B'],
       atLeast: [
         { code: '5A', courses: 1 },
@@ -112,7 +123,7 @@ const CALGETC: Pattern = {
       ],
       caveat: 'one must carry a laboratory',
     },
-    { id: '6', label: 'Ethnic Studies', courses: 1, from: ['6'] },
+    { id: '6', label: 'Ethnic Studies', courses: 1, semesterUnits: 3, from: ['6'] },
   ],
 };
 
@@ -147,13 +158,27 @@ const IGETC: Pattern = {
     areas: ['5C', '6A'],
   },
   areas: [
-    { id: '1A', label: 'English Composition', courses: 1, from: ['1A'] },
-    { id: '1B', label: 'Critical Thinking and English Composition', courses: 1, from: ['1B'] },
-    { id: '1C', label: 'Oral Communication', courses: 1, from: ['1C'], onlyFor: 'CSU' },
+    { id: '1A', label: 'English Composition', courses: 1, semesterUnits: 3, from: ['1A'] },
+    {
+      id: '1B',
+      label: 'Critical Thinking and English Composition',
+      courses: 1,
+      semesterUnits: 3,
+      from: ['1B'],
+    },
+    {
+      id: '1C',
+      label: 'Oral Communication',
+      courses: 1,
+      semesterUnits: 3,
+      from: ['1C'],
+      onlyFor: 'CSU',
+    },
     {
       id: '2A',
       label: 'Mathematical Concepts and Quantitative Reasoning',
       courses: 1,
+      semesterUnits: 3,
       from: ['2A'],
     },
     {
@@ -162,6 +187,7 @@ const IGETC: Pattern = {
       id: '3',
       label: 'Arts and Humanities',
       courses: 3,
+      semesterUnits: 9,
       from: ['3A', '3B'],
       atLeast: [
         { code: '3A', courses: 1 },
@@ -174,6 +200,7 @@ const IGETC: Pattern = {
       id: '4',
       label: 'Social and Behavioral Sciences',
       courses: 2,
+      semesterUnits: 6,
       from: ['4', '4A', '4B', '4C', '4D', '4E', '4F', '4G', '4H', '4I', '4J'],
       caveat: 'from two academic disciplines',
     },
@@ -181,6 +208,8 @@ const IGETC: Pattern = {
       id: '5',
       label: 'Physical and Biological Sciences',
       courses: 2,
+      // Seven, not six: one of the two courses carries a laboratory.
+      semesterUnits: 7,
       from: ['5A', '5B'],
       atLeast: [
         { code: '5A', courses: 1 },
@@ -192,12 +221,14 @@ const IGETC: Pattern = {
       id: '6A',
       label: 'Language Other Than English',
       courses: 1,
+      // Proficiency rather than units, so it adds nothing to the total.
+      semesterUnits: 0,
       from: ['6A'],
       onlyFor: 'UC',
       notCoursework:
         'Satisfied by proficiency equivalent to two years of high school study in the same language, which a course is only one way to show.',
     },
-    { id: '7', label: 'Ethnic Studies', courses: 1, from: ['7'] },
+    { id: '7', label: 'Ethnic Studies', courses: 1, semesterUnits: 3, from: ['7'] },
   ],
 };
 
@@ -241,22 +272,20 @@ const CSUGE: Pattern = {
   citation: 'CSU EO 1100 Revised, 2017, article 4, plus Education Code 89032 for Area F',
   citationUrl:
     'https://web.archive.org/web/2018/http://www.calstate.edu/EO/EO-1100-rev-8-23-17.html',
-  totalCourses: 14,
-  // 39 lower-division units across Areas A to E, plus Area F's 3.
-  totalSemesterUnits: 42,
   labArea: 'B3',
   dualCertify: {
     note: 'The laboratory is associated with one of the Area B science courses rather than being a course of its own.',
     areas: ['B3'],
   },
   areas: [
-    { id: 'A1', label: 'Oral Communication', courses: 1, from: ['A1'] },
-    { id: 'A2', label: 'Written Communication', courses: 1, from: ['A2'] },
-    { id: 'A3', label: 'Critical Thinking', courses: 1, from: ['A3'] },
+    { id: 'A1', label: 'Oral Communication', courses: 1, semesterUnits: 3, from: ['A1'] },
+    { id: 'A2', label: 'Written Communication', courses: 1, semesterUnits: 3, from: ['A2'] },
+    { id: 'A3', label: 'Critical Thinking', courses: 1, semesterUnits: 3, from: ['A3'] },
     {
       id: 'B',
       label: 'Scientific Inquiry and Quantitative Reasoning',
       courses: 3,
+      semesterUnits: 9,
       from: ['B1', 'B2', 'B4'],
       atLeast: [
         { code: 'B1', courses: 1 },
@@ -269,6 +298,7 @@ const CSUGE: Pattern = {
       id: 'C',
       label: 'Arts and Humanities',
       courses: 3,
+      semesterUnits: 9,
       from: ['C1', 'C2'],
       atLeast: [
         { code: 'C1', courses: 1 },
@@ -281,11 +311,12 @@ const CSUGE: Pattern = {
       id: 'D',
       label: 'Social Sciences',
       courses: 3,
+      semesterUnits: 9,
       from: ['D', 'D0', 'D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8', 'D9'],
       caveat: 'from at least two different disciplines',
     },
-    { id: 'E', label: 'Lifelong Learning and Self-Development', courses: 1, from: ['E'] },
-    { id: 'F', label: 'Ethnic Studies', courses: 1, from: ['F'] },
+    { id: 'E', label: 'Lifelong Learning and Self-Development', courses: 1, semesterUnits: 3, from: ['E'] },
+    { id: 'F', label: 'Ethnic Studies', courses: 1, semesterUnits: 3, from: ['F'] },
   ],
 };
 
@@ -303,6 +334,15 @@ export const areasFor = (pattern: Pattern, destination: Destination | null): Are
 // only that subarea can fill; whatever the area still owes becomes a slot any
 // of its subareas can fill. This is what lets IGETC's "three courses, at least
 // one Arts and one Humanities" be expressed without a second mechanism.
+// Totals are summed from the areas that actually apply, rather than written
+// down beside them, because IGETC asks different things of a UC-bound student
+// and a CSU-bound one and a single number would be wrong for one of them.
+export const totalCourses = (areas: AreaRule[]): number =>
+  areas.reduce((sum, a) => sum + (a.notCoursework ? 0 : a.courses), 0);
+
+export const totalSemesterUnits = (areas: AreaRule[]): number =>
+  areas.reduce((sum, a) => sum + a.semesterUnits, 0);
+
 export type Slot = { area: string; eligible: string[] };
 
 export function slotsFor(areas: AreaRule[]): Slot[] {

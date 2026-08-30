@@ -1,6 +1,14 @@
 import type { GeneralEducation } from '../assist/ge';
 import { normalizeCode } from './catalog';
-import { areasFor, slotsFor, type AreaRule, type Destination, type Pattern, type Slot } from './patterns';
+import {
+  areasFor,
+  slotsFor,
+  totalSemesterUnits,
+  type AreaRule,
+  type Destination,
+  type Pattern,
+  type Slot,
+} from './patterns';
 import type { Course } from '../parser/types';
 
 // How a student's coursework lands against a general education pattern.
@@ -152,7 +160,7 @@ export function geStatus(
   const rules: AreaRule[] =
     pattern.areas.length > 0
       ? areasFor(pattern, destination)
-      : ge.areas.map((a) => ({ id: a.code, label: a.name, courses: 0, from: [a.code] }));
+      : ge.areas.map((a) => ({ id: a.code, label: a.name, courses: 0, semesterUnits: 0, from: [a.code] }));
 
   const coverage = new Map<string, AreaCoverage>(
     rules.map((rule) => {
@@ -245,7 +253,7 @@ export function geStatus(
     untouched: areas.filter((a) => a.done.length === 0 && a.planned.length === 0),
     coursesDone: areas.reduce((sum, a) => sum + Math.min(a.done.length, a.required), 0),
     coursesRequired: areas.reduce((sum, a) => sum + a.required, 0),
-    unitsRequired: pattern.totalSemesterUnits,
+    unitsRequired: counted ? totalSemesterUnits(rules) : undefined,
     lab,
     oneDepartment:
       (disciplineArea?.done.length ?? 0) >= (disciplineArea?.required ?? 0) &&

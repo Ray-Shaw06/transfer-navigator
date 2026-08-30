@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { PATTERNS, areasFor, patternFor, slotsFor } from '../../src/planner/patterns';
+import {
+  PATTERNS,
+  areasFor,
+  patternFor,
+  slotsFor,
+  totalCourses,
+  totalSemesterUnits,
+} from '../../src/planner/patterns';
 
 // The transcription check. Every number here is quoted from the cited
 // document, so a future edit that mistypes a table fails the build rather than
@@ -9,8 +16,8 @@ describe('Cal-GETC as ICAS states it', () => {
   const pattern = patternFor('CALGETC');
 
   it('totals the 11 courses and 34 semester units of the summary table', () => {
-    expect(pattern.totalCourses).toBe(11);
-    expect(pattern.totalSemesterUnits).toBe(34);
+    expect(totalCourses(pattern.areas)).toBe(11);
+    expect(totalSemesterUnits(pattern.areas)).toBe(34);
     expect(slotsFor(pattern.areas)).toHaveLength(11);
   });
 
@@ -97,12 +104,9 @@ describe('CSU GE-Breadth as EO 1100 states it', () => {
     // EO 1100 article 2.2.1: campus requirements "shall not exceed the
     // requirements for 39 lower-division and 9 upper-division semester-units".
     // Area F's 3 units come from Education Code 89032, which postdates it.
-    const lowerDivision = pattern.areas
-      .filter((a) => a.id !== 'F')
-      .reduce((sum, a) => sum + a.courses * 3, 0);
-    expect(lowerDivision).toBe(39);
-    expect(pattern.totalSemesterUnits).toBe(42);
-    expect(pattern.totalCourses).toBe(14);
+    expect(totalSemesterUnits(pattern.areas.filter((a) => a.id !== 'F'))).toBe(39);
+    expect(totalSemesterUnits(pattern.areas)).toBe(42);
+    expect(totalCourses(pattern.areas)).toBe(14);
   });
 
   it('subtracts the upper-division units from Areas B, C and D', () => {
@@ -153,8 +157,17 @@ describe('every pattern', () => {
 
   it('never generates more slots than it says it takes', () => {
     for (const pattern of PATTERNS) {
-      if (pattern.totalCourses === undefined) continue;
-      expect(slotsFor(pattern.areas).length).toBe(pattern.totalCourses);
+      expect(slotsFor(pattern.areas).length).toBe(totalCourses(pattern.areas));
     }
+  });
+
+  it('sizes IGETC differently for each destination, which is why totals are derived', () => {
+    const igetc = patternFor('IGETC');
+    // CSU owes Oral Communication; UC owes a language proficiency that carries
+    // no units. A single hardcoded total would be wrong for one of them.
+    expect(totalSemesterUnits(areasFor(igetc, 'CSU'))).toBe(37);
+    expect(totalSemesterUnits(areasFor(igetc, 'UC'))).toBe(34);
+    expect(totalCourses(areasFor(igetc, 'CSU'))).toBe(12);
+    expect(totalCourses(areasFor(igetc, 'UC'))).toBe(11);
   });
 });
