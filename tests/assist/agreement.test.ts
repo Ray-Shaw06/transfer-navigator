@@ -4,8 +4,11 @@ import { UnrecognisedAgreementError } from '../../src/parser/document';
 import type {
   AssistArticulation,
   AssistAsset,
+  AssistCell,
   AssistCourse,
   AssistResult,
+  AssistRow,
+  AssistSection,
 } from '../../src/assist/types';
 
 // Invented institutions and course codes throughout: this project does not
@@ -40,12 +43,9 @@ const group = (
   sections: AssistAsset['sections'],
 ): AssistAsset => ({ type: 'RequirementGroup', area: 'Requirements', position: 1, instruction, sections });
 
-const section = (rows: { position?: number; cells: Record<string, unknown>[] }[]) => ({
-  type: 'Section',
-  rows,
-});
+const section = (rows: AssistRow[]): AssistSection => ({ type: 'Section', rows });
 
-const courseCell = (id: string, c: AssistCourse) => ({ type: 'Course', id, course: c });
+const courseCell = (id: string, c: AssistCourse): AssistCell => ({ type: 'Course', id, course: c });
 
 const articulated = (id: string, conjunction: 'And' | 'Or', courses: AssistCourse[]): AssistArticulation => ({
   templateCellId: id,
