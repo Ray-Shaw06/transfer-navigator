@@ -884,3 +884,86 @@ details.more[open] > summary::before { content: '–'; }
   .subject { grid-template-columns: 1fr; gap: 0.25rem; }
   .subject-name { padding-top: 0; }
 }
+
+/* ----------------------------------- general education
+
+   The overlap is the lede: a course that clears a major requirement and a
+   Cal-GETC area at once is work a student would otherwise do twice. */
+
+.ge-lead { font-size: 0.9375rem; color: var(--ink-2); max-width: 70ch; }
+.ge-lead b { color: var(--ink); font-weight: 620; }
+
+.ge-overlap { list-style: none; margin: 0.875rem 0 0; padding: 0; display: grid; gap: 0.375rem; }
+
+.ge-overlap li {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: baseline;
+  gap: 0.625rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--signal);
+  background: var(--row-todo);
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem;
+}
+
+.ge-overlap .code { font-weight: 620; color: var(--ink); }
+.ge-title { color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.ge-areas { display: inline-flex; gap: 0.25rem; }
+
+.ge-areas em {
+  font-style: normal;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.125rem 0.375rem;
+  border-radius: 999px;
+  background: var(--signal);
+  color: var(--on-signal);
+}
+
+.ge-when { font-size: 0.75rem; color: var(--ink-3); white-space: nowrap; }
+
+.ge-areas-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin: 1.5rem 0 0.625rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.ge-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.25rem; }
+
+.ge-list li {
+  display: grid;
+  grid-template-columns: 2.5rem 1fr auto;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 0.4375rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem;
+}
+
+.ge-list li[data-touched='true'] { background: var(--surface-2); }
+
+.ge-code {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-weight: 620;
+  font-size: 0.8125rem;
+  color: var(--ink-2);
+}
+
+.ge-list li[data-touched='true'] .ge-code { color: var(--signal-ink); }
+.ge-name { color: var(--ink); }
+.ge-count { color: var(--ink-3); font-size: 0.8125rem; text-align: right; }
+.ge-list li[data-touched='true'] .ge-count { color: var(--ink-2); }
+
+@media (max-width: 34rem) {
+  .ge-overlap li { grid-template-columns: auto 1fr; }
+  .ge-overlap .ge-title { grid-column: 1 / -1; white-space: normal; }
+  .ge-list li { grid-template-columns: 2.25rem 1fr; }
+  .ge-count { grid-column: 2; text-align: left; }
+}

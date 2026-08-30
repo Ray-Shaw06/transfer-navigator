@@ -4,6 +4,7 @@ import type {
   AssistPartner,
   AssistReport,
   AssistResult,
+  AssistTransferabilityList,
 } from './types';
 
 // Server-side ASSIST client. This must never be imported into a browser
@@ -178,6 +179,26 @@ export async function majors(
     `/api/agreements?receivingInstitutionId=${receivingId}&sendingInstitutionId=${sendingId}&academicYearId=${academicYearId}&categoryCode=major`,
   )) as { reports?: AssistReport[] } | null;
   return data?.reports ?? [];
+}
+
+// The courses a college certifies for a general education pattern. Cal-GETC
+// replaced IGETC and CSU GE Breadth from Fall 2025, so a year before that
+// returns an empty list rather than an error, and the caller has to say so
+// rather than render an empty pattern as a finished one.
+//
+// listType wants the enum NAME. Passing the number 8 returns the CSU
+// transferable course list with listType echoed back as 0: a wrong list that
+// looks like a right one.
+export async function transferability(
+  institutionId: number,
+  academicYearId: number,
+  listType = 'CALGETC',
+): Promise<AssistTransferabilityList> {
+  const data = (await call(
+    `/api/transferability/courses?institutionId=${institutionId}&academicYearId=${academicYearId}&listType=${encodeURIComponent(listType)}`,
+  )) as AssistTransferabilityList | null;
+  if (!data) throw new AssistUnavailableError('ASSIST returned no transferability list.');
+  return data;
 }
 
 export async function agreement(key: string): Promise<AssistResult> {

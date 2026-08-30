@@ -71,6 +71,21 @@ Only courses that can satisfy something on your agreement are listed, so the
 list stays short and every entry is relevant. The filter ignores spacing and
 zero padding, so `math5a` finds `MATH 005A`.
 
+## General education
+
+Alongside major preparation it shows the Cal-GETC pattern as your college
+certifies it, and leads with the part students most often get wrong: which
+courses in your major-prep route **also** clear a Cal-GETC area, so you do not
+take a second course you never needed.
+
+What it will not tell you is how many courses or units each area requires.
+ASSIST publishes which of your college's courses clear which area; the counts
+are the Cal-GETC standard and are set outside ASSIST, so this tool says so and
+sends you to the official list and a counselor rather than guessing them.
+
+Cal-GETC began in Fall 2025, so a catalog year before that has no pattern and
+the panel simply does not appear.
+
 ## Term planning
 
 Give it a starting term, a unit load, whether you take summers, and a term you
@@ -128,6 +143,7 @@ never implies it ran.
 | `src/parser/` | The PDF parser, and the `Agreement` type both paths produce |
 | `src/planner/` | `buildPlan` (section rules, routes, unit totals), `buildSchedule` (named terms), `catalog` (the courses you can tick) |
 | `app/api/assist/` | Cached server routes; the only code that talks to ASSIST |
+| `src/assist/ge.ts` | The Cal-GETC certification list, mapped into areas |
 | `app/` | The UI |
 | `docs/plans/` | The plans this was built from, including what was left out |
 

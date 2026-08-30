@@ -5,11 +5,14 @@ import { parseAgreement, UnrecognisedAgreementError } from '../src/parser/docume
 import type { Agreement } from '../src/parser/agreement';
 import { buildPlan } from '../src/planner/plan';
 import { buildSchedule, currentTerm } from '../src/planner/schedule';
+import { geStatus } from '../src/planner/ge';
+import type { GeneralEducation as Ge } from '../src/assist/ge';
 import { Dropzone } from './components/Dropzone';
 import { CourseChooser } from './components/CourseChooser';
 import { Verdict } from './components/Verdict';
 import { RouteView } from './components/Route';
 import { Requirements } from './components/Requirements';
+import { GeneralEducation } from './components/GeneralEducation';
 import { ThemeToggle } from './components/ThemeToggle';
 import {
   PlanControls,
@@ -70,6 +73,7 @@ export default function Home() {
   );
   const [major, setMajor] = useState<string | null>(null);
 
+  const [ge, setGe] = useState<Ge | null>(null);
   const [agreement, setAgreement] = useState<Agreement | null>(null);
   const [loadingAgreement, setLoadingAgreement] = useState(false);
   // Course codes the student has ticked, uppercased. Kept across agreement
@@ -182,6 +186,35 @@ export default function Home() {
     };
   }, [college, campus, year]);
 
+  // The general education pattern is a property of the college and the year,
+  // not of the major, so it is fetched independently of the agreement and
+  // survives a change of major. A failure here is never surfaced as an error:
+  // general education is additional to the plan, and losing it must not take
+  // the plan down with it.
+  useEffect(() => {
+    if (college === null || year === null) {
+      setGe(null);
+      return;
+    }
+
+    let live = true;
+    setGe(null);
+
+    fetch(`/api/assist/ge?college=${college}&year=${year}`)
+      .then(async (response) => {
+        if (!response.ok) throw new Error('unavailable');
+        return (await response.json()) as { ge: Ge };
+      })
+      .then((data) => live && setGe(data.ge))
+      .catch(() => {
+        // Leave it null. The panel simply does not appear.
+      });
+
+    return () => {
+      live = false;
+    };
+  }, [college, year]);
+
   useEffect(() => {
     if (major === null) return;
 
@@ -230,6 +263,14 @@ export default function Home() {
     () => (agreement ? buildPlan(agreement, [...completed]) : null),
     [agreement, completed],
   );
+
+  // Courses the route still has the student taking, which is what can double
+  // count toward a general education area.
+  const geView = useMemo(() => {
+    if (!ge || !plan || ge.areas.length === 0) return null;
+    const planned = plan.remainingGroups.flatMap((g) => g.courses);
+    return geStatus(ge, completed, planned);
+  }, [ge, plan, completed]);
 
   const schedule = useMemo(
     () =>
@@ -360,6 +401,18 @@ export default function Home() {
             </div>
             <Requirements plan={plan} />
           </section>
+
+          {geView && (
+            <section className="panel" style={{ marginTop: '1rem' }}>
+              <div className="panel-head">
+                <h2>General education</h2>
+                <p>
+                  {geView.pattern} at {agreement.sendingInstitution} · {geView.academicYear}
+                </p>
+              </div>
+              <GeneralEducation status={geView} />
+            </section>
+          )}
 
           {plan.notes.length > 0 && (
             <section className="panel">

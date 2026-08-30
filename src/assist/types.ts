@@ -112,3 +112,37 @@ export type AssistPartner = {
   receivingYearIds?: number[];
   sendingYearIds?: number[];
 };
+
+// ---------------------------------------------------------------- Cal-GETC
+
+// One area a course is certified for, from the transferability list.
+// `code` is the Cal-GETC area ("1A", "2", "5C") and `codeDescription` is its
+// name ("English Composition", "Laboratory").
+export type AssistTransferArea = {
+  code?: string;
+  codeDescription?: string;
+  areaType?: number;
+};
+
+export type AssistTransferabilityCourse = {
+  prefixCode?: string;
+  courseNumber?: string;
+  courseTitle?: string;
+  minUnits?: number;
+  maxUnits?: number;
+  courseIdentifierParentId?: number;
+  transferAreas?: AssistTransferArea[];
+};
+
+// GET /api/transferability/courses?institutionId=&academicYearId=&listType=
+// `listType` takes the enum NAME, not its number: listType=8 is silently
+// ignored and falls back to the CSU transferable list, while
+// listType=CALGETC returns what was asked for. Getting that wrong returns a
+// plausible-looking list of the wrong thing, which is worse than an error.
+export type AssistTransferabilityList = {
+  listType?: number;
+  institutionName?: string;
+  academicYear?: { code?: string };
+  courseInformationList?: AssistTransferabilityCourse[];
+  headerCopy?: string;
+};
