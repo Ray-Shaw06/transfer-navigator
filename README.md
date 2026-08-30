@@ -94,6 +94,13 @@ certifies it, and leads with the part students most often get wrong: which
 courses in your major-prep route **also** clear a Cal-GETC area, so you do not
 take a second course you never needed.
 
+The pattern is chosen from your catalog year, because that is what actually
+decides it: Cal-GETC replaced the other two from Fall 2025, and ASSIST
+publishes no Cal-GETC list for an earlier year. Pick a year before that and it
+moves to IGETC and greys Cal-GETC out. You can override it, the choice rides
+in the shared link, and it is released again if you change to a year that
+implies something else. The panel says which of those happened.
+
 Three patterns, because which one applies depends on when you started:
 
 | Pattern | Who it is for | Counts |

@@ -6,7 +6,15 @@ import type { Agreement } from '../src/parser/agreement';
 import { buildPlan } from '../src/planner/plan';
 import { buildSchedule, currentTerm } from '../src/planner/schedule';
 import { geStatus } from '../src/planner/ge';
-import { PATTERNS, patternFor, type Destination, type PatternKey } from '../src/planner/patterns';
+import {
+  PATTERNS,
+  availableIn,
+  defaultPatternFor,
+  patternFor,
+  whyPattern,
+  type Destination,
+  type PatternKey,
+} from '../src/planner/patterns';
 import { Dropzone } from './components/Dropzone';
 import { CourseChooser } from './components/CourseChooser';
 import { sendingCourses } from '../src/planner/catalog';
@@ -63,7 +71,9 @@ export default function Home() {
   // Cal-GETC replaced the other two from Fall 2025, but a student with
   // catalog rights before then may still be certified in IGETC or CSU
   // GE-Breadth, so the pattern follows the catalog year and stays changeable.
-  const [pattern, setPattern] = useState<PatternKey | null>(null);
+  // Null means "whatever the catalog year implies". A student who picks one
+  // explicitly overrides that until the year moves under them.
+  const [pattern, setPattern] = useState<PatternKey | null>(initial.pattern);
 
   const [uploaded, setUploaded] = useState<Agreement | null>(null);
   const [uploadError, setUploadError] = useState('');
@@ -73,11 +83,16 @@ export default function Home() {
   const years = yearsFor(partners, campus, catalog?.academicYears ?? []);
   const { majors, state: majorsState, failure: majorsFailure } = useMajors(college, campus, year);
   const { agreement: fetched, loading, failure: agreementFailure } = useAgreement(major);
-  // The year label decides the default: 2025-2026 onward is Cal-GETC.
+  // The catalog year decides which pattern a student is certified in, so it
+  // decides the default here too.
   const yearLabel = (catalog?.academicYears ?? []).find((y) => y.id === year)?.label ?? '';
-  const defaultPattern: PatternKey =
-    yearLabel && Number(yearLabel.slice(0, 4)) >= 2025 ? 'CALGETC' : 'IGETC';
-  const activePattern = pattern ?? defaultPattern;
+  const chosen = pattern ?? defaultPatternFor(yearLabel);
+  // An explicit choice is still dropped when it becomes impossible: Cal-GETC
+  // has no course list before 2025-2026, so keeping it selected after a move
+  // to an older year would empty the panel with no explanation.
+  const activePattern: PatternKey = availableIn(patternFor(chosen), yearLabel)
+    ? chosen
+    : defaultPatternFor(yearLabel);
 
   const ge = useGeneralEducation(college, year, patternFor(activePattern).listType);
 
@@ -109,6 +124,18 @@ export default function Home() {
     setMajor(restoredMajor.current);
     restoredMajor.current = null;
   }, [college, campus, year]);
+
+  // A new catalog year implies a different pattern, so an override from the
+  // old one is released rather than carried across. Held back on the first
+  // run so a pattern restored from a link survives.
+  const restoredPattern = useRef(initial.pattern !== null);
+  useEffect(() => {
+    if (restoredPattern.current) {
+      restoredPattern.current = false;
+      return;
+    }
+    setPattern(null);
+  }, [year]);
 
   // Only campuses this college can reach. Before a college is chosen the full
   // list shows, so the two dropdowns read in either order.
@@ -157,7 +184,7 @@ export default function Home() {
   // Mirror the plan into the address bar. replaceState rather than pushState:
   // ticking a course is not a navigation, and filling the back button with
   // every tick would make it useless.
-  const query = writePlanUrl({ college, campus, year, major, completed, settings });
+  const query = writePlanUrl({ college, campus, year, major, completed, settings, pattern });
   useEffect(() => {
     if (typeof window === 'undefined') return;
     if (window.location.search === query) return;
@@ -313,13 +340,19 @@ export default function Home() {
                   value={activePattern}
                   onChange={(e) => setPattern(e.target.value as PatternKey)}
                 >
-                  {PATTERNS.map((p) => (
-                    <option key={p.key} value={p.key}>
-                      {p.name}
-                    </option>
-                  ))}
+                  {PATTERNS.map((p) => {
+                    const usable = availableIn(p, yearLabel);
+                    return (
+                      <option key={p.key} value={p.key} disabled={!usable}>
+                        {p.name}
+                        {usable ? '' : ` — not offered for ${yearLabel}`}
+                      </option>
+                    );
+                  })}
                 </select>
-                <p className="field-note">{patternFor(activePattern).blurb}</p>
+                <p className="field-note">
+                  {whyPattern(activePattern, yearLabel)} {patternFor(activePattern).blurb}
+                </p>
               </div>
               <GeneralEducation
                 status={geView}

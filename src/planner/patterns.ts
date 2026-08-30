@@ -365,3 +365,52 @@ export function slotsFor(areas: AreaRule[]): Slot[] {
 
   return slots;
 }
+
+// ------------------------------------------------- which pattern applies
+//
+// Cal-GETC's "use ... began Fall 2025 of the 2025-26 Academic Year"
+// (Cal-GETC Standards 1.4, section 1.2), and ASSIST publishes no Cal-GETC
+// list for an earlier catalog year: 2024-2025 comes back with zero courses.
+// The same document says students with catalog rights before then "will be
+// able to maintain their use of their CSU GE Breadth or IGETC pattern", and
+// ASSIST does still publish both for current years, because those students
+// are still transferring.
+export const CALGETC_FIRST_YEAR = 2025;
+
+// Catalog years are labelled "2025-2026", so the year it begins is the first
+// four characters.
+export function startYearOf(yearLabel: string): number | null {
+  const year = Number(yearLabel.slice(0, 4));
+  return Number.isInteger(year) && year > 1900 ? year : null;
+}
+
+export function availableIn(pattern: Pattern, yearLabel: string): boolean {
+  if (pattern.key !== 'CALGETC') return true;
+  const start = startYearOf(yearLabel);
+  return start === null || start >= CALGETC_FIRST_YEAR;
+}
+
+// The pattern a student on this catalog year would normally be certified in.
+// IGETC rather than CSU GE-Breadth for the older years, because IGETC is
+// accepted by every CSU as well as the UCs, so it is the choice that stays
+// right if they change their mind about where they are going.
+export function defaultPatternFor(yearLabel: string): PatternKey {
+  const start = startYearOf(yearLabel);
+  return start !== null && start >= CALGETC_FIRST_YEAR ? 'CALGETC' : 'IGETC';
+}
+
+// Why that pattern, in a sentence, because a choice made for you should say
+// what it was made from.
+export function whyPattern(key: PatternKey, yearLabel: string): string {
+  const start = startYearOf(yearLabel);
+  const isDefault = key === defaultPatternFor(yearLabel);
+
+  if (!isDefault) return 'You chose this one.';
+
+  if (key === 'CALGETC') {
+    return `Cal-GETC is the pattern for ${yearLabel}: it replaced the other two from Fall 2025.`;
+  }
+  return `Cal-GETC did not exist for ${yearLabel}${
+    start === null ? '' : `, it began in Fall ${CALGETC_FIRST_YEAR}`
+  }. Students with catalog rights before then are certified in IGETC or CSU GE-Breadth.`;
+}

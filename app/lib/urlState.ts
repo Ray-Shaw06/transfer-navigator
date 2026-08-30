@@ -1,5 +1,6 @@
 import type { PlanSettings } from '../components/SchoolPicker';
 import type { TermKind, TermRef } from '../../src/planner/schedule';
+import type { PatternKey } from '../../src/planner/patterns';
 
 // The whole plan lives in the query string: a refresh keeps it, the back
 // button works, and a student can send the link to a counselor or a friend
@@ -13,6 +14,9 @@ export type PlanUrlState = {
   major: string | null;
   completed: Set<string>;
   settings: PlanSettings | null;
+  // Null means the catalog year decides, which is the usual case. Only an
+  // explicit choice rides in the link.
+  pattern: PatternKey | null;
 };
 
 const encodeTerm = (ref: TermRef) => `${ref.kind}-${ref.year}`;
@@ -54,6 +58,7 @@ export function readPlanUrl(search: string): PlanUrlState {
         .map((code) => code.trim().toUpperCase())
         .filter(Boolean),
     ),
+    pattern: (['CALGETC', 'IGETC', 'CSUGE'] as const).find((k) => k === params.get('pattern')) ?? null,
     settings: start
       ? {
           start,
@@ -72,6 +77,7 @@ export function writePlanUrl(state: {
   major: string | null;
   completed: Set<string>;
   settings: PlanSettings;
+  pattern: PatternKey | null;
 }): string {
   const params = new URLSearchParams();
   if (state.college !== null) params.set('college', String(state.college));
@@ -79,6 +85,7 @@ export function writePlanUrl(state: {
   if (state.year !== null) params.set('year', String(state.year));
   if (state.major) params.set('major', state.major);
   if (state.completed.size > 0) params.set('done', [...state.completed].sort().join(','));
+  if (state.pattern) params.set('pattern', state.pattern);
 
   // Settings only ride along once there is a plan to apply them to, so a bare
   // link does not carry four parameters that mean nothing yet.

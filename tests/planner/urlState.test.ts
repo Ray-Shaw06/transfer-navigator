@@ -19,6 +19,7 @@ describe('plan URL state', () => {
       major: KEY,
       completed: new Set(['CS 003B', 'MATH 005A']),
       settings,
+      pattern: 'IGETC',
     });
 
     const back = readPlanUrl(url);
@@ -28,6 +29,28 @@ describe('plan URL state', () => {
     expect(back.major).toBe(KEY);
     expect([...back.completed].sort()).toEqual(['CS 003B', 'MATH 005A']);
     expect(back.settings).toEqual(settings);
+    expect(back.pattern).toBe('IGETC');
+  });
+
+  it('leaves the pattern out unless it was chosen explicitly', () => {
+    // Null means the catalog year decides, which is the usual case, and a
+    // link should not pin a choice the student never made.
+    const url = writePlanUrl({
+      college: 49,
+      campus: 120,
+      year: 76,
+      major: KEY,
+      completed: new Set(),
+      settings,
+      pattern: null,
+    });
+    expect(url).not.toContain('pattern=');
+    expect(readPlanUrl(url).pattern).toBeNull();
+  });
+
+  it('refuses a pattern it does not know', () => {
+    expect(readPlanUrl('?pattern=NOPE').pattern).toBeNull();
+    expect(readPlanUrl('?pattern=CSUGE').pattern).toBe('CSUGE');
   });
 
   it('leaves settings out until there is a major to apply them to', () => {
@@ -38,6 +61,7 @@ describe('plan URL state', () => {
       major: null,
       completed: new Set(),
       settings,
+      pattern: null,
     });
     expect(url).toBe('?college=49');
   });

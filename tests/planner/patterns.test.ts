@@ -6,6 +6,10 @@ import {
   slotsFor,
   totalCourses,
   totalSemesterUnits,
+  availableIn,
+  defaultPatternFor,
+  startYearOf,
+  whyPattern,
 } from '../../src/planner/patterns';
 
 // The transcription check. Every number here is quoted from the cited
@@ -169,5 +173,43 @@ describe('every pattern', () => {
     expect(totalSemesterUnits(areasFor(igetc, 'UC'))).toBe(34);
     expect(totalCourses(areasFor(igetc, 'CSU'))).toBe(12);
     expect(totalCourses(areasFor(igetc, 'UC'))).toBe(11);
+  });
+});
+
+describe('choosing a pattern for a catalog year', () => {
+  it('picks Cal-GETC from the year it began, and IGETC before it', () => {
+    expect(defaultPatternFor('2026-2027')).toBe('CALGETC');
+    expect(defaultPatternFor('2025-2026')).toBe('CALGETC');
+    expect(defaultPatternFor('2024-2025')).toBe('IGETC');
+    expect(defaultPatternFor('2019-2020')).toBe('IGETC');
+  });
+
+  it('does not offer Cal-GETC for a year it did not exist in', () => {
+    // ASSIST returns an empty Cal-GETC list for 2024-2025 and earlier, so
+    // offering it would take a student to a pattern with no courses in it.
+    expect(availableIn(patternFor('CALGETC'), '2024-2025')).toBe(false);
+    expect(availableIn(patternFor('CALGETC'), '2025-2026')).toBe(true);
+  });
+
+  it('keeps the older patterns available for every year', () => {
+    // Students with catalog rights before Fall 2025 are still transferring,
+    // and ASSIST still publishes both lists for current years.
+    for (const year of ['2019-2020', '2025-2026', '2026-2027']) {
+      expect(availableIn(patternFor('IGETC'), year)).toBe(true);
+      expect(availableIn(patternFor('CSUGE'), year)).toBe(true);
+    }
+  });
+
+  it('says what the choice was made from', () => {
+    expect(whyPattern('CALGETC', '2025-2026')).toContain('Fall 2025');
+    expect(whyPattern('IGETC', '2023-2024')).toContain('did not exist for 2023-2024');
+    // A pattern the student picked themselves is not explained away as the
+    // tool's decision.
+    expect(whyPattern('CSUGE', '2025-2026')).toBe('You chose this one.');
+  });
+
+  it('shrugs at a year label it cannot read rather than hiding a pattern', () => {
+    expect(startYearOf('unknown')).toBeNull();
+    expect(availableIn(patternFor('CALGETC'), 'unknown')).toBe(true);
   });
 });
