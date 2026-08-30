@@ -1,4 +1,4 @@
-import type { Agreement, ArticulationRow } from '../parser/document';
+import type { Agreement, ArticulationRow } from '../parser/agreement';
 import type { AndGroup } from '../parser/groups';
 import type { SectionRule } from '../parser/sections';
 import type { Course } from '../parser/types';

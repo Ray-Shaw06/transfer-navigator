@@ -1,4 +1,4 @@
-import { UnrecognisedAgreementError, type Agreement, type ArticulationRow } from '../parser/document';
+import { UnrecognisedAgreementError, type Agreement, type ArticulationRow } from '../parser/agreement';
 import type { AndGroup, Requirement } from '../parser/groups';
 import type { Section, SectionRule } from '../parser/sections';
 import type { Course } from '../parser/types';

@@ -6,57 +6,14 @@ import { bandRows, type RawRow } from './rows';
 import { parseRequirement, type Requirement } from './groups';
 import { parseSectionHeader, type Section } from './sections';
 import type { Course } from './types';
+import { UnrecognisedAgreementError, type Agreement, type ArticulationRow } from './agreement';
 
-export type ArticulationRow = {
-  receiving: Course[];
-  sending: Requirement;
-  // Rows sharing an orGroup are alternative paths through one requirement,
-  // coming from an OR connector in the receiving column. Satisfying any one
-  // member satisfies the group. Without this the planner cannot tell "two
-  // separate requirements" from "one requirement, two routes", and will tell
-  // a student to somehow obtain a course that nothing articulates to when a
-  // sibling route is wide open.
-  orGroup?: number;
-  // Indexes into Agreement.sections. Which section a row belongs to decides
-  // whether it is required outright or one of several alternatives under a
-  // choose-at-least quantifier; see assignSections below.
-  section?: number;
-  // Which route within a 'choose_route' section this row belongs to. Rows
-  // sharing a route must all be completed together, and completing any one
-  // route satisfies the section. Only the ASSIST API sets this; the PDF
-  // parser cannot see routes and leaves it undefined.
-  route?: number;
-};
-export type Agreement = {
-  academicYear: string;
-  major: string;
-  receivingInstitution: string;
-  sendingInstitution: string;
-  rows: ArticulationRow[];
-  sections: Section[];
-  // Page 1 advisory prose in the receiving campus's own words: admission
-  // competitiveness, minimum grade requirements, sequence-splitting
-  // warnings, and the like. None of this has a structure this parser can
-  // read (no course codes, no quantifiers), so it is captured verbatim by
-  // line rather than interpreted, and nothing downstream (the planner
-  // included) ever reads it back in. It exists only to be displayed.
-  // Optional on the type only so the hand-built Agreement literals in
-  // tests/planner/plan.test.ts, written before this field existed, keep
-  // typechecking unchanged; parseAgreement itself always sets it.
-  notes?: string[];
-};
-
-// Thrown instead of returning an agreement with no rows and no recognisable
-// header. Without this, a PDF that is not an agreement (the wrong file, or a
-// scan with no text layer) parses cleanly to an empty Agreement, and the page
-// reports 0 units remaining and nothing left to schedule: it tells a student
-// who has done nothing that they are finished transferring.
-export class UnrecognisedAgreementError extends Error {
-  constructor() {
-    super('That file does not look like an ASSIST articulation agreement.');
-    this.name = 'UnrecognisedAgreementError';
-  }
-}
+// Re-exported so the PDF path keeps one import site for everything it needs.
+export {
+  UnrecognisedAgreementError,
+  type Agreement,
+  type ArticulationRow,
+} from './agreement';
 
 // The line right after a marker line was a guess about the print layout.
 // On the real page 1, "To:" and the institution name are one text item, for

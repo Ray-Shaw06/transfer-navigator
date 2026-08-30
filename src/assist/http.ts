@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { AssistQuotaError, AssistUnavailableError } from './client';
-import { UnrecognisedAgreementError } from '../parser/document';
+import { UnrecognisedAgreementError } from '../parser/agreement';
 
 // Agreements are republished about once a year, and the institution list
 // changes about as often, so these are cached hard. The cache lives at
