@@ -1,53 +1,28 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { parseAgreement, UnrecognisedAgreementError } from '../src/parser/document';
 import type { Agreement } from '../src/parser/agreement';
 import { buildPlan } from '../src/planner/plan';
 import { buildSchedule, currentTerm } from '../src/planner/schedule';
 import { geStatus } from '../src/planner/ge';
-import type { GeneralEducation as Ge } from '../src/assist/ge';
 import { Dropzone } from './components/Dropzone';
 import { CourseChooser } from './components/CourseChooser';
 import { Verdict } from './components/Verdict';
 import { RouteView } from './components/Route';
 import { Requirements } from './components/Requirements';
 import { GeneralEducation } from './components/GeneralEducation';
-import { ThemeToggle } from './components/ThemeToggle';
+import { ShareLink } from './components/ShareLink';
+import { PlanControls, SchoolPicker, type PlanSettings } from './components/SchoolPicker';
 import {
-  PlanControls,
-  SchoolPicker,
-  type MajorOption,
-  type Option,
-  type PlanSettings,
-  type YearOption,
-} from './components/SchoolPicker';
-
-type Catalog = { colleges: Option[]; campuses: Option[]; academicYears: YearOption[] };
-type Partner = { id: number; years: number[] };
-type Failure = { code: string; message: string };
-
-// A body this app's own routes always send on failure. Anything else (a proxy
-// error page, a dropped connection) falls back to a sentence written here.
-async function failureOf(response: Response): Promise<Failure> {
-  try {
-    const body = (await response.json()) as { error?: string; message?: string };
-    if (body.message) return { code: body.error ?? 'unavailable', message: body.message };
-  } catch {
-    // fall through
-  }
-  return { code: 'unavailable', message: 'Could not reach ASSIST. Try again in a moment.' };
-}
-
-// Which years a student may actually pick for the pair they have chosen.
-// ASSIST publishes a catalog year long before the agreements under it are
-// written, so offering every published year tells students their college and
-// campus have no agreement when the year is simply too new.
-function yearsFor(partner: Partner | undefined, all: YearOption[]): YearOption[] {
-  if (!partner) return [];
-  const available = new Set(partner.years);
-  return all.filter((y) => available.has(y.id));
-}
+  useAgreement,
+  useCatalog,
+  useGeneralEducation,
+  useMajors,
+  usePartners,
+  yearsFor,
+} from './lib/assist';
+import { readPlanUrl, writePlanUrl } from './lib/urlState';
 
 function Skeleton({ rows }: { rows: number }) {
   return (
@@ -62,215 +37,68 @@ function Skeleton({ rows }: { rows: number }) {
 export default function Home() {
   const earliest = useMemo(() => currentTerm(), []);
 
-  const [catalog, setCatalog] = useState<Catalog | null>(null);
-  const [college, setCollege] = useState<number | null>(null);
-  const [campus, setCampus] = useState<number | null>(null);
-  const [year, setYear] = useState<number | null>(null);
-  const [partners, setPartners] = useState<Partner[] | null>(null);
-  const [majors, setMajors] = useState<MajorOption[]>([]);
-  const [majorsState, setMajorsState] = useState<'idle' | 'loading' | 'ready' | 'empty' | 'error'>(
-    'idle',
+  // Read once, synchronously, before anything fetches. Reading it in an effect
+  // instead would let the pickers settle on empty values first and then jump.
+  const initial = useMemo(
+    () => readPlanUrl(typeof window === 'undefined' ? '' : window.location.search),
+    [],
   );
-  const [major, setMajor] = useState<string | null>(null);
 
-  const [ge, setGe] = useState<Ge | null>(null);
-  const [agreement, setAgreement] = useState<Agreement | null>(null);
-  const [loadingAgreement, setLoadingAgreement] = useState(false);
-  // Course codes the student has ticked, uppercased. Kept across agreement
-  // changes on purpose: switching major at the same college does not change
-  // what they have already taken, and a code that is irrelevant to the new
-  // agreement simply matches nothing.
-  const [completed, setCompleted] = useState<Set<string>>(new Set());
-  const [failure, setFailure] = useState<Failure | null>(null);
+  const [college, setCollege] = useState<number | null>(initial.college);
+  const [campus, setCampus] = useState<number | null>(initial.campus);
+  const [year, setYear] = useState<number | null>(initial.year);
+  const [major, setMajor] = useState<string | null>(initial.major);
+  const [completed, setCompleted] = useState<Set<string>>(initial.completed);
+  const [settings, setSettings] = useState<PlanSettings>(
+    initial.settings ?? { start: earliest, unitsPerTerm: 12, includeSummer: false, target: null },
+  );
+
+  // A major restored from the link. The majors effect clears the selection
+  // whenever the pair changes, which on the very first run would throw away
+  // the one the link asked for, so it is handed back exactly once.
+  const restoredMajor = useRef(initial.major);
+
+  const [uploaded, setUploaded] = useState<Agreement | null>(null);
   const [uploadError, setUploadError] = useState('');
 
-  const [settings, setSettings] = useState<PlanSettings>({
-    start: earliest,
-    unitsPerTerm: 12,
-    includeSummer: false,
-    target: null,
-  });
+  const { catalog, failure: catalogFailure } = useCatalog();
+  const partners = usePartners(college);
+  const years = yearsFor(partners, campus, catalog?.academicYears ?? []);
+  const { majors, state: majorsState, failure: majorsFailure } = useMajors(college, campus, year);
+  const { agreement: fetched, loading, failure: agreementFailure } = useAgreement(major);
+  const ge = useGeneralEducation(college, year);
 
+  const agreement = uploaded ?? fetched;
+  const failure = catalogFailure ?? majorsFailure ?? agreementFailure;
+
+  // Keep the chosen year valid for the chosen pair, but only once the pair's
+  // real years have arrived. Running before that would clear a year restored
+  // from a link, because `years` is empty until partners load.
   useEffect(() => {
-    let live = true;
-    fetch('/api/assist/institutions')
-      .then(async (response) => {
-        if (!response.ok) throw await failureOf(response);
-        return (await response.json()) as Catalog;
-      })
-      .then((data) => live && setCatalog(data))
-      .catch((error: Failure) => live && setFailure(error));
-    return () => {
-      live = false;
-    };
-  }, []);
-
-  // Which campuses this college has agreements with, and for which years.
-  // Fetched as soon as a college is chosen so the campus list is narrowed
-  // before the student picks something that leads nowhere.
-  useEffect(() => {
-    if (college === null) {
-      setPartners(null);
-      return;
-    }
-
-    let live = true;
-    setPartners(null);
-    setFailure(null);
-
-    fetch(`/api/assist/partners?college=${college}`)
-      .then(async (response) => {
-        if (!response.ok) throw await failureOf(response);
-        return (await response.json()) as { partners: Partner[] };
-      })
-      .then((data) => live && setPartners(data.partners))
-      .catch((error: Failure) => live && setFailure(error));
-
-    return () => {
-      live = false;
-    };
-  }, [college]);
-
-  const partner = partners?.find((p) => p.id === campus);
-  const years = yearsFor(partner, catalog?.academicYears ?? []);
-
-  // Keep the chosen year valid for the chosen pair. Changing campus can
-  // invalidate it, and a stale year sends the student to one this pair has no
-  // agreement for.
-  useEffect(() => {
+    if (partners === null) return;
     if (years.length === 0) {
       if (year !== null) setYear(null);
       return;
     }
     if (year === null || !years.some((y) => y.id === year)) setYear(years[0].id);
-  }, [years, year]);
+  }, [partners, years, year]);
 
-  // Only campuses this college can actually reach. Before a college is chosen
-  // the full list shows, so the two dropdowns can be read in either order.
+  // The pair changed, so the previous major no longer applies.
+  useEffect(() => {
+    setMajor(restoredMajor.current);
+    restoredMajor.current = null;
+  }, [college, campus, year]);
+
+  // Only campuses this college can reach. Before a college is chosen the full
+  // list shows, so the two dropdowns read in either order.
   const campuses = (catalog?.campuses ?? []).filter(
     (c) => partners === null || partners.some((p) => p.id === c.id),
   );
-
-  useEffect(() => {
-    if (college === null || campus === null || year === null) {
-      setMajors([]);
-      setMajorsState('idle');
-      return;
-    }
-
-    let live = true;
-    setMajorsState('loading');
-    setMajors([]);
-    setMajor(null);
-    setAgreement(null);
-    setFailure(null);
-
-    fetch(`/api/assist/majors?sending=${college}&receiving=${campus}&year=${year}`)
-      .then(async (response) => {
-        if (!response.ok) throw await failureOf(response);
-        return (await response.json()) as { majors: MajorOption[] };
-      })
-      .then((data) => {
-        if (!live) return;
-        setMajors(data.majors);
-        setMajorsState(data.majors.length === 0 ? 'empty' : 'ready');
-      })
-      .catch((error: Failure) => {
-        if (!live) return;
-        setMajorsState('error');
-        setFailure(error);
-      });
-
-    return () => {
-      live = false;
-    };
-  }, [college, campus, year]);
-
-  // The general education pattern is a property of the college and the year,
-  // not of the major, so it is fetched independently of the agreement and
-  // survives a change of major. A failure here is never surfaced as an error:
-  // general education is additional to the plan, and losing it must not take
-  // the plan down with it.
-  useEffect(() => {
-    if (college === null || year === null) {
-      setGe(null);
-      return;
-    }
-
-    let live = true;
-    setGe(null);
-
-    fetch(`/api/assist/ge?college=${college}&year=${year}`)
-      .then(async (response) => {
-        if (!response.ok) throw new Error('unavailable');
-        return (await response.json()) as { ge: Ge };
-      })
-      .then((data) => live && setGe(data.ge))
-      .catch(() => {
-        // Leave it null. The panel simply does not appear.
-      });
-
-    return () => {
-      live = false;
-    };
-  }, [college, year]);
-
-  useEffect(() => {
-    if (major === null) return;
-
-    let live = true;
-    setLoadingAgreement(true);
-    setFailure(null);
-    setAgreement(null);
-
-    fetch(`/api/assist/agreement?key=${encodeURIComponent(major)}`)
-      .then(async (response) => {
-        if (!response.ok) throw await failureOf(response);
-        return (await response.json()) as { agreement: Agreement };
-      })
-      .then((data) => live && setAgreement(data.agreement))
-      .catch((error: Failure) => live && setFailure(error))
-      .finally(() => {
-        if (live) setLoadingAgreement(false);
-      });
-
-    return () => {
-      live = false;
-    };
-  }, [major]);
-
-  // The upload path is unchanged and still entirely local: the file is read
-  // into memory in this tab and parsed here. It never reaches this app's own
-  // API routes, which only ever carry a college, a campus and a major.
-  const onFile = useCallback(async (file: File) => {
-    try {
-      setUploadError('');
-      setFailure(null);
-      setMajor(null);
-      const bytes = new Uint8Array(await file.arrayBuffer());
-      setAgreement(await parseAgreement(bytes));
-    } catch (err) {
-      setAgreement(null);
-      setUploadError(
-        err instanceof UnrecognisedAgreementError
-          ? 'That does not look like an ASSIST articulation agreement. Download yours from assist.org and try again. A scan or a photo will not work; it needs the PDF assist.org gives you.'
-          : 'Could not read that PDF. Download the agreement again from assist.org and retry.',
-      );
-    }
-  }, []);
 
   const plan = useMemo(
     () => (agreement ? buildPlan(agreement, [...completed]) : null),
     [agreement, completed],
   );
-
-  // Courses the route still has the student taking, which is what can double
-  // count toward a general education area.
-  const geView = useMemo(() => {
-    if (!ge || !plan || ge.areas.length === 0) return null;
-    const planned = plan.remainingGroups.flatMap((g) => g.courses);
-    return geStatus(ge, completed, planned);
-  }, [ge, plan, completed]);
 
   const schedule = useMemo(
     () =>
@@ -285,28 +113,48 @@ export default function Home() {
     [plan, settings],
   );
 
+  const geView = useMemo(() => {
+    if (!ge || !plan || ge.areas.length === 0) return null;
+    return geStatus(ge, completed, plan.remainingGroups.flatMap((g) => g.courses));
+  }, [ge, plan, completed]);
+
+  // Mirror the plan into the address bar. replaceState rather than pushState:
+  // ticking a course is not a navigation, and filling the back button with
+  // every tick would make it useless.
+  const query = writePlanUrl({ college, campus, year, major, completed, settings });
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (window.location.search === query) return;
+    window.history.replaceState(null, '', `${window.location.pathname}${query}`);
+  }, [query]);
+
+  // The upload path is unchanged and still entirely local: the file is read
+  // into memory in this tab and parsed here. It never reaches this app's own
+  // API routes, which only ever carry a college, a campus and a major.
+  const onFile = useCallback(async (file: File) => {
+    try {
+      setUploadError('');
+      setMajor(null);
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      setUploaded(await parseAgreement(bytes));
+    } catch (err) {
+      setUploaded(null);
+      setUploadError(
+        err instanceof UnrecognisedAgreementError
+          ? 'That does not look like an ASSIST articulation agreement. Download yours from assist.org and try again. A scan or a photo will not work; it needs the PDF assist.org gives you.'
+          : 'Could not read that PDF. Download the agreement again from assist.org and retry.',
+      );
+    }
+  }, []);
+
   return (
-    <main className="shell">
-      <header className="masthead">
-        <h1>
-          <svg className="mark" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path
-              d="M5 20V6.5a2.5 2.5 0 0 1 2.5-2.5H19"
-              stroke="currentColor"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-            />
-            <circle cx="5" cy="20" r="2.2" fill="currentColor" />
-            <circle cx="19" cy="4" r="2.2" fill="currentColor" />
-          </svg>
-          Transfer Navigator
-        </h1>
-        <ThemeToggle />
+    <main>
+      <div className="page-intro">
+        <h1>Plan your transfer</h1>
         <p>
-          What you still need to transfer, term by term, read straight from the ASSIST articulation
-          agreement.
+          What you still need, term by term, read straight from the ASSIST articulation agreement.
         </p>
-      </header>
+      </div>
 
       <section className="panel">
         <div className="panel-head">
@@ -325,7 +173,10 @@ export default function Home() {
             year={year}
             major={major}
             majorsState={majorsState}
-            onCollege={setCollege}
+            onCollege={(id) => {
+              setCollege(id);
+              setCampus(null);
+            }}
             onCampus={setCampus}
             onYear={setYear}
             onMajor={setMajor}
@@ -353,7 +204,7 @@ export default function Home() {
         </p>
       )}
 
-      {loadingAgreement && (
+      {loading && (
         <section className="panel" style={{ marginTop: '1rem' }}>
           <Skeleton rows={4} />
         </section>
@@ -375,6 +226,7 @@ export default function Home() {
           <section className="panel" style={{ marginTop: '1rem' }}>
             <div className="panel-head">
               <h2>How you want to go</h2>
+              <ShareLink />
             </div>
             <PlanControls settings={settings} earliest={earliest} onChange={setSettings} />
           </section>
@@ -435,12 +287,12 @@ export default function Home() {
 
           <div className="scope">
             <p>
-              <b>What this covers.</b> Major preparation on this one agreement, and nothing else.
+              <b>What this covers.</b> Major preparation on this agreement, plus how it lands
+              against Cal-GETC.
             </p>
             <p>
-              <b>What it does not.</b> General education and IGETC, the minimum transferable units
-              your campus asks for, GPA, and admission itself. Confirm all of that with a counselor
-              before you register.
+              <b>What it does not.</b> The minimum transferable units your campus asks for, GPA, and
+              admission itself. Confirm all of that with a counselor before you register.
             </p>
             <p>
               <b>Where it can be wrong.</b> When a course you finished could count toward two
@@ -465,17 +317,6 @@ export default function Home() {
           <Dropzone onFile={onFile} error={uploadError} />
         </div>
       </details>
-
-      <footer className="site-footer">
-        <p>
-          Not affiliated with ASSIST, the University of California, the California State University,
-          or any college. Agreement data comes from{' '}
-          <a href="https://assist.org" target="_blank" rel="noreferrer">
-            assist.org
-          </a>
-          , which is the official source and the one to trust if this ever disagrees with it.
-        </p>
-      </footer>
     </main>
   );
 }

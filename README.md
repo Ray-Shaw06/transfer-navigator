@@ -58,6 +58,22 @@ Three things keep the site inside it:
 3. When it does run out, the UI says so plainly and points at the upload
    path, which does not touch ASSIST at all.
 
+## Three surfaces
+
+- **Plan** builds the route for one college, campus and major.
+- **Compare** puts several campuses side by side for the same college, so
+  "where should I aim" gets an answer in units rather than in vibes.
+- **How it works** says where the data comes from, what this refuses to guess,
+  and where it can still be wrong.
+
+## Sharing a plan
+
+The whole plan lives in the query string: college, campus, year, major, the
+courses you have ticked, and your unit load and target term. A refresh keeps
+it, the back button works, and the link can go to a counselor who then sees
+exactly what you see. Nothing is stored on a server because nothing needs to
+be.
+
 ## Saying what you have already taken
 
 You tick courses from a list the agreement itself provides, in your college's
@@ -161,7 +177,7 @@ section, a receiving-side OR, and a section spanning a page break.
 | `src/planner/` | `buildPlan` (section rules, routes, unit totals), `buildSchedule` (named terms), `catalog` (the courses you can tick) |
 | `app/api/assist/` | Cached server routes; the only code that talks to ASSIST |
 | `src/assist/ge.ts` | The Cal-GETC certification list, mapped into areas |
-| `app/` | The UI |
+| `app/` | The three pages, shared data hooks in `app/lib/` |
 | `docs/plans/` | The plans this was built from, including what was left out |
 
 ## License

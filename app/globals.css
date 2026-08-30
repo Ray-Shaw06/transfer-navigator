@@ -967,3 +967,193 @@ details.more[open] > summary::before { content: '–'; }
   .ge-list li { grid-template-columns: 2.25rem 1fr; }
   .ge-count { grid-column: 2; text-align: left; }
 }
+
+/* ----------------------------------- navigation */
+
+.masthead {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem 1.5rem;
+  flex-wrap: wrap;
+  padding: 1.25rem 0 1rem;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 1.75rem;
+}
+
+.wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5625rem;
+  font-size: 1.0625rem;
+  font-weight: 640;
+  letter-spacing: -0.022em;
+  color: var(--ink);
+  text-decoration: none;
+  border-radius: var(--radius-sm);
+}
+
+.wordmark:hover { color: var(--ink); }
+
+.nav { display: flex; gap: 0.25rem; margin-right: auto; }
+
+.nav-link {
+  padding: 0.3125rem 0.625rem;
+  font-size: 0.875rem;
+  font-weight: 550;
+  color: var(--ink-3);
+  text-decoration: none;
+  border-radius: var(--radius-sm);
+  transition: color var(--fast) var(--ease), background var(--fast) var(--ease);
+}
+
+.nav-link:hover { color: var(--ink); background: var(--surface); }
+
+.nav-link[aria-current='page'] { color: var(--ink); background: var(--surface-2); }
+
+.page-intro { margin-bottom: 1.5rem; max-width: 66ch; }
+.page-intro h1 { margin-bottom: 0.375rem; }
+.page-intro p { color: var(--ink-2); font-size: 0.9375rem; }
+
+@media (max-width: 34rem) {
+  .nav { order: 3; width: 100%; margin-right: 0; }
+  .wordmark { margin-right: auto; }
+}
+
+/* ----------------------------------- prose (how it works) */
+
+.prose { max-width: 68ch; display: grid; gap: 1.5rem; }
+.prose section { display: grid; gap: 0.625rem; }
+.prose h2 { font-size: 1.0625rem; }
+.prose p { color: var(--ink-2); font-size: 0.9375rem; }
+.prose strong { color: var(--ink); font-weight: 620; }
+
+.prose ul { margin: 0; padding-left: 1.125rem; display: grid; gap: 0.375rem; color: var(--ink-2); font-size: 0.9375rem; }
+
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.75rem;
+  margin: 0.25rem 0;
+}
+
+.fact {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.75rem 0.875rem;
+  background: var(--surface);
+}
+
+.fact b {
+  display: block;
+  font-size: 1.375rem;
+  font-weight: 640;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.fact span { font-size: 0.8125rem; color: var(--ink-3); }
+
+.pipeline { display: grid; gap: 0.5rem; counter-reset: step; }
+
+.pipeline li {
+  display: grid;
+  grid-template-columns: 1.75rem 1fr;
+  gap: 0.75rem;
+  align-items: baseline;
+  padding: 0.6875rem 0.875rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-size: 0.875rem;
+  color: var(--ink-2);
+  list-style: none;
+}
+
+.pipeline li::before {
+  counter-increment: step;
+  content: counter(step);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--signal-ink);
+}
+
+.pipeline b { color: var(--ink); font-weight: 620; }
+
+/* ----------------------------------- compare */
+
+.compare {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+/* .panel + .panel carries a top margin for stacked panels, which inside this
+   grid pushes every card after the first down by a row gap it does not need. */
+.compare .panel + .panel { margin-top: 0; }
+
+.slot { display: grid; gap: 0.875rem; align-content: start; }
+
+.slot-head { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
+
+.slot-index {
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--ink-2);
+}
+
+.slot-result { display: grid; gap: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--line); }
+
+.slot-figure { display: flex; align-items: baseline; gap: 0.4375rem; }
+
+.slot-figure b {
+  font-size: 1.75rem;
+  font-weight: 640;
+  letter-spacing: -0.03em;
+  color: var(--signal-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.slot-figure span { font-size: 0.8125rem; color: var(--ink-3); }
+
+.slot-stats { margin: 0; display: grid; gap: 0.3125rem; }
+
+.slot-stats > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.8125rem;
+}
+
+.slot-stats dt { color: var(--ink-3); }
+.slot-stats dd { margin: 0; color: var(--ink); font-weight: 620; font-variant-numeric: tabular-nums; }
+
+.slot-note { font-size: 0.8125rem; color: var(--ink-2); }
+
+.slot-open { font-size: 0.8125rem; font-weight: 550; }
+
+.add-slot {
+  margin-top: 1rem;
+  padding: 0.5625rem 0.875rem;
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 550;
+  color: var(--ink-2);
+  background: var(--surface);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: border-color var(--fast) var(--ease), color var(--fast) var(--ease);
+}
+
+.add-slot:hover { border-color: var(--signal); color: var(--ink); }

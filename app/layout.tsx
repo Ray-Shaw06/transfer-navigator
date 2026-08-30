@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Inter, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
+import { Nav } from './components/Nav';
 
 // One family carries headings, labels, data and prose, which is what product
 // UI wants. The mono is not a second voice: it is used only for course codes,
@@ -37,7 +38,22 @@ export const viewport = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={`${sans.variable} ${mono.variable}`}>
-      <body>{children}</body>
+      <body>
+        <div className="shell">
+          <Nav />
+          {children}
+          <footer className="site-footer">
+            <p>
+              Not affiliated with ASSIST, the University of California, the California State
+              University, or any college. Agreement data comes from{' '}
+              <a href="https://assist.org" target="_blank" rel="noreferrer">
+                assist.org
+              </a>
+              , which is the official source and the one to trust if this ever disagrees with it.
+            </p>
+          </footer>
+        </div>
+      </body>
     </html>
   );
 }
