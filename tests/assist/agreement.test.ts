@@ -362,7 +362,38 @@ describe('toSectionRule', () => {
     ).toEqual({ kind: 'choose', least: 2 });
     expect(
       toSectionRule({ type: 'NFromArea', amount: 8, amountUnitType: 'Unit', amountQuantifier: 'None' }),
-    ).toEqual({ kind: 'choose_units', least: 8 });
+    ).toEqual({ kind: 'choose_units', least: 8, unitLabel: 'units' });
+  });
+
+  it('reads every unit flavour ASSIST states as a unit target, not a course count', () => {
+    // Found by checking a second real agreement: ASSIST writes SemesterUnit,
+    // not Unit. Read as a course count, "complete at least 12 semester
+    // units" would have told a student to take twelve courses.
+    expect(
+      toSectionRule({ type: 'NFromArea', amount: 12, amountUnitType: 'SemesterUnit', amountQuantifier: 'AtLeast' }),
+    ).toEqual({ kind: 'choose_units', least: 12, unitLabel: 'semester units' });
+    expect(
+      toSectionRule({ type: 'NFromArea', amount: 12, amountUnitType: 'QuarterUnit', amountQuantifier: 'AtLeast' }),
+    ).toEqual({ kind: 'choose_units', least: 12, unitLabel: 'quarter units' });
+  });
+
+  it('counts a series and a combination the way it counts a course', () => {
+    // Each is one row in this model, so N of them is N rows.
+    for (const amountUnitType of ['Series', 'CourseOrCombination']) {
+      expect(
+        toSectionRule({ type: 'NFromArea', amount: 3, amountUnitType, amountQuantifier: 'AtLeast' }),
+      ).toEqual({ kind: 'choose', least: 3 });
+    }
+  });
+
+  it('refuses to count a unit type it has never seen', () => {
+    const rule = toSectionRule({
+      type: 'NFromArea',
+      amount: 4,
+      amountUnitType: 'SomethingNew',
+      amountQuantifier: 'AtLeast',
+    });
+    expect(rule.kind).toBe('advisory');
   });
 
   it('refuses to invent a floor out of a ceiling', () => {

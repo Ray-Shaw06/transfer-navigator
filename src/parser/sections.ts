@@ -6,9 +6,12 @@
 export type SectionRule =
   | { kind: 'all' }
   | { kind: 'choose'; least: number }
-  // Pick enough options to reach `least` SENDING units. ASSIST states these
-  // as NFromArea with amountUnitType 'Unit'.
-  | { kind: 'choose_units'; least: number }
+  // Pick enough options to reach `least` sending units. ASSIST states these
+  // as NFromArea with a unit-flavoured amountUnitType (SemesterUnit,
+  // QuarterUnit, Unit). `unitLabel` is ASSIST's own wording for which unit
+  // system it means, shown verbatim rather than converted, because semester
+  // and quarter units are not interchangeable.
+  | { kind: 'choose_units'; least: number; unitLabel: string }
   // The section's rows are divided into routes by ArticulationRow.route, and
   // completing any one whole route satisfies the section. This is the
   // multi-row generalisation of ArticulationRow.orGroup.

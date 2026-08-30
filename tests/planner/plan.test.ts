@@ -111,11 +111,19 @@ describe('buildPlan', () => {
     expect(plan.notArticulated.map((c) => c.code)).toEqual(['RECV 40', 'RECV 50']);
   });
 
-  it('packs remaining courses into terms under the unit cap', () => {
-    const plan = buildPlan(agreement, [], 5);
-    expect(plan.terms).toEqual([
-      [course('SEND 1', 3), course('SEND 1L', 1)],
-      [course('SEND 5', 4)],
+  it('reports the work left as the groups it came from, not a flat list', () => {
+    const plan = buildPlan(agreement, []);
+    expect(plan.remainingGroups.map((g) => g.courses.map((c) => c.code))).toEqual([
+      ['SEND 1', 'SEND 1L'],
+      ['SEND 5'],
+    ]);
+  });
+
+  it('leaves a course out of the remaining work once it is done', () => {
+    const plan = buildPlan(agreement, ['SEND 1']);
+    expect(plan.remainingGroups.map((g) => g.courses.map((c) => c.code))).toEqual([
+      ['SEND 1L'],
+      ['SEND 5'],
     ]);
   });
 
@@ -454,7 +462,7 @@ describe('buildPlan', () => {
     // so a third has to be kept as well.
     const unitTarget: Agreement = {
       ...agreement,
-      sections: [{ label: 'Complete at least 8 units from the following', rule: { kind: 'choose_units', least: 8 } }],
+      sections: [{ label: 'Complete at least 8 units from the following', rule: { kind: 'choose_units', least: 8, unitLabel: 'semester units' } }],
       rows: [3, 4, 5, 6].map((units, i) => ({
         receiving: [course(`RECV ${(i + 1) * 10}`, 4)],
         section: 0,
@@ -480,7 +488,7 @@ describe('buildPlan', () => {
   it('counts units already completed toward a unit target', () => {
     const unitTarget: Agreement = {
       ...agreement,
-      sections: [{ label: 'Complete at least 8 units from the following', rule: { kind: 'choose_units', least: 8 } }],
+      sections: [{ label: 'Complete at least 8 units from the following', rule: { kind: 'choose_units', least: 8, unitLabel: 'semester units' } }],
       rows: [3, 4, 5, 6].map((units, i) => ({
         receiving: [course(`RECV ${(i + 1) * 10}`, 4)],
         section: 0,

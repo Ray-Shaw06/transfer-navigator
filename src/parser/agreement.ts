@@ -28,6 +28,13 @@ export type ArticulationRow = {
   // whether it is required outright or one of several alternatives under a
   // choose-at-least quantifier; see assignSections below.
   section?: number;
+  // What the receiving side actually is. Almost every cell names a course,
+  // but ASSIST also publishes cells that name a requirement with no course
+  // code ("a world history area") and cells that name a general education
+  // pattern. Neither carries units and neither can be scheduled like a
+  // course, so they are marked here and rendered as what they are rather
+  // than dressed up as a zero-unit course.
+  receivingKind?: 'course' | 'requirement' | 'ge_pattern';
   // Which route within a 'choose_route' section this row belongs to. Rows
   // sharing a route must all be completed together, and completing any one
   // route satisfies the section. Only the ASSIST API sets this; the PDF

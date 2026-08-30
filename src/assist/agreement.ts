@@ -48,21 +48,32 @@ function toCourse(c: AssistCourse | undefined): Course | null {
 // discover the hard way. A Requirement or CALGETC cell names something with
 // no course code; it is carried as a zero-unit pseudo-course so it stays
 // visible, and receiving units are display-only, never summed into a plan.
-function receivingCourses(cell: AssistCell): Course[] {
+type Receiving = { courses: Course[]; kind: 'course' | 'requirement' | 'ge_pattern' };
+
+function receivingCourses(cell: AssistCell): Receiving {
   if (cell.type === 'Course') {
     const course = toCourse(cell.course);
-    return course ? [course] : [];
+    return { courses: course ? [course] : [], kind: 'course' };
   }
   if (cell.type === 'Series') {
-    return (cell.series?.courses ?? []).map(toCourse).filter((c): c is Course => c !== null);
+    return {
+      courses: (cell.series?.courses ?? []).map(toCourse).filter((c): c is Course => c !== null),
+      kind: 'course',
+    };
   }
   if (cell.type === 'Requirement' && cell.requirement?.name) {
-    return [{ code: cell.requirement.name.trim(), title: '', units: 0 }];
+    // No course code and no units, because ASSIST states none. Carried as a
+    // named requirement so the UI can say "your college's course for this
+    // area" instead of inventing a zero-unit course nobody can look up.
+    return { courses: [{ code: cell.requirement.name.trim(), title: '', units: 0 }], kind: 'requirement' };
   }
   if (cell.type === 'CALGETC') {
-    return [{ code: 'CalGETC', title: 'General education pattern', units: 0 }];
+    return {
+      courses: [{ code: 'CalGETC', title: 'General education pattern', units: 0 }],
+      kind: 'ge_pattern',
+    };
   }
-  return [];
+  return { courses: [], kind: 'course' };
 }
 
 // The sending side. `items` is a list of alternatives; within one item,
@@ -117,12 +128,38 @@ export function toSectionRule(instruction: AssistInstruction | null | undefined)
     if (amount === undefined || amount <= 0 || instruction.amountQuantifier === 'UpTo') {
       return { kind: 'advisory', text: describeInstruction(instruction) };
     }
-    return instruction.amountUnitType === 'Unit'
-      ? { kind: 'choose_units', least: amount }
-      : { kind: 'choose', least: amount };
+
+    const counted = countedThing(instruction.amountUnitType);
+    if (counted === 'units') {
+      return { kind: 'choose_units', least: amount, unitLabel: unitLabelFor(instruction.amountUnitType) };
+    }
+    if (counted === 'courses') return { kind: 'choose', least: amount };
+
+    // An amountUnitType nobody has seen before must not quietly become a
+    // course count. "Complete at least 12 SemesterUnit" read as "pick 12
+    // courses" would roughly triple the work this tool reports.
+    return { kind: 'advisory', text: describeInstruction(instruction) };
   }
 
   return { kind: 'advisory', text: describeInstruction(instruction) };
+}
+
+// What an NFromArea quantifier is counting. ASSIST has used Course, Series,
+// CourseOrCombination and SemesterUnit; a Series and a CourseOrCombination
+// are each one row in this model, so they count the same way a Course does.
+function countedThing(amountUnitType: string | undefined): 'courses' | 'units' | null {
+  if (!amountUnitType) return null;
+  if (amountUnitType.includes('Unit')) return 'units';
+  if (['Course', 'Series', 'CourseOrCombination'].includes(amountUnitType)) return 'courses';
+  return null;
+}
+
+// ASSIST's own wording, kept rather than normalised. A student reading
+// "12 semester units" needs to know it is not 12 quarter units.
+function unitLabelFor(amountUnitType: string | undefined): string {
+  if (amountUnitType === 'SemesterUnit') return 'semester units';
+  if (amountUnitType === 'QuarterUnit') return 'quarter units';
+  return 'units';
 }
 
 // A plain-language rendering of a rule the planner declined to act on, so
@@ -130,7 +167,13 @@ export function toSectionRule(instruction: AssistInstruction | null | undefined)
 // these as a shape, not a sentence, so one is written here.
 function describeInstruction(instruction: AssistInstruction): string {
   const amount = num(instruction.amount);
-  const unit = instruction.amountUnitType === 'Unit' ? 'units' : 'courses';
+  const counted = countedThing(instruction.amountUnitType);
+  const unit =
+    counted === 'units'
+      ? unitLabelFor(instruction.amountUnitType)
+      : counted === 'courses'
+        ? 'courses'
+        : (instruction.amountUnitType ?? 'items');
   const quantifier = instruction.amountQuantifier;
   if (amount !== undefined && quantifier === 'UpTo') {
     return `ASSIST states: complete up to ${amount} ${unit} from the following.`;
@@ -237,7 +280,7 @@ export function toAgreement(result: AssistResult): Agreement {
     contentSections.forEach((section, routeIndex) => {
       for (const row of byPosition(section.rows ?? [])) {
         for (const cell of row.cells ?? []) {
-          const receiving = receivingCourses(cell);
+          const { courses: receiving, kind: receivingKind } = receivingCourses(cell);
           if (receiving.length === 0) continue;
 
           const sending = cell.id
@@ -256,6 +299,7 @@ export function toAgreement(result: AssistResult): Agreement {
                 sending,
                 orGroup,
                 section: sectionIndex,
+                receivingKind,
                 ...(rule.kind === 'choose_route' ? { route: routeIndex } : {}),
               });
               emitted += 1;
@@ -267,6 +311,7 @@ export function toAgreement(result: AssistResult): Agreement {
             receiving,
             sending,
             section: sectionIndex,
+            receivingKind,
             ...(rule.kind === 'choose_route' ? { route: routeIndex } : {}),
           });
           emitted += 1;

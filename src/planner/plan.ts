@@ -5,6 +5,9 @@ import type { Course } from '../parser/types';
 
 export type RowStatus = {
   receiving: Course[];
+  // Carried through from the row so the UI can render a named requirement or
+  // a GE pattern as what it is rather than as a course with zero units.
+  receivingKind?: 'course' | 'requirement' | 'ge_pattern';
   orGroup?: number;
   // Index into Agreement.sections / Plan.sections, carried through from
   // ArticulationRow.section so the UI can group a flat statuses array back
@@ -48,7 +51,12 @@ export type SectionStatus = {
 export type Plan = {
   statuses: RowStatus[];
   remainingUnits: number;
-  terms: Course[][];
+  // The work still to do, kept as the option groups it came from rather than
+  // flattened into a course list. A group is a set of courses that together
+  // satisfy one requirement, so a scheduler that keeps them together packs
+  // terms that mean something; one that flattens them cannot tell a
+  // three-course requirement from three separate ones.
+  remainingGroups: AndGroup[];
   notArticulated: Course[];
   sections: SectionStatus[];
   // Page 1 advisory prose, carried through from Agreement.notes untouched.
@@ -79,6 +87,7 @@ const total = (courses: Course[]) => courses.reduce((sum, c) => sum + c.units, 0
 function baseStatus(row: ArticulationRow, done: Set<string>, consumed: Set<string>): RowStatus {
   const base = {
     receiving: row.receiving,
+    receivingKind: row.receivingKind,
     orGroup: row.orGroup,
     section: row.section,
     satisfiedBy: [] as Course[],
@@ -397,7 +406,7 @@ function resolveSections(
   return { sections, demoted };
 }
 
-export function buildPlan(agreement: Agreement, completed: string[], unitsPerTerm = 15): Plan {
+export function buildPlan(agreement: Agreement, completed: string[]): Plan {
   const done = new Set(completed.map((c) => c.toUpperCase()));
 
   // A row in `excluded` keeps whatever status `fixed` already gave it
@@ -430,25 +439,22 @@ export function buildPlan(agreement: Agreement, completed: string[], unitsPerTer
     resolved = resolveSections(agreement, statuses);
   }
 
-  const queue = statuses
+  // A requirement whose receiving side is a named area or a GE pattern rather
+  // than a course still has real sending courses behind it, so it schedules
+  // normally; it is only its receiving label that cannot be treated as a
+  // course.
+  const remainingGroups: AndGroup[] = statuses
     .filter((s) => s.state === 'remaining')
-    .flatMap((s) => s.cheapestOption.filter((c) => !done.has(c.code.toUpperCase())));
-
-  const terms: Course[][] = [];
-  let term: Course[] = [];
-  for (const course of queue) {
-    if (term.length > 0 && total(term) + course.units > unitsPerTerm) {
-      terms.push(term);
-      term = [];
-    }
-    term.push(course);
-  }
-  if (term.length > 0) terms.push(term);
+    .map((s) => ({
+      kind: 'and' as const,
+      courses: s.cheapestOption.filter((c) => !done.has(c.code.toUpperCase())),
+    }))
+    .filter((g) => g.courses.length > 0);
 
   return {
     statuses,
     remainingUnits: statuses.reduce((sum, s) => sum + s.remainingUnits, 0),
-    terms,
+    remainingGroups,
     notArticulated: statuses
       .filter((s) => s.state === 'not_articulated')
       .flatMap((s) => s.receiving),
