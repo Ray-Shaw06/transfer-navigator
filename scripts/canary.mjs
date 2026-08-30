@@ -90,20 +90,36 @@ async function main() {
     (agreement?.sections ?? []).map((s) => s.rule?.kind).join(','),
   );
 
-  // 5. Cal-GETC. The listType parameter takes the enum NAME; passing the
-  //    number silently returns the CSU transferable list instead, which is
-  //    wrong data that looks right, so the area codes are checked too.
+  // 5. The general education patterns. listType takes the enum NAME; passing
+  //    the number silently returns the CSU transferable list instead, which is
+  //    wrong data that looks right, so each pattern's area codes are checked
+  //    against a shape only that pattern has.
   const geYear = catalog.academicYears.find((y) => y.label.startsWith('2025'))?.id ?? year;
-  const { ge } = await getJson(`/api/assist/ge?college=${college.id}&year=${geYear}`);
-  const areaCodes = (ge?.areas ?? []).map((a) => a.code);
-  check('Cal-GETC: pattern named', ge?.pattern === 'Cal-GETC', ge?.pattern);
-  check('Cal-GETC: has areas', areaCodes.length >= 5, areaCodes.join(','));
-  check(
-    'Cal-GETC: areas look like a GE pattern, not a transferable course list',
-    areaCodes.some((c) => /^1[ABC]$/.test(c)) && areaCodes.includes('2'),
-    areaCodes.join(','),
-  );
-  check('Cal-GETC: courses carry areas', (ge?.byCourse ?? []).every((c) => c.areas?.length >= 1));
+
+  const patterns = [
+    { key: 'CALGETC', signature: (codes) => codes.includes('1A') && codes.includes('6') && !codes.includes('2A') },
+    { key: 'IGETC', signature: (codes) => codes.includes('2A') && codes.includes('6A') },
+    { key: 'CSUGE', signature: (codes) => codes.includes('A1') && codes.includes('F') },
+  ];
+
+  for (const pattern of patterns) {
+    const { ge } = await getJson(
+      `/api/assist/ge?college=${college.id}&year=${geYear}&pattern=${pattern.key}`,
+    );
+    const areaCodes = (ge?.areas ?? []).map((a) => a.code);
+    check(`${pattern.key}: returned`, ge?.pattern === pattern.key, ge?.pattern);
+    check(`${pattern.key}: has areas`, areaCodes.length >= 5, `${areaCodes.length} areas`);
+    check(
+      `${pattern.key}: areas are this pattern's, not another list`,
+      pattern.signature(areaCodes),
+      areaCodes.slice(0, 8).join(','),
+    );
+    check(`${pattern.key}: courses carry areas`, (ge?.byCourse ?? []).every((c) => c.areas?.length >= 1));
+  }
+
+  // An unknown pattern must be refused rather than silently served something.
+  const rejected = await fetch(`${BASE}/api/assist/ge?college=${college.id}&year=${geYear}&pattern=NOPE`);
+  check('unknown pattern is refused', rejected.status === 400, `${rejected.status}`);
 
   console.log(notes.join('\n'));
   if (failures.length > 0) {
