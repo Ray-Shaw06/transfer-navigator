@@ -3,7 +3,7 @@
 Pick your California community college, where you want to transfer, and your
 major. It reads the ASSIST articulation agreement and builds the route: which
 courses to take, in which term, and whether you make the term you are aiming
-for. Tell it what you have already finished and the plan updates around it.
+for. Tick what you have already finished and the plan updates around it.
 
 Not affiliated with ASSIST or any college. [assist.org](https://assist.org)
 is the official source; this is a reading of it.
@@ -57,6 +57,19 @@ Three things keep the site inside it:
    ceiling, so the site stops itself before ASSIST stops it.
 3. When it does run out, the UI says so plainly and points at the upload
    path, which does not touch ASSIST at all.
+
+## Saying what you have already taken
+
+You tick courses from a list the agreement itself provides, in your college's
+spelling. It used to be a text box matched by exact string equality, which
+meant `CS 3B` counted for nothing against a catalog that says `CS 003B`: the
+plan simply did not move, and the only symptom was that the tool looked
+broken. Nothing you can tick can be misspelled, so nothing you tell it can be
+quietly ignored.
+
+Only courses that can satisfy something on your agreement are listed, so the
+list stays short and every entry is relevant. The filter ignores spacing and
+zero padding, so `math5a` finds `MATH 005A`.
 
 ## Term planning
 
@@ -113,7 +126,7 @@ never implies it ran.
 |---|---|
 | `src/assist/` | ASSIST client, response types, and the mapper into `Agreement` |
 | `src/parser/` | The PDF parser, and the `Agreement` type both paths produce |
-| `src/planner/` | `buildPlan` (section rules, routes, unit totals) and `buildSchedule` (named terms) |
+| `src/planner/` | `buildPlan` (section rules, routes, unit totals), `buildSchedule` (named terms), `catalog` (the courses you can tick) |
 | `app/api/assist/` | Cached server routes; the only code that talks to ASSIST |
 | `app/` | The UI |
 | `docs/plans/` | The plans this was built from, including what was left out |

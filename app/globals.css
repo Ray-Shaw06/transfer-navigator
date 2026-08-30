@@ -778,3 +778,109 @@ details.more[open] > summary::before { content: '–'; }
 }
 
 .notes-body p:first-child { color: var(--ink); font-weight: 620; }
+
+/* ----------------------------------- course chooser
+
+   Ticking beats typing: a typed course code has to match the agreement's
+   spelling exactly or it silently counts for nothing, and the only symptom is
+   that the tool appears not to work. */
+
+.chooser { display: grid; gap: 0.75rem; }
+
+.chooser-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.chooser-head .field-label { margin-bottom: 0; }
+
+.chooser-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.linkish {
+  font: inherit;
+  font-size: 0.8125rem;
+  color: var(--signal-ink);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.linkish:hover { color: var(--signal-hover); text-decoration: underline; }
+
+.subjects {
+  display: grid;
+  gap: 0.625rem;
+  max-height: 21rem;
+  overflow-y: auto;
+  padding-right: 0.375rem;
+}
+
+.subject { display: grid; grid-template-columns: 5.5rem 1fr; gap: 0.75rem; align-items: start; }
+
+.subject-name {
+  font-size: 0.75rem;
+  font-weight: 620;
+  color: var(--ink-3);
+  letter-spacing: 0.02em;
+  padding-top: 0.4375rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chips { display: flex; flex-wrap: wrap; gap: 0.375rem; }
+
+/* A real checkbox, visually a chip. The input stays in the accessibility tree
+   and keeps keyboard and screen-reader behaviour; only its box is hidden. */
+.chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4375rem;
+  padding: 0.375rem 0.5625rem;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font-size: 0.8125rem;
+  cursor: pointer;
+  user-select: none;
+  transition: border-color var(--fast) var(--ease), background var(--fast) var(--ease);
+}
+
+.chip input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  margin: 0;
+  pointer-events: none;
+}
+
+.chip .code { font-weight: 620; color: var(--ink-2); }
+.chip u { text-decoration: none; color: var(--ink-3); font-size: 0.75rem; font-variant-numeric: tabular-nums; }
+
+.chip:hover { border-color: var(--line-strong); }
+
+.chip[data-on='true'] {
+  background: var(--row-todo);
+  border-color: var(--signal);
+}
+
+.chip[data-on='true'] .code { color: var(--ink); }
+
+.chip:has(input:focus-visible) { outline: 2px solid var(--signal); outline-offset: 2px; }
+
+@media (max-width: 34rem) {
+  .subject { grid-template-columns: 1fr; gap: 0.25rem; }
+  .subject-name { padding-top: 0; }
+}

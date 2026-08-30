@@ -6,7 +6,7 @@ import type { Agreement } from '../src/parser/agreement';
 import { buildPlan } from '../src/planner/plan';
 import { buildSchedule, currentTerm } from '../src/planner/schedule';
 import { Dropzone } from './components/Dropzone';
-import { CourseInput } from './components/CourseInput';
+import { CourseChooser } from './components/CourseChooser';
 import { Verdict } from './components/Verdict';
 import { RouteView } from './components/Route';
 import { Requirements } from './components/Requirements';
@@ -72,7 +72,11 @@ export default function Home() {
 
   const [agreement, setAgreement] = useState<Agreement | null>(null);
   const [loadingAgreement, setLoadingAgreement] = useState(false);
-  const [completed, setCompleted] = useState('');
+  // Course codes the student has ticked, uppercased. Kept across agreement
+  // changes on purpose: switching major at the same college does not change
+  // what they have already taken, and a code that is irrelevant to the new
+  // agreement simply matches nothing.
+  const [completed, setCompleted] = useState<Set<string>>(new Set());
   const [failure, setFailure] = useState<Failure | null>(null);
   const [uploadError, setUploadError] = useState('');
 
@@ -223,16 +227,7 @@ export default function Home() {
   }, []);
 
   const plan = useMemo(
-    () =>
-      agreement
-        ? buildPlan(
-            agreement,
-            completed
-              .split(',')
-              .map((s) => s.trim())
-              .filter(Boolean),
-          )
-        : null,
+    () => (agreement ? buildPlan(agreement, [...completed]) : null),
     [agreement, completed],
   );
 
@@ -333,7 +328,7 @@ export default function Home() {
                 {agreement.receivingInstitution} · {agreement.academicYear}
               </p>
             </div>
-            <CourseInput value={completed} onChange={setCompleted} />
+            <CourseChooser agreement={agreement} chosen={completed} onChange={setCompleted} />
           </section>
 
           <section className="panel" style={{ marginTop: '1rem' }}>
