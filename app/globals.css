@@ -201,3 +201,136 @@ h1 {
 .option-chosen {
   font-weight: 600;
 }
+
+/* The picker is the primary path: college, campus, year, major. It stays a
+   single column on a phone and goes two-up once there is room, because
+   these are four short fields and stacking all four wastes a wide screen. */
+.picker {
+  display: grid;
+  gap: 1rem;
+  margin: 1.5rem 0;
+}
+
+@media (min-width: 34rem) {
+  .picker {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.field label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+}
+
+.field select {
+  width: 100%;
+  padding: 0.55rem;
+  font-size: 1rem;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  background: #fff;
+  color: inherit;
+}
+
+.field select:disabled {
+  opacity: 0.6;
+}
+
+@media (prefers-color-scheme: dark) {
+  .field select {
+    border-color: #3a3b40;
+    background: #1f2023;
+  }
+}
+
+.field-note {
+  font-size: 0.9rem;
+  color: #555;
+  margin-bottom: 0;
+}
+
+@media (prefers-color-scheme: dark) {
+  .field-note {
+    color: #aaa;
+  }
+}
+
+.loading {
+  color: #555;
+}
+
+@media (prefers-color-scheme: dark) {
+  .loading {
+    color: #aaa;
+  }
+}
+
+/* A warning is not an error: the quota message is a "come back shortly",
+   not a failure, so it reads amber rather than red. */
+.warning {
+  color: #6b4a00;
+  background: #fff6e0;
+  border-color: #e8cf94;
+}
+
+@media (prefers-color-scheme: dark) {
+  .warning {
+    color: #f0cf87;
+    background: #33290f;
+    border-color: #5a4a1e;
+  }
+}
+
+.section-rule-advisory {
+  font-weight: 400;
+  font-size: 0.9rem;
+  border-left: 4px solid #ef6c00;
+  padding: 0.5rem 0.75rem;
+  background: #f2f2f2;
+  border-radius: 0 6px 6px 0;
+}
+
+@media (prefers-color-scheme: dark) {
+  .section-rule-advisory {
+    background: #1f2023;
+  }
+}
+
+.reason {
+  display: block;
+  font-size: 0.9rem;
+  margin-top: 0.25rem;
+}
+
+/* The upload path still works and still never sends the file anywhere, but
+   it is now the fallback, so it is collapsed by default. */
+.fallback {
+  margin-top: 2.5rem;
+  border-top: 1px solid #ddd;
+  padding-top: 1rem;
+}
+
+.fallback summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.site-footer {
+  margin-top: 2.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid #ddd;
+  font-size: 0.85rem;
+  color: #555;
+}
+
+@media (prefers-color-scheme: dark) {
+  .fallback,
+  .site-footer {
+    border-top-color: #333;
+  }
+
+  .site-footer {
+    color: #aaa;
+  }
+}

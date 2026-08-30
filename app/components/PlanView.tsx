@@ -67,6 +67,14 @@ function StatusRow({ status, sectionLabel }: { status: RowStatus; sectionLabel?:
       <li className="status-row status-not-articulated">
         <strong>{label}</strong>. Nothing at your college is articulated for this. You take it
         after you transfer.
+        {/* ASSIST distinguishes "no course articulated" from "this course
+            must be taken at the university after transfer", which are
+            different pieces of advice. Shown in its own words when it gave
+            one; an agreement read from a PDF prints only a single marker and
+            so carries none. */}
+        {status.notArticulatedReason && (
+          <span className="reason"> ASSIST says: {status.notArticulatedReason}.</span>
+        )}
       </li>
     );
   }
@@ -112,21 +120,54 @@ function StatusRow({ status, sectionLabel }: { status: RowStatus; sectionLabel?:
   );
 }
 
-// Plain-language statement of a section's rule. Only 'choose' sections get a
-// sentence: the whole point is telling a student "pick 1 of these 8" instead
-// of letting all 8 read as separate required items, which was the bug this
-// task exists to fix. An 'all' section with a real label (REQUIRED FOR
-// ADMISSION, for example) still gets a one-line reminder that everything
-// under it is required; the unlabelled synthetic section that never governs
-// a real requirement gets no line at all.
+// Plain-language statement of a section's rule. The whole point is telling a
+// student "pick 1 of these 8" instead of letting all 8 read as separate
+// required items, which was the bug this component exists to fix. An 'all'
+// section with a real label (REQUIRED FOR ADMISSION, for example) still gets
+// a one-line reminder that everything under it is required; the unlabelled
+// synthetic section that never governs a real requirement gets no line at
+// all. An 'advisory' section says outright that its rule was not applied,
+// because a student reading a list of required-looking items deserves to
+// know the tool did not understand the rule over them.
 function SectionRuleLine({ section, count }: { section: Plan['sections'][number]; count: number }) {
-  if (section.rule.kind === 'choose') {
+  const { rule } = section;
+
+  if (rule.kind === 'choose') {
     return (
       <p className="section-rule">
         Pick at least {section.needed} of these {count}. You have {section.satisfiedCount} so far.
       </p>
     );
   }
+
+  if (rule.kind === 'choose_units') {
+    return (
+      <p className="section-rule">
+        Take at least {rule.least} semester units from these {count}. You have{' '}
+        {section.satisfiedUnits} so far.
+      </p>
+    );
+  }
+
+  if (rule.kind === 'choose_route') {
+    return (
+      <p className="section-rule">
+        Complete any one of these {count} routes in full. The cheapest one by units is the one
+        shown as still needed; the others are marked as routes you did not take.
+      </p>
+    );
+  }
+
+  if (rule.kind === 'advisory') {
+    return (
+      <p className="section-rule section-rule-advisory" role="note">
+        {rule.text} This tool does not apply that rule, so everything below is counted as
+        required, which overstates the work rather than hiding a requirement. Read the rule and
+        decide for yourself which of these you need.
+      </p>
+    );
+  }
+
   if (section.label) {
     return <p className="section-rule">All {count} of these are required.</p>;
   }
@@ -165,12 +206,12 @@ export function PlanView({ plan }: { plan: Plan }) {
       </p>
 
       <p className="limits-note">
-        Two ways this plan can be wrong, both worth knowing. If a numbered section&apos;s pick-N
-        rule was not recognized while reading the PDF, this tool treats every item under it as
-        required, which can overstate the work. Separately, when a course you already completed
-        could count toward more than one requirement, this tool credits it to only the first
-        requirement it matches, walking the agreement in order, which can understate what you
-        have already finished. It never overstates what you have finished.
+        Two ways this plan can be wrong, both worth knowing. Where a section&apos;s rule was not
+        one this tool evaluates, it treats every item under that section as required and says so
+        on the section itself, which can overstate the work. Separately, when a course you
+        already completed could count toward more than one requirement, this tool credits it to
+        only the first requirement it matches, walking the agreement in order, which can
+        understate what you have already finished. It never overstates what you have finished.
       </p>
 
       {hasUnreadable && (
