@@ -25,7 +25,7 @@ export type GeneralEducation = {
   areas: GeArea[];
   // Every certified course, with the areas it clears. One course routinely
   // clears several, so this is the index the overlap check reads.
-  byCourse: { code: string; title: string; units: number; areas: string[] }[];
+  byCourse: { code: string; title: string; units: number; areas: string[]; department: string }[];
 };
 
 // Cal-GETC areas sort as 1A, 1B, 1C, 2, 3A, 3B, 4, 5A, 5B, 5C, 6: a number
@@ -80,7 +80,11 @@ export function toGeneralEducation(
     // A course with no area is in the response but certified for nothing, so
     // it is not part of the pattern and is left out rather than shown as an
     // option that counts.
-    if (codes.length > 0) byCourse.push({ ...course, areas: codes });
+    // The department rides along only for Area 4, whose rule asks for two
+    // academic disciplines. It is a weaker signal than "discipline", so it is
+    // used to flag a likely problem and never to certify the rule as met.
+    if (codes.length > 0)
+      byCourse.push({ ...course, areas: codes, department: (raw.departmentName ?? '').trim() });
   }
 
   return {

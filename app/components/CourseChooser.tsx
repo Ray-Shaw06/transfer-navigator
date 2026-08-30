@@ -1,24 +1,34 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { bySubject, normalizeCode, sendingCourses, subjectOf } from '../../src/planner/catalog';
-import type { Agreement } from '../../src/parser/agreement';
+import { bySubject, normalizeCode, subjectOf } from '../../src/planner/catalog';
+import type { Course } from '../../src/parser/types';
 
-// The courses a student has already taken, chosen from the agreement's own
-// list rather than typed. Nothing here can be misspelled, so the plan can
-// never quietly ignore something a student told it.
+// The courses a student has already taken, chosen from a supplied list rather
+// than typed. Nothing here can be misspelled, so the plan can never quietly
+// ignore something a student told it.
+//
+// The list is a parameter because two of them are needed: the courses this
+// agreement articulates, and the courses the college certifies for Cal-GETC.
+// They are the same interaction over different data.
 export function CourseChooser({
-  agreement,
+  courses,
   chosen,
   onChange,
+  label,
+  emptyNote,
+  footnote,
+  id = 'course-filter',
 }: {
-  agreement: Agreement;
+  courses: Course[];
   chosen: Set<string>;
   onChange: (next: Set<string>) => void;
+  label: string;
+  emptyNote: string;
+  footnote: string;
+  id?: string;
 }) {
   const [filter, setFilter] = useState('');
-
-  const courses = useMemo(() => sendingCourses(agreement), [agreement]);
 
   const matching = useMemo(() => {
     const needle = filter.trim().toLowerCase();
@@ -35,13 +45,7 @@ export function CourseChooser({
   const groups = useMemo(() => bySubject(matching), [matching]);
   const selected = courses.filter((c) => chosen.has(c.code.toUpperCase()));
 
-  if (courses.length === 0) {
-    return (
-      <p className="field-note">
-        This agreement articulates no courses at your college, so there is nothing here to tick.
-      </p>
-    );
-  }
+  if (courses.length === 0) return <p className="field-note">{emptyNote}</p>;
 
   const toggle = (code: string) => {
     const key = code.toUpperCase();
@@ -54,8 +58,8 @@ export function CourseChooser({
   return (
     <div className="chooser">
       <div className="chooser-head">
-        <label className="field-label" htmlFor="course-filter">
-          Tick anything you have already finished
+        <label className="field-label" htmlFor={id}>
+          {label}
         </label>
         <div className="chooser-meta">
           <span>
@@ -70,7 +74,7 @@ export function CourseChooser({
       </div>
 
       <input
-        id="course-filter"
+        id={id}
         type="text"
         value={filter}
         onChange={(e) => setFilter(e.target.value)}
@@ -80,8 +84,7 @@ export function CourseChooser({
 
       {matching.length === 0 ? (
         <p className="field-note">
-          Nothing on this agreement matches &ldquo;{filter}&rdquo;. Only courses that can satisfy
-          something here are listed.
+          Nothing here matches &ldquo;{filter}&rdquo;.
         </p>
       ) : (
         <div className="subjects">
@@ -113,10 +116,7 @@ export function CourseChooser({
         </div>
       )}
 
-      <p className="field-note">
-        Only courses that can satisfy something on this agreement are listed, in your college&apos;s
-        own spelling. Nothing you tick leaves this browser.
-      </p>
+      <p className="field-note">{footnote}</p>
     </div>
   );
 }

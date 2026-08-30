@@ -94,10 +94,29 @@ certifies it, and leads with the part students most often get wrong: which
 courses in your major-prep route **also** clear a Cal-GETC area, so you do not
 take a second course you never needed.
 
-What it will not tell you is how many courses or units each area requires.
-ASSIST publishes which of your college's courses clear which area; the counts
-are the Cal-GETC standard and are set outside ASSIST, so this tool says so and
-sends you to the official list and a counselor rather than guessing them.
+It tracks the whole pattern: 11 courses, 34 semester units, area by area. Tick
+what you have taken and it fills in.
+
+The per-area counts are not in ASSIST. They come from
+[ICAS Cal-GETC Standards 1.4](https://icas-ca.org/wp-content/uploads/2026/07/Cal-GETC_Standards_1v4_Final_r.pdf),
+section 2, transcribed in `src/planner/calgetc.ts` with its citation and
+covered by tests that assert the transcription, so a mistyped table fails the
+build rather than quietly changing what students are told to take.
+
+Two rules from that standard are applied rather than assumed:
+
+- **One course, one area.** Section 9: a course listed under two areas may be
+  applied to only one. Assigning each course to a single area, choosing the
+  assignment that satisfies the most requirements, is a matching problem;
+  crediting a course to every area it is listed under would overstate progress.
+- **The laboratory.** Area 5 asks that one of your two science courses carry a
+  one-unit lab. That is the exception the standard names, so it rides along
+  with an Area 5 course instead of consuming a slot, and you are told when
+  neither of yours has one.
+
+Area 4 asks for two academic disciplines. A department is not quite a
+discipline, so that one is flagged when both courses share a department rather
+than being enforced.
 
 Cal-GETC began in Fall 2025, so a catalog year before that has no pattern and
 the panel simply does not appear.

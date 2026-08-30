@@ -131,6 +131,7 @@ export type AssistTransferabilityCourse = {
   minUnits?: number;
   maxUnits?: number;
   courseIdentifierParentId?: number;
+  departmentName?: string;
   transferAreas?: AssistTransferArea[];
 };
 

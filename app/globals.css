@@ -1157,3 +1157,68 @@ details.more[open] > summary::before { content: '–'; }
 }
 
 .add-slot:hover { border-color: var(--signal); color: var(--ink); }
+
+/* ----------------------------------- Cal-GETC progress */
+
+.ge-progress { margin: 1.125rem 0 0; display: grid; gap: 0.5rem; }
+
+.ge-progress p { font-size: 0.875rem; color: var(--ink-2); }
+.ge-progress b { color: var(--ink); font-weight: 620; }
+
+.ge-bar {
+  height: 0.5rem;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.ge-bar span {
+  display: block;
+  height: 100%;
+  background: var(--signal);
+  border-radius: 999px;
+  transition: width var(--base) var(--ease);
+}
+
+.ge-list li { grid-template-columns: 2.5rem 1fr auto auto; }
+
+.ge-need {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.75rem;
+  font-weight: 620;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+  min-width: 2.25rem;
+  text-align: right;
+}
+
+.ge-list li[data-met='true'] .ge-need { color: var(--signal-ink); }
+.ge-list li[data-met='true'] .ge-name { font-weight: 620; }
+
+.ge-caveat { font-style: normal; color: var(--ink-3); font-size: 0.8125rem; }
+
+@media (max-width: 34rem) {
+  .ge-list li { grid-template-columns: 2.25rem 1fr auto; }
+  .ge-count { grid-column: 1 / -1; text-align: left; }
+}
+
+.ge-add { margin-top: 1.5rem; border-top: 1px solid var(--line); padding-top: 1rem; }
+
+.ge-add > summary {
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 620;
+  color: var(--ink-2);
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4375rem;
+  border-radius: var(--radius-sm);
+}
+
+.ge-add > summary::-webkit-details-marker { display: none; }
+.ge-add > summary::before { content: '+'; color: var(--ink-3); font-weight: 700; }
+.ge-add[open] > summary::before { content: '–'; }
+.ge-add > summary:hover { color: var(--ink); }
+.ge-add-body { margin-top: 0.875rem; }

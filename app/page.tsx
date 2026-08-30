@@ -8,6 +8,7 @@ import { buildSchedule, currentTerm } from '../src/planner/schedule';
 import { geStatus } from '../src/planner/ge';
 import { Dropzone } from './components/Dropzone';
 import { CourseChooser } from './components/CourseChooser';
+import { sendingCourses } from '../src/planner/catalog';
 import { Verdict } from './components/Verdict';
 import { RouteView } from './components/Route';
 import { Requirements } from './components/Requirements';
@@ -111,6 +112,15 @@ export default function Home() {
           })
         : null,
     [plan, settings],
+  );
+
+  // The Cal-GETC courses this college certifies, as a tickable list. Without
+  // it the pattern's counts would only ever move for courses that happen to
+  // double as major preparation, which is a small fraction of them.
+  const geCourses = useMemo(
+    () =>
+      (ge?.byCourse ?? []).map((c) => ({ code: c.code, title: c.title, units: c.units })),
+    [ge],
   );
 
   const geView = useMemo(() => {
@@ -220,7 +230,14 @@ export default function Home() {
                 {agreement.receivingInstitution} · {agreement.academicYear}
               </p>
             </div>
-            <CourseChooser agreement={agreement} chosen={completed} onChange={setCompleted} />
+            <CourseChooser
+              courses={sendingCourses(agreement)}
+              chosen={completed}
+              onChange={setCompleted}
+              label="Tick anything you have already finished"
+              emptyNote="This agreement articulates no courses at your college, so there is nothing here to tick."
+              footnote="Only courses that can satisfy something on this agreement are listed, in your college's own spelling. Nothing you tick leaves this browser."
+            />
           </section>
 
           <section className="panel" style={{ marginTop: '1rem' }}>
@@ -262,7 +279,12 @@ export default function Home() {
                   {geView.pattern} at {agreement.sendingInstitution} · {geView.academicYear}
                 </p>
               </div>
-              <GeneralEducation status={geView} />
+              <GeneralEducation
+                status={geView}
+                courses={geCourses}
+                chosen={completed}
+                onChange={setCompleted}
+              />
             </section>
           )}
 
