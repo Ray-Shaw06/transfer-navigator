@@ -3,7 +3,7 @@ import {
   buildSchedule,
   currentTerm,
   nextTerm,
-  sequenceStem,
+  sequenceKey,
   termIndex,
   termLabel,
 } from '../../src/planner/schedule';
@@ -46,12 +46,20 @@ describe('term arithmetic', () => {
   });
 });
 
-describe('sequenceStem', () => {
-  it('finds the stem only when a suffix distinguishes courses', () => {
-    expect(sequenceStem('MATH 005A')).toBe('MATH 005');
-    expect(sequenceStem('CS 003BL')).toBe('CS 003');
-    expect(sequenceStem('MATH 010')).toBeNull();
-    expect(sequenceStem('I&C SCI 6B')).toBe('I&C SCI 6');
+describe('sequenceKey', () => {
+  it('reads a sequence letter as a step', () => {
+    expect(sequenceKey('MATH 005A')).toEqual({ stem: 'MATH 005', step: 'A' });
+    expect(sequenceKey('I&C SCI 6B')).toEqual({ stem: 'I&C SCI 6', step: 'B' });
+  });
+
+  it('treats a lab as the same step as its lecture, not a later one', () => {
+    expect(sequenceKey('CS 003BL')).toEqual({ stem: 'CS 003', step: 'B' });
+    expect(sequenceKey('CS 003B')).toEqual({ stem: 'CS 003', step: 'B' });
+  });
+
+  it('treats an honours section as the same course', () => {
+    expect(sequenceKey('MATH 010H')).toBeNull();
+    expect(sequenceKey('MATH 010')).toBeNull();
   });
 });
 
@@ -87,9 +95,34 @@ describe('buildSchedule', () => {
     expect(schedule.terms[0].sequenced).toEqual(['MATH 005A']);
   });
 
+  it('keeps a lecture and its own lab in the same term', () => {
+    // The bug this exists to prevent: reading the L in CS 003BL as a later
+    // sequence step and telling a student to take the lab a term after the
+    // lecture it belongs to.
+    const schedule = buildSchedule(
+      [group(course('CS 003B', 3), course('CS 033', 3), course('CS 003BL', 1))],
+      base,
+    );
+
+    expect(schedule.terms).toHaveLength(1);
+    expect(schedule.terms[0].courses.map((c) => c.code)).toEqual(['CS 003B', 'CS 033', 'CS 003BL']);
+    expect(schedule.terms[0].sequenced).toEqual([]);
+  });
+
   it('does not flag a course whose stem it never had to split', () => {
     const schedule = buildSchedule([group(course('MATH 005A', 5), course('BIO 010', 4))], base);
     expect(schedule.terms[0].sequenced).toEqual([]);
+  });
+
+  it('separates real sequence steps even across different requirements', () => {
+    const schedule = buildSchedule(
+      [group(course('CS 003A', 3), course('CS 003AL', 1)), group(course('CS 003B', 3))],
+      base,
+    );
+
+    expect(schedule.terms).toHaveLength(2);
+    expect(schedule.terms[0].courses.map((c) => c.code)).toEqual(['CS 003A', 'CS 003AL']);
+    expect(schedule.terms[1].courses.map((c) => c.code)).toEqual(['CS 003B']);
   });
 
   it('gives summer a smaller load than a full term', () => {

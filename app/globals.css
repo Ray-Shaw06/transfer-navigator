@@ -1,336 +1,780 @@
+/* ---------------------------------------------------------------------------
+   Transfer Navigator design tokens.
+
+   The scene this is built for: a community college student at eleven at night,
+   deciding whether to register for a course tomorrow. Anxious, often on a
+   phone. What they read here changes what they do. So the interface is a tool
+   in a task, not a landing page, and every choice serves reading a dense
+   requirement list without losing the thread.
+
+   COLOUR STRATEGY: committed, not restrained. The surface IS the colour.
+
+   A drenched deep navy, because the material is a state articulation
+   agreement and the register is institutional rather than startup. Ink is a
+   warm bone, the colour of the document this describes. Exactly one signal
+   colour, vermilion, and it means one thing: work you still owe.
+
+   The two colours that are deliberately absent are green and violet. Green
+   for "done" is the reflex, and it is also wrong here: finished requirements
+   should recede, not compete with the work still ahead. Done is quiet. Violet
+   has no job at all. Two chromatic hues, navy and vermilion, plus a gold that
+   appears only where this tool is telling you it could not read something.
+--------------------------------------------------------------------------- */
+
 :root {
-  color-scheme: light dark;
+  color-scheme: dark;
+
+  /* Ground. Saturated enough to read as navy, not as gray with a hint. */
+  --bg: oklch(0.175 0.055 262);
+  --bg-deep: oklch(0.135 0.050 262);
+  --surface: oklch(0.225 0.052 262);
+  --surface-2: oklch(0.268 0.050 262);
+  --line: oklch(0.33 0.045 262);
+  --line-strong: oklch(0.46 0.048 262);
+
+  /* Ink, warmed toward paper. --ink-2 is the floor for anything that must
+     actually be read. */
+  --ink: oklch(0.97 0.011 82);
+  --ink-2: oklch(0.83 0.016 82);
+  --ink-3: oklch(0.69 0.018 82);
+
+  /* The one signal. Primary action, current selection, and the courses still
+     to take. Nothing decorative is allowed to use it. */
+  --signal: oklch(0.64 0.195 38);
+  --signal-hover: oklch(0.70 0.190 38);
+  --signal-ink: oklch(0.78 0.155 38);
+  --signal-soft: oklch(0.31 0.095 38);
+  --on-signal: oklch(0.99 0.010 38);
+
+  /* Used only where this tool is admitting it could not read a rule. */
+  --caution: oklch(0.84 0.135 85);
+  --caution-soft: oklch(0.30 0.070 85);
+
+  /* The ground for a requirement still owed. On the dark navy this is simply
+     a lifted navy: a red wash at this lightness turns maroon and reads as
+     something being wrong rather than as work to do. The vermilion border and
+     the arrow token carry the signal. On paper a pale warm tint does the same
+     job without going muddy. */
+  --row-todo: oklch(0.255 0.058 262);
+
+  --radius: 10px;
+  --radius-lg: 14px;
+  --radius-sm: 7px;
+
+  --shadow: 0 1px 2px oklch(0.10 0.04 262 / 0.5), 0 10px 30px oklch(0.08 0.04 262 / 0.35);
+
+  /* Users are in a task. Fast, exponential ease-out, nothing springy. */
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --fast: 140ms;
+  --base: 200ms;
+
+  /* Semantic stacking order. Never an arbitrary 9999. */
+  --z-sticky: 20;
+  --z-toast: 50;
 }
 
-* {
-  box-sizing: border-box;
+/* Light applies when the system asks for it and the reader has not explicitly
+   chosen dark, or when they have explicitly chosen light. Declared twice
+   because CSS has no way to share one block between two selectors. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme='dark']) {
+    color-scheme: light;
+
+    /* Paper, tinted toward the navy it belongs to. Deliberately not a warm
+       cream: that is the saturated default, and this palette is not warm. */
+    --bg: oklch(0.972 0.006 262);
+    --bg-deep: oklch(0.935 0.010 262);
+    --surface: oklch(1 0 0);
+    --surface-2: oklch(0.968 0.008 262);
+    --line: oklch(0.895 0.012 262);
+    --line-strong: oklch(0.76 0.020 262);
+
+    --ink: oklch(0.24 0.045 262);
+    --ink-2: oklch(0.43 0.035 262);
+    --ink-3: oklch(0.545 0.030 262);
+
+    --signal: oklch(0.53 0.195 38);
+    --signal-hover: oklch(0.46 0.195 38);
+    --signal-ink: oklch(0.48 0.190 38);
+    --signal-soft: oklch(0.972 0.020 38);
+    --on-signal: oklch(0.99 0.010 38);
+
+    --caution: oklch(0.48 0.115 85);
+    --caution-soft: oklch(0.955 0.045 85);
+    --row-todo: oklch(0.976 0.016 38);
+
+    --shadow: 0 1px 2px oklch(0.3 0.04 262 / 0.07), 0 10px 30px oklch(0.3 0.04 262 / 0.08);
+  }
 }
+
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg: oklch(0.972 0.006 262);
+  --bg-deep: oklch(0.935 0.010 262);
+  --surface: oklch(1 0 0);
+  --surface-2: oklch(0.968 0.008 262);
+  --line: oklch(0.895 0.012 262);
+  --line-strong: oklch(0.76 0.020 262);
+  --ink: oklch(0.24 0.045 262);
+  --ink-2: oklch(0.43 0.035 262);
+  --ink-3: oklch(0.545 0.030 262);
+  --signal: oklch(0.53 0.195 38);
+  --signal-hover: oklch(0.46 0.195 38);
+  --signal-ink: oklch(0.48 0.190 38);
+  --signal-soft: oklch(0.972 0.020 38);
+  --on-signal: oklch(0.99 0.010 38);
+  --caution: oklch(0.48 0.115 85);
+  --caution-soft: oklch(0.955 0.045 85);
+  --row-todo: oklch(0.976 0.016 38);
+  --shadow: 0 1px 2px oklch(0.3 0.04 262 / 0.07), 0 10px 30px oklch(0.3 0.04 262 / 0.08);
+}
+
+:root[data-theme='dark'] { color-scheme: dark; }
+
+* { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
 
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  color: #1a1a1a;
-  background: #fafafa;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
 }
 
-@media (prefers-color-scheme: dark) {
-  body {
-    color: #e8e8e8;
-    background: #16171a;
-  }
-}
-
-main {
-  max-width: 46rem;
-  margin: 0 auto;
-  padding: 2rem 1.25rem 4rem;
-}
-
-h1 {
-  margin-bottom: 0.25rem;
-}
-
-.tagline {
-  color: #555;
-  margin-top: 0;
-}
-
-@media (prefers-color-scheme: dark) {
-  .tagline {
-    color: #aaa;
-  }
-}
-
-.dropzone,
-.course-input {
-  margin: 1.25rem 0;
-  padding: 1rem;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-}
-
-@media (prefers-color-scheme: dark) {
-  .dropzone,
-  .course-input {
-    border-color: #333;
-  }
-}
-
-.dropzone label,
-.course-input label {
-  display: block;
-  font-weight: 600;
-  margin-bottom: 0.5rem;
-}
-
-.course-input input {
-  width: 100%;
-  padding: 0.5rem;
-  font-size: 1rem;
-}
-
-.privacy-note {
-  font-size: 0.9rem;
-  color: #555;
-  margin-bottom: 0;
-}
-
-@media (prefers-color-scheme: dark) {
-  .privacy-note {
-    color: #aaa;
-  }
-}
-
-.error,
-.warning {
-  color: #8a1f11;
-  background: #fdecea;
-  border: 1px solid #f5c2c0;
-  padding: 0.75rem;
-  border-radius: 6px;
-}
-
-@media (prefers-color-scheme: dark) {
-  .error,
-  .warning {
-    color: #ffb4ab;
-    background: #3a1a17;
-    border-color: #5c2b26;
-  }
-}
-
-.agreement-header {
-  font-weight: 600;
-}
-
-.unit-note {
-  color: #444;
-}
-
-@media (prefers-color-scheme: dark) {
-  .unit-note {
-    color: #bbb;
-  }
-}
-
-.status-list {
-  list-style: none;
-  padding: 0;
-}
-
-.status-row {
-  padding: 0.6rem 0.75rem;
-  margin-bottom: 0.5rem;
-  border-radius: 6px;
-  border-left: 4px solid #999;
-  background: #f2f2f2;
-}
-
-@media (prefers-color-scheme: dark) {
-  .status-row {
-    background: #1f2023;
-  }
-}
-
-.status-satisfied {
-  border-left-color: #2e7d32;
-}
-
-.status-remaining {
-  border-left-color: #1565c0;
-}
-
-.status-not-articulated {
-  border-left-color: #c62828;
-}
-
-.status-alternative {
-  border-left-color: #9e9e9e;
-  opacity: 0.8;
-}
-
-.status-unreadable {
-  border-left-color: #ef6c00;
-}
-
-.status-optional {
-  border-left-color: #6a1b9a;
-  opacity: 0.8;
-}
-
-.limits-note {
-  font-size: 0.9rem;
-  color: #444;
-  background: #f2f2f2;
-  border-radius: 6px;
-  padding: 0.75rem;
-}
-
-@media (prefers-color-scheme: dark) {
-  .limits-note {
-    color: #bbb;
-    background: #1f2023;
-  }
-}
-
-.section-group {
-  margin-bottom: 1.25rem;
-}
-
-.section-group h4 {
-  margin-bottom: 0.25rem;
-}
-
-.section-rule {
-  font-weight: 600;
-  margin-top: 0;
-}
-
-.option-list-intro {
-  margin: 0.5rem 0 0.25rem;
-  font-size: 0.9rem;
-}
-
-.option-list {
+/* A fixed rem scale. This is product UI read at a consistent DPI; a heading
+   that shrinks with the viewport looks worse, not better. */
+h1, h2, h3, h4 {
   margin: 0;
-  padding-left: 1.25rem;
-  font-size: 0.9rem;
-}
-
-.option-chosen {
   font-weight: 600;
+  letter-spacing: -0.018em;
+  text-wrap: balance;
 }
 
-/* The picker is the primary path: college, campus, year, major. It stays a
-   single column on a phone and goes two-up once there is room, because
-   these are four short fields and stacking all four wastes a wide screen. */
-.picker {
+h1 { font-size: 1.375rem; letter-spacing: -0.026em; }
+h2 { font-size: 1.25rem; }
+h3 { font-size: 1.0625rem; }
+h4 { font-size: 0.9375rem; }
+
+p { margin: 0; text-wrap: pretty; }
+
+a { color: var(--signal-ink); text-underline-offset: 2px; }
+a:hover { color: var(--signal-hover); }
+
+/* Course codes are identifiers a student scans against a registration screen
+   and reads aloud to a counsellor. Mono is functional here, not decorative. */
+.code {
+  font-family: var(--font-mono), ui-monospace, SFMono-Regular, monospace;
+  font-size: 0.9em;
+  letter-spacing: -0.015em;
+}
+
+/* ----------------------------------- shell */
+
+.shell { max-width: 62rem; margin: 0 auto; padding: 0 1.25rem 5rem; }
+
+.masthead {
   display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: start;
+  gap: 0.5rem 1rem;
+  padding: 1.75rem 0 1.125rem;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 1.75rem;
+}
+
+.masthead p { grid-column: 1 / -1; }
+
+.masthead h1 { display: flex; align-items: center; gap: 0.5625rem; }
+
+.mark { width: 1.25rem; height: 1.25rem; flex: none; color: var(--signal); }
+
+.masthead p { color: var(--ink-2); font-size: 0.875rem; max-width: 46ch; }
+
+/* ----------------------------------- panel */
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem;
+}
+
+.panel + .panel { margin-top: 1rem; }
+
+.panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
   gap: 1rem;
-  margin: 1.5rem 0;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
 }
 
-@media (min-width: 34rem) {
-  .picker {
-    grid-template-columns: 1fr 1fr;
-  }
+.panel-head h2 { font-size: 1rem; }
+.panel-head p { color: var(--ink-3); font-size: 0.8125rem; }
+
+/* ----------------------------------- form controls */
+
+.grid {
+  display: grid;
+  gap: 0.875rem;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
 }
 
-.field label {
+.grid-tight { grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); }
+
+.field { min-width: 0; }
+
+.field > label,
+.field-label {
   display: block;
-  font-weight: 600;
-  margin-bottom: 0.35rem;
+  font-size: 0.8125rem;
+  font-weight: 550;
+  color: var(--ink-2);
+  margin-bottom: 0.375rem;
 }
 
-.field select {
+select,
+input[type='text'],
+input[type='number'] {
   width: 100%;
-  padding: 0.55rem;
-  font-size: 1rem;
-  border-radius: 6px;
-  border: 1px solid #ccc;
-  background: #fff;
-  color: inherit;
+  padding: 0.5625rem 0.6875rem;
+  font: inherit;
+  font-size: 0.9375rem;
+  color: var(--ink);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  transition: border-color var(--fast) var(--ease);
 }
 
-.field select:disabled {
-  opacity: 0.6;
-}
-
-@media (prefers-color-scheme: dark) {
-  .field select {
-    border-color: #3a3b40;
-    background: #1f2023;
-  }
-}
-
-.field-note {
-  font-size: 0.9rem;
-  color: #555;
-  margin-bottom: 0;
-}
-
-@media (prefers-color-scheme: dark) {
-  .field-note {
-    color: #aaa;
-  }
-}
-
-.loading {
-  color: #555;
-}
-
-@media (prefers-color-scheme: dark) {
-  .loading {
-    color: #aaa;
-  }
-}
-
-/* A warning is not an error: the quota message is a "come back shortly",
-   not a failure, so it reads amber rather than red. */
-.warning {
-  color: #6b4a00;
-  background: #fff6e0;
-  border-color: #e8cf94;
-}
-
-@media (prefers-color-scheme: dark) {
-  .warning {
-    color: #f0cf87;
-    background: #33290f;
-    border-color: #5a4a1e;
-  }
-}
-
-.section-rule-advisory {
-  font-weight: 400;
-  font-size: 0.9rem;
-  border-left: 4px solid #ef6c00;
-  padding: 0.5rem 0.75rem;
-  background: #f2f2f2;
-  border-radius: 0 6px 6px 0;
-}
-
-@media (prefers-color-scheme: dark) {
-  .section-rule-advisory {
-    background: #1f2023;
-  }
-}
-
-.reason {
-  display: block;
-  font-size: 0.9rem;
-  margin-top: 0.25rem;
-}
-
-/* The upload path still works and still never sends the file anywhere, but
-   it is now the fallback, so it is collapsed by default. */
-.fallback {
-  margin-top: 2.5rem;
-  border-top: 1px solid #ddd;
-  padding-top: 1rem;
-}
-
-.fallback summary {
+select {
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: right 1rem center, right 0.6875rem center;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  padding-right: 2rem;
   cursor: pointer;
-  font-weight: 600;
 }
+
+select:hover:not(:disabled),
+input:hover:not(:disabled) { border-color: var(--line-strong); }
+
+select:focus-visible,
+input:focus-visible,
+button:focus-visible,
+summary:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 2px;
+  border-color: var(--signal);
+}
+
+select:disabled,
+input:disabled { opacity: 0.55; cursor: not-allowed; }
+
+input::placeholder { color: var(--ink-3); }
+
+.field-note { margin-top: 0.4375rem; font-size: 0.8125rem; color: var(--ink-2); }
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: var(--ink-2);
+  cursor: pointer;
+  user-select: none;
+  padding-top: 1.375rem;
+}
+
+.check input { width: 1rem; height: 1rem; accent-color: var(--signal); cursor: pointer; }
+
+/* ----------------------------------- verdict
+
+   One sentence, and the number that matters inside it. Not a metric tile:
+   a student needs a judgement, not a dashboard. */
+
+/* This out-ranks every panel on the page on purpose: it is the answer, and
+   the panels around it are the inputs and the evidence. Deeper ground, a
+   heavier rule above it, and the only type on the page at this size. */
+.verdict {
+  margin: 1.75rem 0;
+  padding: 1.5rem 1.625rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--line-strong);
+  border-top: 3px solid var(--signal);
+  background: var(--bg-deep);
+  box-shadow: var(--shadow);
+  display: grid;
+  gap: 0.625rem;
+}
+
+.verdict-line {
+  font-size: 1.625rem;
+  font-weight: 620;
+  letter-spacing: -0.026em;
+  line-height: 1.22;
+  text-wrap: balance;
+}
+
+.verdict-sub { color: var(--ink-2); font-size: 0.9375rem; max-width: 68ch; }
+
+/* Finished reads as settled: the ground itself, no colour shouting. */
+.verdict[data-tone='ready'] { border-top-color: var(--ink-3); }
+.verdict[data-tone='ready'] .verdict-line { color: var(--ink); }
+
+/* Nothing articulated is the one thing that must never be mistaken for done. */
+.verdict[data-tone='blocked'] {
+  border-color: var(--signal);
+  border-top-width: 3px;
+  background: var(--signal-soft);
+}
+.verdict[data-tone='blocked'] .verdict-line { color: var(--signal-ink); }
+.verdict[data-tone='blocked'] .verdict-sub { color: var(--ink); }
+
+.verdict[data-tone='late'] {
+  border-color: var(--caution);
+  border-top-color: var(--caution);
+  background: var(--caution-soft);
+}
+.verdict[data-tone='late'] .verdict-line { color: var(--caution); }
+.verdict[data-tone='late'] .verdict-sub { color: var(--ink); }
+
+.verdict-figures {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.75rem;
+  padding-top: 0.6875rem;
+  border-top: 1px solid var(--line);
+  margin-top: 0.125rem;
+}
+
+.figure { display: flex; align-items: baseline; gap: 0.4375rem; font-size: 0.875rem; color: var(--ink-2); }
+
+.figure b {
+  font-size: 1.0625rem;
+  font-weight: 640;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ----------------------------------- the route
+
+   The one committed visual idea. A student is travelling from the term they
+   are in now to the term they transfer in, so the plan is drawn as a route:
+   a rail, a station per term, a terminus. It earns the metaphor because the
+   content genuinely is a sequence, and it gives the page a structure nothing
+   else has to compete with. */
+
+.route { display: grid; margin-top: 0.25rem; }
+
+.term {
+  display: grid;
+  grid-template-columns: 4.25rem 1fr;
+  gap: 1rem;
+  position: relative;
+  padding-bottom: 1.375rem;
+}
+
+.term::before {
+  content: '';
+  position: absolute;
+  left: calc(4.25rem + 0.5rem - 1.5px);
+  top: 1.5rem;
+  bottom: 0;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--signal);
+  opacity: 0.5;
+}
+
+.term:last-of-type { padding-bottom: 0.75rem; }
+
+.term-when { text-align: right; padding-top: 0.125rem; }
+
+.term-season { font-size: 0.9375rem; font-weight: 620; letter-spacing: -0.012em; }
+
+.term-year { font-size: 0.8125rem; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+
+.term-body { position: relative; padding-left: 1.0625rem; min-width: 0; }
+
+/* The station. Filled, on the rail, ringed in the ground colour so the rail
+   reads as passing behind it. */
+.term-body::before {
+  content: '';
+  position: absolute;
+  left: -0.5625rem;
+  top: 0.375rem;
+  width: 0.6875rem;
+  height: 0.6875rem;
+  border-radius: 50%;
+  background: var(--signal);
+  box-shadow: 0 0 0 3.5px var(--bg);
+}
+
+.term[data-over='true'] .term-body::before { background: var(--caution); }
+.term[data-over='true']::before { background: var(--caution); }
+
+.term-load {
+  font-size: 0.8125rem;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+  margin-bottom: 0.5rem;
+}
+
+.term-courses { display: flex; flex-wrap: wrap; gap: 0.375rem; }
+
+.course-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4375rem;
+  padding: 0.3125rem 0.5625rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font-size: 0.8125rem;
+  max-width: 100%;
+}
+
+.course-chip .code { font-weight: 640; color: var(--ink); flex: none; }
+.course-chip span { color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.course-chip u { color: var(--ink-3); text-decoration: none; font-variant-numeric: tabular-nums; flex: none; }
+
+.term-note { margin-top: 0.5rem; font-size: 0.8125rem; color: var(--ink-3); }
+
+.terminus { display: grid; grid-template-columns: 4.25rem 1fr; gap: 1rem; }
+
+.terminus-body {
+  padding-left: 1.0625rem;
+  position: relative;
+  font-weight: 620;
+  color: var(--ink);
+}
+
+/* A bar across the rail: the end of the line, not another station. */
+.terminus-body::before {
+  content: '';
+  position: absolute;
+  left: -0.75rem;
+  top: 0.5rem;
+  width: 1.0625rem;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--ink);
+}
+
+.terminus small { display: block; font-weight: 400; color: var(--ink-3); font-size: 0.8125rem; }
+
+/* ----------------------------------- requirements */
+
+.section-block { margin-top: 1.625rem; }
+.section-block:first-child { margin-top: 0; }
+
+.section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 0.75rem;
+}
+
+.section-rule { font-size: 0.8125rem; color: var(--ink-2); margin-top: 0.25rem; flex-basis: 100%; }
+
+.section-rule[data-advisory='true'] {
+  color: var(--ink);
+  background: var(--caution-soft);
+  border: 1px solid var(--caution);
+  border-radius: var(--radius-sm);
+  padding: 0.5625rem 0.6875rem;
+  margin-top: 0.5rem;
+}
+
+.tally { font-size: 0.8125rem; color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tally[data-met='true'] { color: var(--ink-3); }
+
+.rows { display: grid; gap: 0.5rem; }
+
+.row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.75rem;
+  padding: 0.75rem 0.875rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  transition: border-color var(--fast) var(--ease);
+}
+
+.row:hover { border-color: var(--line-strong); }
+
+/* Work still owed is the only row that carries the signal colour. */
+.row[data-state='remaining'] { border-color: var(--signal); background: var(--row-todo); }
+
+/* Finished work recedes. It is behind you; it should not compete. */
+.row[data-state='satisfied'] { background: transparent; border-color: var(--line); }
+.row[data-state='satisfied'] .row-title { color: var(--ink-2); }
+.row[data-state='satisfied'] .row-title { font-weight: 550; }
+
+/* Not something to do: quieter still, but never hidden. */
+.row[data-state='alternative'],
+.row[data-state='optional'] { background: transparent; border-style: dashed; }
+.row[data-state='alternative'] .row-title,
+.row[data-state='optional'] .row-title { color: var(--ink-2); font-weight: 550; }
+
+.row[data-state='unreadable'] { border-color: var(--caution); background: var(--caution-soft); }
+
+/* A token per row, so scanning the list reads as a column of states before a
+   single word is read. Shape carries meaning as well as colour, which is what
+   keeps it legible to a colourblind reader. */
+.token {
+  width: 1.375rem;
+  height: 1.375rem;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  margin-top: 0.0625rem;
+  flex: none;
+  border: 1.5px solid currentColor;
+  color: var(--ink-3);
+}
+
+.token svg { width: 0.875rem; height: 0.875rem; }
+
+.row[data-state='satisfied'] .token { color: var(--ink-2); }
+.row[data-state='remaining'] .token { color: var(--signal-ink); border-width: 2px; }
+.row[data-state='not_articulated'] .token { color: var(--ink-2); border-style: dashed; }
+.row[data-state='unreadable'] .token { color: var(--caution); }
+
+.row-main { min-width: 0; }
+
+.row-title { font-weight: 620; color: var(--ink); margin-bottom: 0.1875rem; letter-spacing: -0.008em; }
+
+.row-title .kindnote { font-weight: 400; color: var(--ink-3); font-size: 0.8125rem; }
+
+.row-detail { font-size: 0.875rem; color: var(--ink-2); }
+
+.row-reason { display: block; margin-top: 0.1875rem; font-size: 0.8125rem; color: var(--ink-3); }
+
+.options { margin: 0.5rem 0 0; padding: 0; list-style: none; display: grid; gap: 0.25rem; font-size: 0.8125rem; color: var(--ink-2); }
+
+.options li { padding-left: 0.875rem; position: relative; }
+
+.options li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.6875rem;
+  width: 0.375rem;
+  height: 1px;
+  background: var(--line-strong);
+}
+
+.options li[data-chosen='true'] { color: var(--ink); font-weight: 550; }
+.options li[data-chosen='true']::before { background: var(--signal); height: 2px; }
+
+details.more { margin-top: 0.5rem; }
+
+details.more > summary {
+  cursor: pointer;
+  font-size: 0.8125rem;
+  color: var(--ink-3);
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3125rem;
+  border-radius: var(--radius-sm);
+}
+
+details.more > summary::-webkit-details-marker { display: none; }
+details.more > summary:hover { color: var(--signal-ink); }
+details.more > summary::before { content: '+'; font-weight: 700; }
+details.more[open] > summary::before { content: '–'; }
+
+/* ----------------------------------- notices */
+
+.notice {
+  padding: 0.8125rem 0.9375rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  font-size: 0.875rem;
+  color: var(--ink-2);
+  display: grid;
+  gap: 0.375rem;
+}
+
+.notice strong { color: var(--ink); font-weight: 620; }
+.notice[data-tone='error'] { border-color: var(--signal); background: var(--signal-soft); color: var(--ink); }
+.notice[data-tone='caution'] { border-color: var(--caution); background: var(--caution-soft); color: var(--ink); }
+
+.scope {
+  margin-top: 1.5rem;
+  font-size: 0.8125rem;
+  color: var(--ink-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.875rem 0.9375rem;
+  display: grid;
+  gap: 0.4375rem;
+}
+
+.scope b { color: var(--ink); font-weight: 620; }
+
+/* ----------------------------------- skeleton
+
+   The shape of what is coming, not a spinner in the middle of the content it
+   is replacing. */
+
+.skeleton { display: grid; gap: 0.5rem; }
+
+.bar {
+  height: 0.75rem;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--surface) 25%, var(--surface-2) 50%, var(--surface) 75%);
+  background-size: 200% 100%;
+  animation: sweep 1.4s linear infinite;
+}
+
+@keyframes sweep { to { background-position: -200% 0; } }
+
+/* ----------------------------------- fallback and footer */
+
+.fallback { margin-top: 2.5rem; border-top: 1px solid var(--line); padding-top: 1.25rem; }
+
+.fallback > summary {
+  cursor: pointer;
+  font-weight: 620;
+  font-size: 0.9375rem;
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: var(--radius-sm);
+}
+
+.fallback > summary::-webkit-details-marker { display: none; }
+.fallback > summary::before { content: '+'; color: var(--ink-3); font-weight: 700; }
+.fallback[open] > summary::before { content: '–'; }
+
+.fallback-body { margin-top: 0.875rem; display: grid; gap: 0.75rem; }
+
+.dropzone {
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius);
+  padding: 1rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.dropzone input[type='file'] { font: inherit; font-size: 0.875rem; color: var(--ink-2); }
+
+.dropzone input[type='file']::file-selector-button {
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 550;
+  margin-right: 0.75rem;
+  padding: 0.4375rem 0.75rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line-strong);
+  background: var(--surface-2);
+  color: var(--ink);
+  cursor: pointer;
+  transition: border-color var(--fast) var(--ease);
+}
+
+.dropzone input[type='file']::file-selector-button:hover { border-color: var(--signal); }
 
 .site-footer {
   margin-top: 2.5rem;
-  padding-top: 1rem;
-  border-top: 1px solid #ddd;
-  font-size: 0.85rem;
-  color: #555;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--line);
+  font-size: 0.8125rem;
+  color: var(--ink-3);
+  max-width: 72ch;
 }
 
-@media (prefers-color-scheme: dark) {
-  .fallback,
-  .site-footer {
-    border-top-color: #333;
-  }
+/* ----------------------------------- motion
 
-  .site-footer {
-    color: #aaa;
-  }
+   One moment: the route resolving, stop by stop. It offsets content that is
+   already visible by default, so a paused tab or a headless render still
+   shows the whole plan. */
+
+@keyframes settle {
+  from { opacity: 0; transform: translateY(7px); }
+  to { opacity: 1; transform: none; }
 }
+
+.route .term,
+.route .terminus {
+  animation: settle var(--base) var(--ease) both;
+  animation-delay: calc(var(--i, 0) * 45ms);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .bar { background: var(--surface-2); }
+}
+
+@media (max-width: 34rem) {
+  .term, .terminus { grid-template-columns: 3.25rem 1fr; gap: 0.75rem; }
+  .term::before { left: calc(3.25rem + 0.375rem - 1.5px); }
+  .verdict-line { font-size: 1.25rem; }
+  .verdict { padding: 1.125rem 1.125rem; }
+}
+
+/* ----------------------------------- theme toggle
+
+   Not decoration: this gets read in a library at night and outside between
+   classes, and the system setting is often wrong for one of them. */
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.625rem;
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 550;
+  color: var(--ink-2);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: border-color var(--fast) var(--ease), color var(--fast) var(--ease);
+}
+
+.theme-toggle:hover { color: var(--ink); border-color: var(--line-strong); }
+.theme-toggle svg { width: 0.875rem; height: 0.875rem; }
+
+/* ----------------------------------- campus notes
+
+   A campus can write several screens of prose here. It matters, so it is
+   never dropped, but it is not what a student opened this page for, so it
+   does not sit between them and their plan. */
+
+.notes-body {
+  margin-top: 0.75rem;
+  display: grid;
+  gap: 0.6875rem;
+  font-size: 0.875rem;
+  color: var(--ink-2);
+  max-width: 74ch;
+  max-height: 26rem;
+  overflow-y: auto;
+  padding-right: 0.5rem;
+}
+
+.notes-body p:first-child { color: var(--ink); font-weight: 620; }

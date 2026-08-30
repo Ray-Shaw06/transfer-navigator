@@ -5,13 +5,15 @@ type DropzoneProps = {
   error: string;
 };
 
-// Presentational only. The file object is handed to the caller, which reads
-// it with FileReader/arrayBuffer and parses it in the same browser tab. This
-// component never sends the file anywhere.
+// Presentational only. The file object is handed to the caller, which reads it
+// with arrayBuffer and parses it in the same browser tab. This component never
+// sends the file anywhere.
 export function Dropzone({ onFile, error }: DropzoneProps) {
   return (
     <div className="dropzone">
-      <label htmlFor="agreement-file">Upload your ASSIST articulation agreement PDF</label>
+      <label className="field-label" htmlFor="agreement-file">
+        Agreement PDF from assist.org
+      </label>
       <input
         id="agreement-file"
         type="file"
@@ -21,11 +23,8 @@ export function Dropzone({ onFile, error }: DropzoneProps) {
           if (file) onFile(file);
         }}
       />
-      <p className="privacy-note">
-        Your agreement is read in this browser tab. It is never uploaded and never stored.
-      </p>
       {error && (
-        <p role="alert" className="error">
+        <p role="alert" className="notice" data-tone="error">
           {error}
         </p>
       )}

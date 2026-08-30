@@ -1,15 +1,22 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { parseAgreement, UnrecognisedAgreementError, type Agreement } from '../src/parser/document';
-import { buildPlan, type Plan } from '../src/planner/plan';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { parseAgreement, UnrecognisedAgreementError } from '../src/parser/document';
+import type { Agreement } from '../src/parser/agreement';
+import { buildPlan } from '../src/planner/plan';
+import { buildSchedule, currentTerm } from '../src/planner/schedule';
 import { Dropzone } from './components/Dropzone';
 import { CourseInput } from './components/CourseInput';
-import { PlanView } from './components/PlanView';
+import { Verdict } from './components/Verdict';
+import { RouteView } from './components/Route';
+import { Requirements } from './components/Requirements';
+import { ThemeToggle } from './components/ThemeToggle';
 import {
+  PlanControls,
   SchoolPicker,
   type MajorOption,
   type Option,
+  type PlanSettings,
   type YearOption,
 } from './components/SchoolPicker';
 
@@ -17,8 +24,8 @@ type Catalog = { colleges: Option[]; campuses: Option[]; academicYears: YearOpti
 type Partner = { id: number; years: number[] };
 type Failure = { code: string; message: string };
 
-// A body this app's own routes always send on failure. Anything else (a
-// proxy error page, a network drop) falls back to a sentence written here.
+// A body this app's own routes always send on failure. Anything else (a proxy
+// error page, a dropped connection) falls back to a sentence written here.
 async function failureOf(response: Response): Promise<Failure> {
   try {
     const body = (await response.json()) as { error?: string; message?: string };
@@ -29,27 +36,38 @@ async function failureOf(response: Response): Promise<Failure> {
   return { code: 'unavailable', message: 'Could not reach ASSIST. Try again in a moment.' };
 }
 
-// Which years a student may actually pick, for the pair they have chosen.
+// Which years a student may actually pick for the pair they have chosen.
 // ASSIST publishes a catalog year long before the agreements under it are
-// written: on the day this was built, 2026-2027 was a selectable year with
-// zero agreements for most pairs. Offering it would tell a student their
-// college and campus have no agreement at all, which is false. So the year
-// list is whatever ASSIST says exists for that pair, newest first, and the
-// default is the newest of those rather than today's date.
+// written, so offering every published year tells students their college and
+// campus have no agreement when the year is simply too new.
 function yearsFor(partner: Partner | undefined, all: YearOption[]): YearOption[] {
   if (!partner) return [];
   const available = new Set(partner.years);
   return all.filter((y) => available.has(y.id));
 }
 
+function Skeleton({ rows }: { rows: number }) {
+  return (
+    <div className="skeleton" aria-hidden="true">
+      {Array.from({ length: rows }, (_, i) => (
+        <div className="bar" key={i} style={{ width: `${100 - i * 12}%` }} />
+      ))}
+    </div>
+  );
+}
+
 export default function Home() {
+  const earliest = useMemo(() => currentTerm(), []);
+
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [college, setCollege] = useState<number | null>(null);
   const [campus, setCampus] = useState<number | null>(null);
   const [year, setYear] = useState<number | null>(null);
   const [partners, setPartners] = useState<Partner[] | null>(null);
   const [majors, setMajors] = useState<MajorOption[]>([]);
-  const [majorsState, setMajorsState] = useState<'idle' | 'loading' | 'ready' | 'empty' | 'error'>('idle');
+  const [majorsState, setMajorsState] = useState<'idle' | 'loading' | 'ready' | 'empty' | 'error'>(
+    'idle',
+  );
   const [major, setMajor] = useState<string | null>(null);
 
   const [agreement, setAgreement] = useState<Agreement | null>(null);
@@ -58,6 +76,13 @@ export default function Home() {
   const [failure, setFailure] = useState<Failure | null>(null);
   const [uploadError, setUploadError] = useState('');
 
+  const [settings, setSettings] = useState<PlanSettings>({
+    start: earliest,
+    unitsPerTerm: 12,
+    includeSummer: false,
+    target: null,
+  });
+
   useEffect(() => {
     let live = true;
     fetch('/api/assist/institutions')
@@ -65,10 +90,7 @@ export default function Home() {
         if (!response.ok) throw await failureOf(response);
         return (await response.json()) as Catalog;
       })
-      .then((data) => {
-        if (!live) return;
-        setCatalog(data);
-      })
+      .then((data) => live && setCatalog(data))
       .catch((error: Failure) => live && setFailure(error));
     return () => {
       live = false;
@@ -76,8 +98,8 @@ export default function Home() {
   }, []);
 
   // Which campuses this college has agreements with, and for which years.
-  // Fetched as soon as a college is chosen so the campus list can be
-  // narrowed before the student picks a campus that leads nowhere.
+  // Fetched as soon as a college is chosen so the campus list is narrowed
+  // before the student picks something that leads nowhere.
   useEffect(() => {
     if (college === null) {
       setPartners(null);
@@ -105,8 +127,8 @@ export default function Home() {
   const years = yearsFor(partner, catalog?.academicYears ?? []);
 
   // Keep the chosen year valid for the chosen pair. Changing campus can
-  // invalidate it, and leaving a stale year selected would send the student
-  // to a year this pair has no agreement for.
+  // invalidate it, and a stale year sends the student to one this pair has no
+  // agreement for.
   useEffect(() => {
     if (years.length === 0) {
       if (year !== null) setYear(null);
@@ -115,9 +137,8 @@ export default function Home() {
     if (year === null || !years.some((y) => y.id === year)) setYear(years[0].id);
   }, [years, year]);
 
-  // Only campuses this college can actually reach. Before a college is
-  // chosen the full list is shown, so the two dropdowns can be read in
-  // either order.
+  // Only campuses this college can actually reach. Before a college is chosen
+  // the full list shows, so the two dropdowns can be read in either order.
   const campuses = (catalog?.campuses ?? []).filter(
     (c) => partners === null || partners.some((p) => p.id === c.id),
   );
@@ -182,8 +203,8 @@ export default function Home() {
   }, [major]);
 
   // The upload path is unchanged and still entirely local: the file is read
-  // into memory in this tab and parsed here. It is never sent to this app's
-  // own API routes, which only ever carry a college, a campus and a major.
+  // into memory in this tab and parsed here. It never reaches this app's own
+  // API routes, which only ever carry a college, a campus and a major.
   const onFile = useCallback(async (file: File) => {
     try {
       setUploadError('');
@@ -195,98 +216,216 @@ export default function Home() {
       setAgreement(null);
       setUploadError(
         err instanceof UnrecognisedAgreementError
-          ? 'That file does not look like an ASSIST articulation agreement. Download yours from assist.org and try again. A scanned or photographed agreement will not work, it needs to be the PDF assist.org gives you.'
+          ? 'That does not look like an ASSIST articulation agreement. Download yours from assist.org and try again. A scan or a photo will not work; it needs the PDF assist.org gives you.'
           : 'Could not read that PDF. Download the agreement again from assist.org and retry.',
       );
     }
   }, []);
 
-  const plan: Plan | null = agreement
-    ? buildPlan(
-        agreement,
-        completed
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean),
-      )
-    : null;
+  const plan = useMemo(
+    () =>
+      agreement
+        ? buildPlan(
+            agreement,
+            completed
+              .split(',')
+              .map((s) => s.trim())
+              .filter(Boolean),
+          )
+        : null,
+    [agreement, completed],
+  );
+
+  const schedule = useMemo(
+    () =>
+      plan
+        ? buildSchedule(plan.remainingGroups, {
+            start: settings.start,
+            unitsPerTerm: settings.unitsPerTerm,
+            includeSummer: settings.includeSummer,
+            target: settings.target,
+          })
+        : null,
+    [plan, settings],
+  );
 
   return (
-    <main>
-      <h1>Transfer Navigator</h1>
-      <p className="tagline">
-        Pick your community college, where you want to transfer, and your major. This shows what
-        you still need, straight from the ASSIST articulation agreement.
-      </p>
+    <main className="shell">
+      <header className="masthead">
+        <h1>
+          <svg className="mark" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path
+              d="M5 20V6.5a2.5 2.5 0 0 1 2.5-2.5H19"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+            />
+            <circle cx="5" cy="20" r="2.2" fill="currentColor" />
+            <circle cx="19" cy="4" r="2.2" fill="currentColor" />
+          </svg>
+          Transfer Navigator
+        </h1>
+        <ThemeToggle />
+        <p>
+          What you still need to transfer, term by term, read straight from the ASSIST articulation
+          agreement.
+        </p>
+      </header>
 
-      {catalog ? (
-        <SchoolPicker
-          colleges={catalog.colleges}
-          campuses={campuses}
-          years={years}
-          majors={majors}
-          college={college}
-          campus={campus}
-          year={year}
-          major={major}
-          majorsState={majorsState}
-          onCollege={setCollege}
-          onCampus={setCampus}
-          onYear={setYear}
-          onMajor={setMajor}
-        />
-      ) : (
-        !failure && <p className="loading">Loading the list of colleges…</p>
-      )}
+      <section className="panel">
+        <div className="panel-head">
+          <h2>Your agreement</h2>
+          <p>116 California community colleges · 9 UC, 23 CSU and 33 private campuses</p>
+        </div>
+
+        {catalog ? (
+          <SchoolPicker
+            colleges={catalog.colleges}
+            campuses={campuses}
+            years={years}
+            majors={majors}
+            college={college}
+            campus={campus}
+            year={year}
+            major={major}
+            majorsState={majorsState}
+            onCollege={setCollege}
+            onCampus={setCampus}
+            onYear={setYear}
+            onMajor={setMajor}
+          />
+        ) : failure ? null : (
+          <Skeleton rows={3} />
+        )}
+      </section>
 
       {failure && (
-        <div role="alert" className={failure.code === 'quota' ? 'warning' : 'error'}>
-          <p>{failure.message}</p>
+        <p
+          role="alert"
+          className="notice"
+          data-tone={failure.code === 'quota' ? 'caution' : 'error'}
+          style={{ marginTop: '1rem' }}
+        >
+          <strong>{failure.code === 'quota' ? 'ASSIST is busy' : 'Something went wrong'}</strong>
+          {failure.message}
           {failure.code === 'quota' && (
-            <p>
-              The upload route below reads a PDF entirely inside this browser tab, so it works
-              even when ASSIST will not answer this site.
-            </p>
+            <span>
+              The upload at the bottom of this page reads a PDF entirely inside this tab, so it
+              works even when ASSIST will not answer.
+            </span>
           )}
-        </div>
+        </p>
       )}
 
-      {loadingAgreement && <p className="loading">Reading the agreement…</p>}
+      {loadingAgreement && (
+        <section className="panel" style={{ marginTop: '1rem' }}>
+          <Skeleton rows={4} />
+        </section>
+      )}
 
-      {agreement && (
+      {plan && schedule && agreement && (
         <>
-          <p className="agreement-header">
-            {agreement.major}, {agreement.sendingInstitution} to {agreement.receivingInstitution},{' '}
-            {agreement.academicYear}
-          </p>
-          <CourseInput value={completed} onChange={setCompleted} />
+          <section className="panel" style={{ marginTop: '1rem' }}>
+            <div className="panel-head">
+              <h2>Where you are</h2>
+              <p>
+                {agreement.major} · {agreement.sendingInstitution} to{' '}
+                {agreement.receivingInstitution} · {agreement.academicYear}
+              </p>
+            </div>
+            <CourseInput value={completed} onChange={setCompleted} />
+          </section>
+
+          <section className="panel" style={{ marginTop: '1rem' }}>
+            <div className="panel-head">
+              <h2>How you want to go</h2>
+            </div>
+            <PlanControls settings={settings} earliest={earliest} onChange={setSettings} />
+          </section>
+
+          <Verdict plan={plan} schedule={schedule} target={settings.target} />
+
+          {schedule.terms.length > 0 && (
+            <section className="panel">
+              <div className="panel-head">
+                <h2>Your route</h2>
+                <p>
+                  Grouped by unit load. Agreements list no prerequisites, so confirm the order with
+                  a counselor.
+                </p>
+              </div>
+              <RouteView schedule={schedule} unitsPerTerm={settings.unitsPerTerm} />
+            </section>
+          )}
+
+          <section className="panel" style={{ marginTop: '1rem' }}>
+            <div className="panel-head">
+              <h2>Every requirement</h2>
+              <p>Grouped the way the agreement groups them</p>
+            </div>
+            <Requirements plan={plan} />
+          </section>
+
+          {plan.notes.length > 0 && (
+            <section className="panel">
+              <details>
+                <summary className="field-label" style={{ cursor: 'pointer', marginBottom: 0 }}>
+                  Notes from {agreement.receivingInstitution} ({plan.notes.length})
+                </summary>
+                <div className="notes-body">
+                  {plan.notes.map((note, i) => (
+                    <p key={i}>{note}</p>
+                  ))}
+                </div>
+              </details>
+              <p className="field-note" style={{ marginTop: '0.75rem' }}>
+                Their words, unedited. They carry rules this tool does not check, including grade
+                minimums and whether the major takes TAG.
+              </p>
+            </section>
+          )}
+
+          <div className="scope">
+            <p>
+              <b>What this covers.</b> Major preparation on this one agreement, and nothing else.
+            </p>
+            <p>
+              <b>What it does not.</b> General education and IGETC, the minimum transferable units
+              your campus asks for, GPA, and admission itself. Confirm all of that with a counselor
+              before you register.
+            </p>
+            <p>
+              <b>Where it can be wrong.</b> When a course you finished could count toward two
+              requirements it is credited to the first one only, so this can understate what you
+              have done. It never overstates it.
+            </p>
+          </div>
         </>
       )}
 
-      {plan && <PlanView plan={plan} />}
-
       <details className="fallback">
         <summary>Or upload an agreement PDF instead</summary>
-        <p>
-          For anything ASSIST will not serve this site: a year or a pair of schools the picker
-          above cannot reach, or an agreement you already have saved. Download it from{' '}
-          <a href="https://assist.org" target="_blank" rel="noreferrer">
-            assist.org
-          </a>{' '}
-          and drop it here. The file is read in this browser tab and never uploaded.
-        </p>
-        <Dropzone onFile={onFile} error={uploadError} />
+        <div className="fallback-body">
+          <p className="field-note">
+            For anything ASSIST will not serve this site: a pair of schools or a year the picker
+            cannot reach, or an agreement you already saved. Download it from{' '}
+            <a href="https://assist.org" target="_blank" rel="noreferrer">
+              assist.org
+            </a>
+            . The file is read in this browser tab and never uploaded.
+          </p>
+          <Dropzone onFile={onFile} error={uploadError} />
+        </div>
       </details>
 
       <footer className="site-footer">
         <p>
-          Not affiliated with ASSIST, the University of California, the California State
-          University, or any college. Agreement data comes from{' '}
+          Not affiliated with ASSIST, the University of California, the California State University,
+          or any college. Agreement data comes from{' '}
           <a href="https://assist.org" target="_blank" rel="noreferrer">
             assist.org
           </a>
-          , which is the official source. Confirm anything here with a counselor before you
-          register.
+          , which is the official source and the one to trust if this ever disagrees with it.
         </p>
       </footer>
     </main>

@@ -68,18 +68,34 @@ export function currentTerm(now = new Date()): TermRef {
   return { kind: 'Spring', year: year + 1 };
 }
 
-// Two courses look like parts of one sequence when they share a prefix and a
-// numeric stem and differ only in what trails it: MATH 005A and MATH 005B,
-// CS 003A and CS 003B. This is a reading of how California colleges number
-// courses, not something any agreement states, so it only ever spreads a
-// sequence across terms and never claims an order is required.
+// Two courses are parts of one sequence when they share a prefix and a number
+// and carry DIFFERENT sequence letters: MATH 005A then MATH 005B. This is a
+// reading of how California colleges number courses, not something any
+// agreement states, so it only ever spreads a sequence across terms and never
+// claims an order is required.
+//
+// Two suffix letters are not sequence steps and must be stripped first, or
+// this rule does real damage:
+//
+//   L  a lab. CS 003BL is the lab for CS 003B, normally taken WITH it, so
+//      reading the L as a later step splits a lecture from its own lab and
+//      tells a student to take them a term apart.
+//   H  an honours section. MATH 010H is MATH 010, not a second part of it.
 const STEM = /^([A-Z&\s]+?)\s*(\d+)([A-Z]*)$/i;
 
-export function sequenceStem(code: string): string | null {
+export type SequenceKey = { stem: string; step: string };
+
+export function sequenceKey(code: string): SequenceKey | null {
   const match = STEM.exec(code.trim());
   if (!match) return null;
-  const [, prefix, digits, suffix] = match;
-  return suffix ? `${prefix.trim().toUpperCase()} ${digits}` : null;
+  const [, prefix, digits, rawSuffix] = match;
+
+  // Strip lab and honours markers wherever they trail, then whatever letters
+  // remain are the actual sequence step.
+  const step = rawSuffix.toUpperCase().replace(/[LH]+$/, '');
+  if (!step) return null;
+
+  return { stem: `${prefix.trim().toUpperCase()} ${digits}`, step };
 }
 
 const total = (courses: Course[]) => courses.reduce((sum, c) => sum + c.units, 0);
@@ -104,9 +120,10 @@ export function buildSchedule(groups: AndGroup[], options: ScheduleOptions): Sch
   let ref = start;
   let courses: Course[] = [];
   let sequenced: string[] = [];
-  // Stems already placed, and the term index they were placed in, so a later
-  // part of a sequence never lands in the same term as an earlier one.
-  const placedStems = new Map<string, number>();
+  // For each stem, which sequence step was placed in which term. A course
+  // clashes only with a DIFFERENT step of the same stem in the same term, so
+  // a lecture and its lab still sit together.
+  const placed = new Map<string, { step: string; term: number }[]>();
 
   const closeTerm = () => {
     terms.push({ ref, label: termLabel(ref), courses, units: total(courses), sequenced });
@@ -135,8 +152,10 @@ export function buildSchedule(groups: AndGroup[], options: ScheduleOptions): Sch
 
   for (const course of queue) {
     while (guard++ < limit) {
-      const stem = sequenceStem(course.code);
-      const clashes = stem !== null && placedStems.get(stem) === terms.length;
+      const key = sequenceKey(course.code);
+      const clashes =
+        key !== null &&
+        (placed.get(key.stem) ?? []).some((p) => p.term === terms.length && p.step !== key.step);
       const fits = total(courses) + course.units <= budgetFor(ref);
 
       if (courses.length > 0 && (clashes || !fits)) {
@@ -153,21 +172,29 @@ export function buildSchedule(groups: AndGroup[], options: ScheduleOptions): Sch
         continue;
       }
 
-      if (stem) placedStems.set(stem, terms.length);
+      if (key) placed.set(key.stem, [...(placed.get(key.stem) ?? []), { step: key.step, term: terms.length }]);
       courses.push(course);
-      if (stem) sequenced.push(course.code);
+      if (key) sequenced.push(course.code);
       break;
     }
   }
 
   if (courses.length > 0) closeTerm();
 
-  // A term whose only note is that one course happened to have a stem is not
-  // worth a caveat; only a term that actually held something back is.
+  // Only a term that actually held something back deserves the caveat. A
+  // course whose stem has just one step in the whole plan was never split, so
+  // saying so would be noise.
   for (const term of terms) {
     term.sequenced = term.sequenced.filter((code) => {
-      const stem = sequenceStem(code);
-      return stem !== null && queue.filter((c) => sequenceStem(c.code) === stem).length > 1;
+      const key = sequenceKey(code);
+      if (!key) return false;
+      const steps = new Set(
+        queue
+          .map((c) => sequenceKey(c.code))
+          .filter((k): k is SequenceKey => k !== null && k.stem === key.stem)
+          .map((k) => k.step),
+      );
+      return steps.size > 1;
     });
   }
 
