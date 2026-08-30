@@ -6,6 +6,7 @@ import type { Agreement } from '../src/parser/agreement';
 import { buildPlan } from '../src/planner/plan';
 import { buildSchedule, currentTerm } from '../src/planner/schedule';
 import { geStatus } from '../src/planner/ge';
+import { buildDoubleCountIndex } from '../src/planner/doubleCount';
 import {
   PATTERNS,
   availableIn,
@@ -170,6 +171,14 @@ export default function Home() {
     [ge],
   );
 
+  // Which of the college's courses clear a pattern area, keyed by course, so
+  // the route and the requirement list can mark them where a student is
+  // actually choosing.
+  const doubleCount = useMemo(
+    () => buildDoubleCountIndex(ge, patternFor(activePattern), destination),
+    [ge, activePattern, destination],
+  );
+
   const geView = useMemo(() => {
     if (!ge || !plan || ge.byCourse.length === 0) return null;
     return geStatus(
@@ -312,7 +321,12 @@ export default function Home() {
                   a counselor.
                 </p>
               </div>
-              <RouteView schedule={schedule} unitsPerTerm={settings.unitsPerTerm} />
+              <RouteView
+                schedule={schedule}
+                unitsPerTerm={settings.unitsPerTerm}
+                doubleCount={doubleCount}
+                pattern={patternFor(activePattern).name}
+              />
             </section>
           )}
 
@@ -321,7 +335,11 @@ export default function Home() {
               <h2>Every requirement</h2>
               <p>Grouped the way the agreement groups them</p>
             </div>
-            <Requirements plan={plan} />
+            <Requirements
+              plan={plan}
+              doubleCount={doubleCount}
+              pattern={patternFor(activePattern).name}
+            />
           </section>
 
           {geView && (

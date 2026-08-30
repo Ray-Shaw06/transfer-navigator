@@ -1,16 +1,37 @@
 import type { Schedule } from '../../src/planner/schedule';
+import { areasCleared, type DoubleCountIndex } from '../../src/planner/doubleCount';
 import type { Course } from '../../src/parser/types';
 
 // The plan drawn as a route: a rail, a station per term, a terminus. The
 // content genuinely is a sequence, so the metaphor is carried by the
 // structure rather than by decoration.
-export function RouteView({ schedule, unitsPerTerm }: { schedule: Schedule; unitsPerTerm: number }) {
+export function RouteView({
+  schedule,
+  unitsPerTerm,
+  doubleCount,
+  pattern,
+}: {
+  schedule: Schedule;
+  unitsPerTerm: number;
+  doubleCount: DoubleCountIndex;
+  pattern: string;
+}) {
   if (schedule.terms.length === 0) return null;
 
   const target = schedule.meetsTarget;
+  const doubled = schedule.terms
+    .flatMap((t) => t.courses)
+    .filter((c) => areasCleared(doubleCount, c.code).length > 0).length;
 
   return (
-    <div className="route">
+    <>
+      {doubled > 0 && (
+        <p className="route-note">
+          <b>{doubled}</b> of these also clear a {pattern} area, marked on the course. You are not
+          taking them twice.
+        </p>
+      )}
+      <div className="route">
       {schedule.terms.map((term, i) => {
         const [season, year] = term.label.split(' ');
         // A term over the normal load is worth flagging: it is usually the
@@ -36,13 +57,27 @@ export function RouteView({ schedule, unitsPerTerm }: { schedule: Schedule; unit
                 {over ? ' · over a normal load' : ''}
               </div>
               <div className="term-courses">
-                {term.courses.map((c: Course) => (
-                  <span className="course-chip" key={c.code}>
-                    <span className="code">{c.code}</span>
-                    <span>{c.title}</span>
-                    <u>{c.units}u</u>
-                  </span>
-                ))}
+                {term.courses.map((c: Course) => {
+                  // A course doing double duty is the best thing on the
+                  // route, so it is marked where the student reads the plan
+                  // rather than only counted in the panel below.
+                  const areas = areasCleared(doubleCount, c.code);
+                  return (
+                    <span className="course-chip" key={c.code} data-double={areas.length > 0}>
+                      <span className="code">{c.code}</span>
+                      <span>{c.title}</span>
+                      {areas.length > 0 && (
+                        <b
+                          className="double-badge"
+                          title={`Also clears ${pattern} ${areas.length === 1 ? 'Area' : 'Areas'} ${areas.join(', ')}`}
+                        >
+                          {areas.join('·')}
+                        </b>
+                      )}
+                      <u>{c.units}u</u>
+                    </span>
+                  );
+                })}
               </div>
               {term.sequenced.length > 0 && (
                 <p className="term-note">
@@ -69,6 +104,7 @@ export function RouteView({ schedule, unitsPerTerm }: { schedule: Schedule; unit
           </small>
         </div>
       </div>
-    </div>
+      </div>
+    </>
   );
 }

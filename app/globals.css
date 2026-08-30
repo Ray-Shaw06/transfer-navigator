@@ -1224,3 +1224,51 @@ details.more[open] > summary::before { content: '–'; }
 .ge-add-body { margin-top: 0.875rem; }
 
 .pattern-pick { margin: 0 0 1.125rem; max-width: 24rem; }
+
+/* ----------------------------------- double counting
+
+   A course that clears a major requirement and a general education area at
+   once is the best thing on the plan, so it is marked wherever a student is
+   choosing rather than only counted in the panel below. */
+
+.double-badge {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--signal-ink);
+  white-space: nowrap;
+}
+
+.course-chip[data-double='true'] {
+  border-color: var(--signal);
+  background: var(--row-todo);
+}
+
+.course-chip .double-badge {
+  padding: 0.0625rem 0.3125rem;
+  border-radius: 999px;
+  background: var(--signal);
+  color: var(--on-signal);
+  flex: none;
+}
+
+.route-note {
+  font-size: 0.875rem;
+  color: var(--ink-2);
+  margin-bottom: 0.875rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.route-note b { color: var(--signal-ink); font-weight: 700; }
+
+.better-note {
+  margin-top: 0.4375rem;
+  font-size: 0.8125rem;
+  color: var(--ink-2);
+  padding: 0.4375rem 0.625rem;
+  border: 1px dashed var(--signal);
+  border-radius: var(--radius-sm);
+}
+
+.options .double-badge { font-weight: 620; }

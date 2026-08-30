@@ -89,10 +89,20 @@ zero padding, so `math5a` finds `MATH 005A`.
 
 ## General education
 
-Alongside major preparation it shows the Cal-GETC pattern as your college
-certifies it, and leads with the part students most often get wrong: which
-courses in your major-prep route **also** clear a Cal-GETC area, so you do not
-take a second course you never needed.
+Alongside major preparation it shows the pattern as your college certifies it,
+and leads with the part students most often get wrong: which courses in your
+major-prep route **also** clear a general education area, so you do not take a
+second course you never needed.
+
+Those are marked where the choosing happens, not only counted afterwards. A
+course doing double duty is badged on the route and on every accepted option
+for a requirement. And where a costlier option would clear an area the
+suggested one does not, the requirement says so: for PCC to UCI Computer
+Science and Engineering, the planner suggests `CS 045` on units alone, while
+`MATH 022` costs exactly the same and clears Area 2 as well. That is pointed
+at rather than chosen, because the planner picks on units and says so, and
+silently overriding it with a rule about a pattern the student may not be
+following would be worse help.
 
 The pattern is chosen from your catalog year, because that is what actually
 decides it: Cal-GETC replaced the other two from Fall 2025, and ASSIST

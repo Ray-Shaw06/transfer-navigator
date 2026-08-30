@@ -1,4 +1,9 @@
 import type { Plan, RowStatus } from '../../src/planner/plan';
+import {
+  betterByDoubleCount,
+  optionAreas,
+  type DoubleCountIndex,
+} from '../../src/planner/doubleCount';
 import type { AndGroup } from '../../src/parser/groups';
 import type { Course } from '../../src/parser/types';
 
@@ -26,15 +31,29 @@ function joined(courses: Course[], word: string) {
 // student still has a real decision in front of them. `chosen` compares by
 // array identity against the option the planner picked: baseStatus never
 // copies, so this never has to match on course codes.
-function Options({ options, chosen }: { options: AndGroup[]; chosen?: Course[] }) {
+function Options({
+  options,
+  chosen,
+  doubleCount,
+}: {
+  options: AndGroup[];
+  chosen?: Course[];
+  doubleCount: DoubleCountIndex;
+}) {
   if (options.length === 0) return null;
   return (
     <ul className="options">
-      {options.map((o, i) => (
-        <li key={i} data-chosen={o.courses === chosen}>
-          {joined(o.courses, 'and')} · {units(o)} units
-        </li>
-      ))}
+      {options.map((o, i) => {
+        const areas = optionAreas(doubleCount, o);
+        return (
+          <li key={i} data-chosen={o.courses === chosen}>
+            {joined(o.courses, 'and')} · {units(o)} units
+            {areas.length > 0 && (
+              <b className="double-badge"> also clears {areas.length === 1 ? 'Area' : 'Areas'} {areas.join(', ')}</b>
+            )}
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -93,7 +112,26 @@ function ReceivingLabel({ status }: { status: RowStatus }) {
   return <>{joined(status.receiving, 'and')}</>;
 }
 
-function Row({ status, sectionLabel }: { status: RowStatus; sectionLabel?: string }) {
+function Row({
+  status,
+  sectionLabel,
+  doubleCount,
+  pattern,
+}: {
+  status: RowStatus;
+  sectionLabel?: string;
+  doubleCount: DoubleCountIndex;
+  pattern: string;
+}) {
+  // A costlier option that also clears a general education area buys back a
+  // course elsewhere. Pointed at rather than chosen: the planner picks on
+  // units and says so, and silently overriding that with a rule about a
+  // pattern the student may not be following would be worse help.
+  const better =
+    status.state === 'remaining'
+      ? betterByDoubleCount(doubleCount, status.allOptions, status.cheapestOption)
+      : null;
+
   return (
     <li className="row" data-state={status.state}>
       <Mark state={status.state} />
@@ -112,11 +150,37 @@ function Row({ status, sectionLabel }: { status: RowStatus; sectionLabel?: strin
           <>
             <p className="row-detail">
               Take {joined(status.cheapestOption, 'and')} · {status.remainingUnits} units.
+              {optionAreas(doubleCount, { kind: 'and', courses: status.cheapestOption }).length >
+                0 && (
+                <b className="double-badge">
+                  {' '}
+                  also clears{' '}
+                  {optionAreas(doubleCount, { kind: 'and', courses: status.cheapestOption }).join(
+                    ', ',
+                  )}
+                </b>
+              )}
             </p>
+            {better && (
+              <p className="better-note">
+                {joined(better.option.courses, 'and')} costs{' '}
+                {better.extraUnits === 0
+                  ? 'the same'
+                  : better.extraUnits > 0
+                    ? `${better.extraUnits} more ${better.extraUnits === 1 ? 'unit' : 'units'}`
+                    : `${-better.extraUnits} fewer ${-better.extraUnits === 1 ? 'unit' : 'units'}`}{' '}
+                and also clears {pattern} {better.gains.length === 1 ? 'Area' : 'Areas'}{' '}
+                {better.gains.join(', ')}, which would save you a course there.
+              </p>
+            )}
             {status.allOptions.length > 1 && (
               <details className="more">
                 <summary>{status.allOptions.length} accepted options</summary>
-                <Options options={status.allOptions} chosen={status.cheapestOption} />
+                <Options
+                  options={status.allOptions}
+                  chosen={status.cheapestOption}
+                  doubleCount={doubleCount}
+                />
               </details>
             )}
           </>
@@ -141,7 +205,7 @@ function Row({ status, sectionLabel }: { status: RowStatus; sectionLabel?: strin
             {status.allOptions.length > 0 && (
               <details className="more">
                 <summary>What would have counted</summary>
-                <Options options={status.allOptions} />
+                <Options options={status.allOptions} doubleCount={doubleCount} />
               </details>
             )}
           </>
@@ -156,7 +220,7 @@ function Row({ status, sectionLabel }: { status: RowStatus; sectionLabel?: strin
             {status.allOptions.length > 0 && (
               <details className="more">
                 <summary>What would have counted</summary>
-                <Options options={status.allOptions} />
+                <Options options={status.allOptions} doubleCount={doubleCount} />
               </details>
             )}
           </>
@@ -229,7 +293,15 @@ function Tally({ section }: { section: Plan['sections'][number] }) {
   );
 }
 
-export function Requirements({ plan }: { plan: Plan }) {
+export function Requirements({
+  plan,
+  doubleCount,
+  pattern,
+}: {
+  plan: Plan;
+  doubleCount: DoubleCountIndex;
+  pattern: string;
+}) {
   // Group the flat statuses back under the section each came from. A status
   // without a recognised section falls back to an unheaded list so nothing
   // silently vanishes.
@@ -248,7 +320,7 @@ export function Requirements({ plan }: { plan: Plan }) {
       {ungrouped.length > 0 && (
         <ul className="rows">
           {ungrouped.map((s, i) => (
-            <Row key={i} status={s} />
+            <Row key={i} status={s} doubleCount={doubleCount} pattern={pattern} />
           ))}
         </ul>
       )}
@@ -265,7 +337,13 @@ export function Requirements({ plan }: { plan: Plan }) {
             </div>
             <ul className="rows">
               {members.map((s, i) => (
-                <Row key={i} status={s} sectionLabel={section.label || undefined} />
+                <Row
+                  key={i}
+                  status={s}
+                  sectionLabel={section.label || undefined}
+                  doubleCount={doubleCount}
+                  pattern={pattern}
+                />
               ))}
             </ul>
           </div>
