@@ -105,7 +105,18 @@ describe('buildSchedule', () => {
     );
 
     expect(schedule.terms).toHaveLength(1);
-    expect(schedule.terms[0].courses.map((c) => c.code)).toEqual(['CS 003B', 'CS 033', 'CS 003BL']);
+    // All three in the one term is the point. The lab now sits next to the
+    // lecture it belongs to rather than in the order the requirement listed
+    // them, because the two are scheduled as one block.
+    expect(schedule.terms[0].courses.map((c) => c.code).sort()).toEqual([
+      'CS 003B',
+      'CS 003BL',
+      'CS 033',
+    ]);
+    expect(schedule.terms[0].courses.map((c) => c.code).slice(0, 2)).toEqual([
+      'CS 003B',
+      'CS 003BL',
+    ]);
     expect(schedule.terms[0].sequenced).toEqual([]);
   });
 
@@ -268,6 +279,27 @@ describe('buildSchedule with general education', () => {
     const termOf = (code: string) =>
       schedule.terms.findIndex((t) => t.courses.some((c) => c.code === code));
     expect(termOf('MATH 005A')).toBeLessThan(termOf('MATH 005B'));
+  });
+
+  it('never separates a lecture from its own lab, even under a tight budget', () => {
+    // The regression this exists to catch: reserving room for general
+    // education squeezed CS 003BL out of the term holding CS 003B, so the
+    // plan told a student to take a lab a term after its lecture. The two are
+    // not neighbours in the requirement, so adjacency would not have caught
+    // it: the real order is CS 003B, CS 033, CS 003BL.
+    const schedule = buildSchedule(
+      [group(course('CS 003B', 3), course('CS 033', 3), course('CS 003BL', 1))],
+      { start: FALL_26, unitsPerTerm: 12, includeSummer: false },
+      [
+        { kind: 'area' as const, units: 3, areaId: '1A', label: 'Area 1A', pattern: 'Cal-GETC' },
+        { kind: 'area' as const, units: 3, areaId: '1B', label: 'Area 1B', pattern: 'Cal-GETC' },
+      ],
+    );
+
+    const termOf = (code: string) =>
+      schedule.terms.findIndex((t) => t.courses.some((c) => c.code === code));
+    expect(termOf('CS 003B')).toBe(termOf('CS 003BL'));
+    expect(termOf('CS 003B')).toBeGreaterThanOrEqual(0);
   });
 });
 

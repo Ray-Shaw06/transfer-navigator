@@ -183,17 +183,45 @@ export function buildSchedule(
     ref = nextTerm(ref, includeSummer);
   };
 
-  // Flattened deliberately: a requirement's courses are kept adjacent, so
-  // they land in one term whenever they fit, but a four-course requirement
-  // is not forced past a term boundary as a block.
-  const queue = groups.flatMap((g) => g.courses);
+  // A course and the lab belonging to it are one thing to schedule. They
+  // share a sequence key, so they go into a block and are placed together or
+  // not at all: a term with the lecture and not its lab is not a term anybody
+  // can enrol in. Everything else is its own block, so a four-course
+  // requirement is still allowed to straddle a term boundary.
+  //
+  // Blocks rather than adjacency because the two are not always neighbours:
+  // one real requirement lists CS 003B, CS 033, CS 003BL in that order, and a
+  // run of adjacent courses would not catch it.
+  const queue = groups.flatMap((group) => {
+    const blocks: Course[][] = [];
+    const byKey = new Map<string, Course[]>();
+
+    for (const course of group.courses) {
+      const key = sequenceKey(course.code);
+      const id = key ? `${key.stem}|${key.step}` : null;
+      if (id === null) {
+        blocks.push([course]);
+        continue;
+      }
+      const existing = byKey.get(id);
+      if (existing) {
+        existing.push(course);
+        continue;
+      }
+      const block = [course];
+      byKey.set(id, block);
+      blocks.push(block);
+    }
+
+    return blocks;
+  });
 
   // Every term aims for the same mix as the whole plan. Filling major
   // preparation first and letting general education take the leftovers puts
   // all of it at the end, which is not how anybody actually enrols: a student
   // with 22 units of major preparation and 31 of general education does not
   // spend two years on one and then two on the other.
-  const majorUnits = queue.reduce((sum, c) => sum + c.units, 0);
+  const majorUnits = queue.reduce((sum, block) => sum + total(block), 0);
   const geShare =
     majorUnits + total(pendingGe) > 0 ? total(pendingGe) / (majorUnits + total(pendingGe)) : 0;
 
@@ -214,18 +242,27 @@ export function buildSchedule(
 
     // Then major preparation, which owns the rest of the term.
     while (next < queue.length) {
-      const course = queue[next];
-      const key = sequenceKey(course.code);
-      const clashes =
-        key !== null &&
-        (placed.get(key.stem) ?? []).some((p) => p.term === terms.length && p.step !== key.step);
-      if (clashes || total(items) + course.units > budget) break;
+      const block = queue[next];
+      const clashes = block.some((course) => {
+        const key = sequenceKey(course.code);
+        return (
+          key !== null &&
+          (placed.get(key.stem) ?? []).some((p) => p.term === terms.length && p.step !== key.step)
+        );
+      });
+      if (clashes || total(items) + total(block) > budget) break;
 
-      if (key) {
-        placed.set(key.stem, [...(placed.get(key.stem) ?? []), { step: key.step, term: terms.length }]);
-        sequenced.push(course.code);
+      for (const course of block) {
+        const key = sequenceKey(course.code);
+        if (key) {
+          placed.set(key.stem, [
+            ...(placed.get(key.stem) ?? []),
+            { step: key.step, term: terms.length },
+          ]);
+          sequenced.push(course.code);
+        }
+        items.push({ kind: 'course', units: course.units, course });
       }
-      items.push({ kind: 'course', units: course.units, course });
       next++;
     }
 
@@ -237,14 +274,16 @@ export function buildSchedule(
       // Nothing fitted an empty term. Either this is a short summer and the
       // next thing belongs after it, or one item is larger than any term and
       // goes in alone: an honest oversized term beats a silent omission.
-      const upNext = next < queue.length ? queue[next].units : (pendingGe[0]?.units ?? 0);
+      const upNext = next < queue.length ? total(queue[next]) : (pendingGe[0]?.units ?? 0);
       if (upNext <= unitsPerTerm) {
         skipTerm();
         continue;
       }
-      if (next < queue.length && queue[next].units > unitsPerTerm) {
-        const course = queue[next++];
-        items.push({ kind: 'course', units: course.units, course });
+      if (next < queue.length && total(queue[next]) > unitsPerTerm) {
+        for (const course of queue[next]) {
+          items.push({ kind: 'course', units: course.units, course });
+        }
+        next++;
       } else if (pendingGe.length > 0) {
         items.push(pendingGe.shift()!);
       }
@@ -262,6 +301,7 @@ export function buildSchedule(
       if (!key) return false;
       const steps = new Set(
         queue
+          .flat()
           .map((c) => sequenceKey(c.code))
           .filter((k): k is SequenceKey => k !== null && k.stem === key.stem)
           .map((k) => k.step),
