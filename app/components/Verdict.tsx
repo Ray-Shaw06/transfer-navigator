@@ -73,10 +73,14 @@ export function Verdict({
   plan,
   schedule,
   target,
+  generalEducation,
 }: {
   plan: Plan;
   schedule: Schedule;
   target: TermRef | null;
+  // The pattern's name when general education is in the route, so the finish
+  // date is not read as covering major preparation alone.
+  generalEducation?: string;
 }) {
   const { tone, line, sub } = verdictFor(plan, schedule, target);
   const blocked = plan.statuses.filter((s) => s.state === 'not_articulated').length;
@@ -84,7 +88,12 @@ export function Verdict({
   return (
     <section className="verdict" data-tone={tone} aria-live="polite">
       <p className="verdict-line">{line}</p>
-      <p className="verdict-sub">{sub}</p>
+      <p className="verdict-sub">
+        {sub}
+        {generalEducation && schedule.terms.length > 0 && (
+          <> The finish date covers {generalEducation} as well, not just these requirements.</>
+        )}
+      </p>
       <div className="verdict-figures">
         {/* Always labelled with the unit system. UC asks for 60 semester or 90
             quarter units, so a bare number here would be ambiguous by

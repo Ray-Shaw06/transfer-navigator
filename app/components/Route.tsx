@@ -126,11 +126,13 @@ export function RouteView({
           <div className="term-season">Done</div>
         </div>
         <div className="terminus-body">
-          Major preparation finished
+          {areaSlots > 0 ? `Major preparation and ${pattern} finished` : 'Major preparation finished'}
           <small>
             {target === false
               ? 'Later than the term you were aiming for.'
-              : 'Everything on this agreement that your college can cover.'}
+              : areaSlots > 0
+                ? `Everything on this agreement your college can cover, plus the ${pattern} pattern.`
+                : 'Everything on this agreement that your college can cover.'}
           </small>
         </div>
       </div>

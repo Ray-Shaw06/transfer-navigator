@@ -317,7 +317,16 @@ export default function Home() {
             <PlanControls settings={settings} earliest={earliest} onChange={setSettings} />
           </section>
 
-          <Verdict plan={plan} schedule={schedule} target={settings.target} />
+          <Verdict
+            plan={plan}
+            schedule={schedule}
+            target={settings.target}
+            generalEducation={
+              schedule.terms.some((t) => t.items.some((i) => i.kind === 'area'))
+                ? patternFor(activePattern).name
+                : undefined
+            }
+          />
 
           {schedule.terms.length > 0 && (
             <section className="panel">

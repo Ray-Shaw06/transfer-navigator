@@ -169,6 +169,15 @@ the panel simply does not appear.
 
 ## Term planning
 
+The route carries both. ASSIST names the exact course that satisfies a major
+requirement, so those are scheduled as courses. It cannot do that for a
+general education area: Humanities has 138 certified courses at one college
+and nothing says which one you will take. So the **area** is scheduled,
+carrying the units the pattern states, drawn outlined rather than solid, and
+you pick the course. Areas your major-prep courses already clear are not
+scheduled again.
+
+
 Give it a starting term, a unit load, whether you take summers, and a term you
 want to transfer by. It packs the remaining work into named terms, gives
 summer a smaller load, and says plainly when the plan runs past your target.
