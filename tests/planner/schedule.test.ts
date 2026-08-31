@@ -187,3 +187,87 @@ describe('buildSchedule', () => {
     expect(schedule.totalUnits).toBe(0);
   });
 });
+
+describe('buildSchedule with general education', () => {
+  const area = (id: string, units: number) => ({
+    kind: 'area' as const,
+    units,
+    areaId: id,
+    label: `Area ${id}`,
+    pattern: 'Cal-GETC',
+  });
+
+  const kinds = (schedule: ReturnType<typeof buildSchedule>) =>
+    schedule.terms.map((t) => t.items.map((i) => (i.kind === 'course' ? 'C' : 'G')).join(''));
+
+  it('puts general education in the first term, not only the last', () => {
+    // The bug this exists to prevent: major preparation filling every early
+    // term to the brim and general education all landing at the end, which is
+    // not how anybody enrols.
+    const schedule = buildSchedule(
+      [group(course('AAA 1', 6)), group(course('BBB 2', 6)), group(course('CCC 3', 6))],
+      base,
+      [area('1A', 3), area('1B', 3), area('2', 3), area('3', 3), area('4', 3), area('5', 3)],
+    );
+
+    expect(schedule.terms[0].items.some((i) => i.kind === 'area')).toBe(true);
+    expect(schedule.terms[0].items.some((i) => i.kind === 'course')).toBe(true);
+  });
+
+  it('gives every term roughly the mix of the whole plan', () => {
+    // Half major preparation, half general education, so each term should be
+    // about half and half rather than all of one then all of the other.
+    const schedule = buildSchedule(
+      [group(course('AAA 1', 6)), group(course('BBB 2', 6))],
+      base,
+      [area('1A', 6), area('1B', 6)],
+    );
+
+    for (const term of schedule.terms) {
+      expect(term.items.filter((i) => i.kind === 'course')).toHaveLength(1);
+      expect(term.items.filter((i) => i.kind === 'area')).toHaveLength(1);
+    }
+  });
+
+  it('does not take more terms than the same work without the mixing', () => {
+    const items = [area('1A', 3), area('1B', 3), area('2', 3)];
+    const majorOnly = buildSchedule(
+      [group(course('AAA 1', 6)), group(course('BBB 2', 6))],
+      base,
+      [],
+    );
+    const mixed = buildSchedule([group(course('AAA 1', 6)), group(course('BBB 2', 6))], base, items);
+
+    // 12 units of major preparation plus 9 of general education is 21, which
+    // is two terms at 15. Spreading it must not cost a third.
+    expect(majorOnly.terms).toHaveLength(1);
+    expect(mixed.terms).toHaveLength(2);
+    expect(mixed.totalUnits).toBe(21);
+  });
+
+  it('schedules general education alone when there is no major preparation left', () => {
+    const schedule = buildSchedule([], base, [area('1A', 3), area('1B', 3)]);
+    expect(kinds(schedule)).toEqual(['GG']);
+    expect(schedule.totalUnits).toBe(6);
+  });
+
+  it('counts an area toward the term load and the total', () => {
+    const schedule = buildSchedule([group(course('AAA 1', 4))], base, [area('3', 3)]);
+    expect(schedule.terms[0].units).toBe(7);
+    expect(schedule.terms[0].courses.map((c) => c.code)).toEqual(['AAA 1']);
+    expect(schedule.terms[0].items).toHaveLength(2);
+  });
+
+  it('still keeps a numbered sequence apart when general education is mixed in', () => {
+    const schedule = buildSchedule(
+      [group(course('MATH 005A', 5), course('MATH 005B', 5))],
+      base,
+      [area('1A', 3), area('1B', 3)],
+    );
+
+    const termOf = (code: string) =>
+      schedule.terms.findIndex((t) => t.courses.some((c) => c.code === code));
+    expect(termOf('MATH 005A')).toBeLessThan(termOf('MATH 005B'));
+  });
+});
+

@@ -125,8 +125,8 @@ export function buildSchedule(
   groups: AndGroup[],
   options: ScheduleOptions,
   // General education still to be scheduled, in the order it should be taken.
-  // Filled into whatever room each term has left after major preparation,
-  // because major preparation is the part with sequences to respect.
+  // Spread across the terms in proportion to how much of the whole plan it
+  // is, rather than filling the gaps major preparation leaves.
   generalEducation: ScheduleItem[] = [],
 ): Schedule {
   const { start, unitsPerTerm, includeSummer, target = null } = options;
@@ -146,13 +146,13 @@ export function buildSchedule(
   // a lecture and its lab still sit together.
   const placed = new Map<string, { step: string; term: number }[]>();
 
-  // Top up the current term with whatever general education still fits. Walks
-  // the list rather than stopping at the first thing too big, so a three-unit
+  // Add general education up to a ceiling on this term's units. Walks the
+  // list rather than stopping at the first thing too big, so a three-unit
   // area can still land in a term with three units left even when a
   // four-unit one is next in line.
-  const fillWithGe = () => {
+  const fillGeUpTo = (ceiling: number) => {
     for (let i = 0; i < pendingGe.length; ) {
-      if (total(items) + pendingGe[i].units <= budgetFor(ref)) {
+      if (total(items) + pendingGe[i].units <= ceiling) {
         items.push(pendingGe[i]);
         pendingGe.splice(i, 1);
       } else {
@@ -162,7 +162,6 @@ export function buildSchedule(
   };
 
   const closeTerm = () => {
-    fillWithGe();
     terms.push({
       ref,
       label: termLabel(ref),
@@ -189,55 +188,68 @@ export function buildSchedule(
   // is not forced past a term boundary as a block.
   const queue = groups.flatMap((g) => g.courses);
 
-  // Bounded so a course larger than a whole term's budget cannot spin
-  // forever. Such a course is placed alone in its own term instead.
-  let guard = 0;
-  const limit = queue.length * 4 + 8;
+  // Every term aims for the same mix as the whole plan. Filling major
+  // preparation first and letting general education take the leftovers puts
+  // all of it at the end, which is not how anybody actually enrols: a student
+  // with 22 units of major preparation and 31 of general education does not
+  // spend two years on one and then two on the other.
+  const majorUnits = queue.reduce((sum, c) => sum + c.units, 0);
+  const geShare =
+    majorUnits + total(pendingGe) > 0 ? total(pendingGe) / (majorUnits + total(pendingGe)) : 0;
 
-  for (const course of queue) {
-    while (guard++ < limit) {
+  let next = 0;
+  let guard = 0;
+  // Bounded so an item larger than a whole term cannot spin forever. Such an
+  // item is placed alone in its own term instead.
+  const limit = (queue.length + generalEducation.length) * 4 + 16;
+
+  while ((next < queue.length || pendingGe.length > 0) && guard++ < limit) {
+    const budget = budgetFor(ref);
+
+    // General education goes in first, up to its share of the term. It is the
+    // half with no sequences to respect, so it is the half that can be moved,
+    // and taking its share up front is what stops it being squeezed to the
+    // end.
+    fillGeUpTo(Math.round(budget * geShare));
+
+    // Then major preparation, which owns the rest of the term.
+    while (next < queue.length) {
+      const course = queue[next];
       const key = sequenceKey(course.code);
       const clashes =
         key !== null &&
         (placed.get(key.stem) ?? []).some((p) => p.term === terms.length && p.step !== key.step);
-      const fits = total(items) + course.units <= budgetFor(ref);
+      if (clashes || total(items) + course.units > budget) break;
 
-      if (items.length > 0 && (clashes || !fits)) {
-        closeTerm();
-        continue;
+      if (key) {
+        placed.set(key.stem, [...(placed.get(key.stem) ?? []), { step: key.step, term: terms.length }]);
+        sequenced.push(course.code);
       }
-
-      // The term is empty and the course still does not fit. If it would fit
-      // a normal term, this is a short summer and the course belongs after
-      // it. If it fits nowhere, it goes here alone rather than never being
-      // scheduled at all: an honest oversized term beats a silent omission.
-      if (items.length === 0 && !fits && course.units <= unitsPerTerm) {
-        skipTerm();
-        continue;
-      }
-
-      if (key) placed.set(key.stem, [...(placed.get(key.stem) ?? []), { step: key.step, term: terms.length }]);
       items.push({ kind: 'course', units: course.units, course });
-      if (key) sequenced.push(course.code);
-      break;
+      next++;
     }
-  }
 
-  if (items.length > 0) closeTerm();
+    // Then anything else that fits, so a term is not left part empty because
+    // the reservation was a round number.
+    fillGeUpTo(budget);
 
-  // Whatever general education is left needs terms of its own.
-  let drain = 0;
-  while (pendingGe.length > 0 && drain++ < pendingGe.length * 4 + 8) {
-    fillWithGe();
     if (items.length === 0) {
-      // Nothing fitted an empty term. A short summer is stepped over; an item
-      // larger than any term goes in alone rather than never being scheduled.
-      if (pendingGe[0].units <= unitsPerTerm) {
+      // Nothing fitted an empty term. Either this is a short summer and the
+      // next thing belongs after it, or one item is larger than any term and
+      // goes in alone: an honest oversized term beats a silent omission.
+      const upNext = next < queue.length ? queue[next].units : (pendingGe[0]?.units ?? 0);
+      if (upNext <= unitsPerTerm) {
         skipTerm();
         continue;
       }
-      items.push(pendingGe.shift()!);
+      if (next < queue.length && queue[next].units > unitsPerTerm) {
+        const course = queue[next++];
+        items.push({ kind: 'course', units: course.units, course });
+      } else if (pendingGe.length > 0) {
+        items.push(pendingGe.shift()!);
+      }
     }
+
     closeTerm();
   }
 
