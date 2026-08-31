@@ -105,3 +105,59 @@ export function betterByDoubleCount(
 
   return candidates[0] ?? null;
 }
+
+
+// ------------------------------------------------- scheduling the pattern
+//
+// General education is most of what a student takes, so a route showing only
+// major preparation understates a term badly. But ASSIST cannot say which
+// course a student will use for an area, and this tool will not pick one for
+// them: an area like Humanities has over a hundred certified courses at a
+// single college. So the area itself is scheduled, carrying the units the
+// pattern says it takes, and the student chooses the course.
+//
+// Areas already covered by the major-prep route are not scheduled again. That
+// is the whole point of the double counting: those courses are already in the
+// terms below as real courses.
+
+import type { GeStatus } from './ge';
+import type { ScheduleItem } from './schedule';
+
+// How the area's units split across the courses it takes. Cal-GETC Area 5 is
+// seven units over two courses because one of them carries a one-unit
+// laboratory, so it splits four and three rather than three and a half each.
+// The larger goes first, so a part-finished area reports the more expensive
+// remainder: overstating what is left is the safe direction.
+export function splitUnits(totalUnits: number, courses: number): number[] {
+  if (courses <= 0) return [];
+  const base = Math.floor(totalUnits / courses);
+  const remainder = totalUnits - base * courses;
+  return Array.from({ length: courses }, (_, i) => (i < remainder ? base + 1 : base));
+}
+
+export function geScheduleItems(status: GeStatus): ScheduleItem[] {
+  const items: ScheduleItem[] = [];
+
+  for (const area of status.areas) {
+    if (area.required === 0) continue;
+
+    // Already done, and already covered by a course in the route, both count.
+    // Scheduling an area the route already clears would be telling a student
+    // to take a course twice.
+    const outstanding = area.required - area.done.length - area.planned.length;
+    if (outstanding <= 0) continue;
+
+    const units = splitUnits(area.semesterUnits, area.required);
+    for (let i = 0; i < outstanding; i++) {
+      items.push({
+        kind: 'area',
+        units: units[i] ?? 3,
+        areaId: area.id,
+        label: area.label,
+        pattern: status.pattern,
+      });
+    }
+  }
+
+  return items;
+}

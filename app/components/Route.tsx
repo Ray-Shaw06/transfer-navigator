@@ -1,4 +1,4 @@
-import type { Schedule } from '../../src/planner/schedule';
+import type { Schedule, ScheduleItem } from '../../src/planner/schedule';
 import { areasCleared, type DoubleCountIndex } from '../../src/planner/doubleCount';
 import type { Course } from '../../src/parser/types';
 
@@ -22,13 +22,27 @@ export function RouteView({
   const doubled = schedule.terms
     .flatMap((t) => t.courses)
     .filter((c) => areasCleared(doubleCount, c.code).length > 0).length;
+  const areaSlots = schedule.terms
+    .flatMap((t) => t.items)
+    .filter((i) => i.kind === 'area').length;
 
   return (
     <>
-      {doubled > 0 && (
+      {(doubled > 0 || areaSlots > 0) && (
         <p className="route-note">
-          <b>{doubled}</b> of these also clear a {pattern} area, marked on the course. You are not
-          taking them twice.
+          {doubled > 0 && (
+            <>
+              <b>{doubled}</b> of these courses also clear a {pattern} area, marked on the course.
+              You are not taking them twice.{' '}
+            </>
+          )}
+          {areaSlots > 0 && (
+            <>
+              The <b>{areaSlots}</b> outlined {areaSlots === 1 ? 'slot is' : 'slots are'} general
+              education still to choose: ASSIST does not say which course fills an area, so the
+              area is scheduled at the units it takes and you pick the course.
+            </>
+          )}
         </p>
       )}
       <div className="route">
@@ -57,7 +71,20 @@ export function RouteView({
                 {over ? ' · over a normal load' : ''}
               </div>
               <div className="term-courses">
-                {term.courses.map((c: Course) => {
+                {term.items.map((item: ScheduleItem) => {
+                  // An area is not a course. It carries the units the pattern
+                  // says it takes, and the student picks what fills it.
+                  if (item.kind === 'area') {
+                    return (
+                      <span className="area-chip" key={`area-${item.areaId}-${item.units}`}>
+                        <span className="area-mark">{item.areaId}</span>
+                        <span>{item.label}</span>
+                        <u>{item.units}u</u>
+                      </span>
+                    );
+                  }
+
+                  const c = item.course;
                   // A course doing double duty is the best thing on the
                   // route, so it is marked where the student reads the plan
                   // rather than only counted in the panel below.

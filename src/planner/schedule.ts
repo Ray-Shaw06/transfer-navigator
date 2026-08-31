@@ -17,9 +17,22 @@ export type TermKind = 'Fall' | 'Spring' | 'Summer';
 // Fall 2026.
 export type TermRef = { kind: TermKind; year: number };
 
+// A term holds two kinds of thing. ASSIST names the exact course that
+// satisfies a major requirement, so those are scheduled as courses. It cannot
+// do that for general education: an area like Humanities has a hundred and
+// more certified courses at a single college and nothing says which one a
+// student will take. Those are scheduled as the area, carrying the units the
+// pattern says it takes, and the student picks the course.
+export type ScheduleItem =
+  | { kind: 'course'; units: number; course: Course }
+  | { kind: 'area'; units: number; areaId: string; label: string; pattern: string };
+
 export type ScheduledTerm = {
   ref: TermRef;
   label: string;
+  items: ScheduleItem[];
+  // The course items alone, in order. Kept because most of what reads a term
+  // wants the real courses and should not have to filter for them.
   courses: Course[];
   units: number;
   // Courses held back from an earlier term only because they look like a
@@ -98,7 +111,7 @@ export function sequenceKey(code: string): SequenceKey | null {
   return { stem: `${prefix.trim().toUpperCase()} ${digits}`, step };
 }
 
-const total = (courses: Course[]) => courses.reduce((sum, c) => sum + c.units, 0);
+const total = (items: { units: number }[]) => items.reduce((sum, i) => sum + i.units, 0);
 
 export type ScheduleOptions = {
   start: TermRef;
@@ -108,7 +121,14 @@ export type ScheduleOptions = {
   target?: TermRef | null;
 };
 
-export function buildSchedule(groups: AndGroup[], options: ScheduleOptions): Schedule {
+export function buildSchedule(
+  groups: AndGroup[],
+  options: ScheduleOptions,
+  // General education still to be scheduled, in the order it should be taken.
+  // Filled into whatever room each term has left after major preparation,
+  // because major preparation is the part with sequences to respect.
+  generalEducation: ScheduleItem[] = [],
+): Schedule {
   const { start, unitsPerTerm, includeSummer, target = null } = options;
   // Summer terms are short. Half a normal load, at least one course's worth,
   // unless the caller states otherwise.
@@ -118,17 +138,41 @@ export function buildSchedule(groups: AndGroup[], options: ScheduleOptions): Sch
 
   const terms: ScheduledTerm[] = [];
   let ref = start;
-  let courses: Course[] = [];
+  let items: ScheduleItem[] = [];
   let sequenced: string[] = [];
+  const pendingGe = [...generalEducation];
   // For each stem, which sequence step was placed in which term. A course
   // clashes only with a DIFFERENT step of the same stem in the same term, so
   // a lecture and its lab still sit together.
   const placed = new Map<string, { step: string; term: number }[]>();
 
+  // Top up the current term with whatever general education still fits. Walks
+  // the list rather than stopping at the first thing too big, so a three-unit
+  // area can still land in a term with three units left even when a
+  // four-unit one is next in line.
+  const fillWithGe = () => {
+    for (let i = 0; i < pendingGe.length; ) {
+      if (total(items) + pendingGe[i].units <= budgetFor(ref)) {
+        items.push(pendingGe[i]);
+        pendingGe.splice(i, 1);
+      } else {
+        i++;
+      }
+    }
+  };
+
   const closeTerm = () => {
-    terms.push({ ref, label: termLabel(ref), courses, units: total(courses), sequenced });
+    fillWithGe();
+    terms.push({
+      ref,
+      label: termLabel(ref),
+      items,
+      courses: items.filter((i) => i.kind === 'course').map((i) => i.course),
+      units: total(items),
+      sequenced,
+    });
     ref = nextTerm(ref, includeSummer);
-    courses = [];
+    items = [];
     sequenced = [];
   };
 
@@ -156,9 +200,9 @@ export function buildSchedule(groups: AndGroup[], options: ScheduleOptions): Sch
       const clashes =
         key !== null &&
         (placed.get(key.stem) ?? []).some((p) => p.term === terms.length && p.step !== key.step);
-      const fits = total(courses) + course.units <= budgetFor(ref);
+      const fits = total(items) + course.units <= budgetFor(ref);
 
-      if (courses.length > 0 && (clashes || !fits)) {
+      if (items.length > 0 && (clashes || !fits)) {
         closeTerm();
         continue;
       }
@@ -167,19 +211,35 @@ export function buildSchedule(groups: AndGroup[], options: ScheduleOptions): Sch
       // a normal term, this is a short summer and the course belongs after
       // it. If it fits nowhere, it goes here alone rather than never being
       // scheduled at all: an honest oversized term beats a silent omission.
-      if (courses.length === 0 && !fits && course.units <= unitsPerTerm) {
+      if (items.length === 0 && !fits && course.units <= unitsPerTerm) {
         skipTerm();
         continue;
       }
 
       if (key) placed.set(key.stem, [...(placed.get(key.stem) ?? []), { step: key.step, term: terms.length }]);
-      courses.push(course);
+      items.push({ kind: 'course', units: course.units, course });
       if (key) sequenced.push(course.code);
       break;
     }
   }
 
-  if (courses.length > 0) closeTerm();
+  if (items.length > 0) closeTerm();
+
+  // Whatever general education is left needs terms of its own.
+  let drain = 0;
+  while (pendingGe.length > 0 && drain++ < pendingGe.length * 4 + 8) {
+    fillWithGe();
+    if (items.length === 0) {
+      // Nothing fitted an empty term. A short summer is stepped over; an item
+      // larger than any term goes in alone rather than never being scheduled.
+      if (pendingGe[0].units <= unitsPerTerm) {
+        skipTerm();
+        continue;
+      }
+      items.push(pendingGe.shift()!);
+    }
+    closeTerm();
+  }
 
   // Only a term that actually held something back deserves the caveat. A
   // course whose stem has just one step in the whole plan was never split, so

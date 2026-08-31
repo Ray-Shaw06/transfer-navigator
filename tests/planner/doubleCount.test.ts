@@ -4,8 +4,11 @@ import {
   areasCleared,
   betterByDoubleCount,
   buildDoubleCountIndex,
+  geScheduleItems,
   optionAreas,
+  splitUnits,
 } from '../../src/planner/doubleCount';
+import { geStatus } from '../../src/planner/ge';
 import { patternFor } from '../../src/planner/patterns';
 import type { AssistTransferabilityList } from '../../src/assist/types';
 import type { AndGroup } from '../../src/parser/groups';
@@ -114,5 +117,54 @@ describe('betterByDoubleCount', () => {
     const empty = buildDoubleCountIndex(null, patternFor('CALGETC'), null);
     expect(betterByDoubleCount(empty, [option(course('A 1', 3))], [course('A 1', 3)])).toBeNull();
     expect(areasCleared(empty, 'MATH 006A')).toEqual([]);
+  });
+});
+
+describe('splitUnits', () => {
+  it('splits evenly when it divides', () => {
+    expect(splitUnits(6, 2)).toEqual([3, 3]);
+    expect(splitUnits(9, 3)).toEqual([3, 3, 3]);
+  });
+
+  it('gives the remainder to the first, which is the laboratory course', () => {
+    // Cal-GETC Area 5 is seven units over two courses because one carries a
+    // one-unit lab. Four then three, not three and a half each.
+    expect(splitUnits(7, 2)).toEqual([4, 3]);
+  });
+
+  it('has nothing to split for an area that takes no courses', () => {
+    expect(splitUnits(0, 0)).toEqual([]);
+  });
+});
+
+describe('geScheduleItems', () => {
+  const status = geStatus(ge, patternFor('CALGETC'), null, new Set(), []);
+
+  it('schedules every outstanding area at the units the pattern states', () => {
+    const items = geScheduleItems(status);
+    const area5 = items.filter((i) => i.kind === 'area' && i.areaId === '5');
+    expect(area5.map((i) => i.units)).toEqual([4, 3]);
+    // Eleven courses in the pattern, none done.
+    expect(items).toHaveLength(11);
+  });
+
+  it('does not schedule an area the route already covers', () => {
+    // MATH 006A is in the route and clears Area 2, so Area 2 must not appear
+    // again as something to take: that is the double counting working.
+    const covered = geStatus(ge, patternFor('CALGETC'), null, new Set(), [
+      { code: 'MATH 006A', title: 'Calculus', units: 3 },
+    ]);
+    expect(geScheduleItems(covered).some((i) => i.kind === 'area' && i.areaId === '2')).toBe(false);
+  });
+
+  it('does not schedule an area already finished', () => {
+    const done = geStatus(ge, patternFor('CALGETC'), null, new Set(['MATH 006A']), []);
+    expect(geScheduleItems(done).some((i) => i.kind === 'area' && i.areaId === '2')).toBe(false);
+  });
+
+  it('schedules only what is left of a part-finished area', () => {
+    const partial = geStatus(ge, patternFor('CALGETC'), null, new Set(['HIST 001']), []);
+    const area3 = geScheduleItems(partial).filter((i) => i.kind === 'area' && i.areaId === '3');
+    expect(area3).toHaveLength(1);
   });
 });

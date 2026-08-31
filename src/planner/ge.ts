@@ -29,6 +29,9 @@ import type { Course } from '../parser/types';
 export type AreaCoverage = {
   id: string;
   label: string;
+  // Semester units the pattern says the area takes in full, used to weight
+  // the area when it is scheduled.
+  semesterUnits: number;
   // Courses the pattern asks for here. Zero when the requirement is not
   // coursework, or when the pattern's counts could not be sourced.
   required: number;
@@ -170,6 +173,7 @@ export function geStatus(
         {
           id: rule.id,
           label: rule.label,
+          semesterUnits: rule.semesterUnits,
           required: rule.notCoursework ? 0 : rule.courses,
           offered,
           done: [],

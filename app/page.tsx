@@ -6,7 +6,7 @@ import type { Agreement } from '../src/parser/agreement';
 import { buildPlan } from '../src/planner/plan';
 import { buildSchedule, currentTerm } from '../src/planner/schedule';
 import { geStatus } from '../src/planner/ge';
-import { buildDoubleCountIndex } from '../src/planner/doubleCount';
+import { buildDoubleCountIndex, geScheduleItems } from '../src/planner/doubleCount';
 import {
   PATTERNS,
   availableIn,
@@ -149,18 +149,6 @@ export default function Home() {
     [agreement, completed],
   );
 
-  const schedule = useMemo(
-    () =>
-      plan
-        ? buildSchedule(plan.remainingGroups, {
-            start: settings.start,
-            unitsPerTerm: settings.unitsPerTerm,
-            includeSummer: settings.includeSummer,
-            target: settings.target,
-          })
-        : null,
-    [plan, settings],
-  );
 
   // The Cal-GETC courses this college certifies, as a tickable list. Without
   // it the pattern's counts would only ever move for courses that happen to
@@ -189,6 +177,25 @@ export default function Home() {
       plan.remainingGroups.flatMap((g) => g.courses),
     );
   }, [ge, plan, completed, activePattern, destination]);
+
+  const schedule = useMemo(
+    () =>
+      plan
+        ? buildSchedule(
+            plan.remainingGroups,
+            {
+              start: settings.start,
+              unitsPerTerm: settings.unitsPerTerm,
+              includeSummer: settings.includeSummer,
+              target: settings.target,
+            },
+            // General education fills whatever room each term has left after
+            // major preparation, which is the part with sequences to respect.
+            geView ? geScheduleItems(geView) : [],
+          )
+        : null,
+    [plan, settings, geView],
+  );
 
   // Mirror the plan into the address bar. replaceState rather than pushState:
   // ticking a course is not a navigation, and filling the back button with
