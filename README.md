@@ -254,6 +254,14 @@ section, a receiving-side OR, and a section spanning a page break.
 | `app/` | The three pages, shared data hooks in `app/lib/` |
 | `docs/plans/` | The plans this was built from, including what was left out |
 
+## Write-up
+
+[Reading ASSIST](docs/reading-assist.md) covers the parts of this that are
+actually hard: why no CORS header forces a per-user rate limit to become the
+whole site's budget, the antiforgery handshake, why the widest gap is the wrong
+place to split an agreement's columns, and how a parser is tested against data
+the repository is not allowed to carry.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).
