@@ -66,8 +66,11 @@ export function RouteView({
             </div>
             <div className="term-body">
               <div className="term-load">
-                {term.units} units · {term.courses.length}{' '}
-                {term.courses.length === 1 ? 'course' : 'courses'}
+                {/* Counted over items, not courses: an area slot is one
+                    course the student will take, it just does not have a name
+                    yet. Counting only the named ones reads as an empty term. */}
+                {term.units} units · {term.items.length}{' '}
+                {term.items.length === 1 ? 'course' : 'courses'}
                 {over ? ' · over a normal load' : ''}
               </div>
               <div className="term-courses">
