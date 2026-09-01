@@ -58,6 +58,10 @@ export type Pattern = {
   // The four areas of this pattern that CSU admission itself turns on. Only
   // read for a CSU-bound student; see CSU_GATE below.
   csuGate?: AdmissionGate;
+  // The areas of this pattern that UC's 7-course pattern asks for. Only read
+  // for a UC-bound student; see UC_GATE below. Undefined for CSU GE-Breadth,
+  // which UC does not accept, so nothing on it maps to a UC requirement.
+  ucGate?: UcPattern;
 };
 
 export type PatternKey = 'CALGETC' | 'IGETC' | 'CSUGE';
@@ -138,6 +142,69 @@ export const CSU_GATE = {
   adt: 'An Associate Degree for Transfer earned at a California community college guarantees admission with junior status to the CSU, though not to any particular campus or program, and takes priority over other community college transfers.',
 } as const;
 
+// ------------------------------------------------- what UC admission asks for
+//
+// The CSU gate above names four courses. UC states its floor as a pattern of
+// seven, and the difference matters to a student who is short of time: the two
+// systems ask for different things, and neither asks for a finished general
+// education pattern.
+//
+// Quoted from UC's own statement of the basic transfer requirements:
+// https://admission.universityofcalifornia.edu/admission-requirements/transfer-requirements/preparing-to-transfer/basic-requirements.html
+//
+//   "Complete the following 7-course pattern by the end of the spring term
+//    prior to fall enrollment at UC.
+//      Two transferable courses in English composition (UC-E)
+//      One transferable course in mathematical concepts and quantitative
+//      reasoning (UC-M)
+//      Four transferable college courses chosen from at least two of the
+//      following subject areas: arts and humanities (UC-H), social and
+//      behavioral sciences (UC-B), physical and biological sciences (UC-S)"
+//
+// The same page states the other half of the floor, none of which this tool
+// checks, and the sentence that this whole feature turns on: of the general
+// education requirements, "You don't need to complete these requirements
+// before you transfer."
+//
+// Mapping the pattern onto an area list is the one step that is a reading
+// rather than a quote, so it is done per pattern and written out below. It is
+// a safe reading in both cases: the two composition areas of Cal-GETC and
+// IGETC are the two UC-E courses, their mathematics area is UC-M, and their
+// three breadth areas are UC-H, UC-B and UC-S in that order. The areas that
+// fall outside the pattern are the interesting result: Ethnic Studies and, on
+// IGETC, Language Other Than English are certification, not admission.
+
+// A quota met by courses drawn from several areas at once, which is how UC
+// states the breadth half of the pattern. Not the same demand as completing
+// any of those areas.
+export type BreadthRule = { areas: string[]; courses: number; leastAreas: number };
+
+export type UcPattern = {
+  // Area ids that must be completed in full.
+  required: string[];
+  breadth: BreadthRule;
+};
+
+export const UC_GATE = {
+  name: 'the 7-course pattern',
+  grade: 'C or better',
+  citation: 'UC transfer admission requirements',
+  citationUrl:
+    'https://admission.universityofcalifornia.edu/admission-requirements/transfer-requirements/preparing-to-transfer/basic-requirements.html',
+  minimums: [
+    'at least 60 semester (90 quarter) units of UC-transferable credit, of which no more than 14 semester (21 quarter) units may be pass or credit grades',
+    'a grade point average of 2.4 or better in UC-transferable courses, or 2.8 if you are not a California resident',
+    'good academic standing at the last college attended',
+    'the required or recommended courses for your intended major, at the minimum grades',
+  ],
+  // The line that makes deferring the rest of a pattern a real option rather
+  // than this tool's own idea.
+  certification:
+    "UC states that general education requirements do not have to be finished before you transfer, and that completing IGETC or Cal-GETC may already satisfy the 7-course pattern. Certification is all or nothing, so a pattern left part-done certifies nothing: you would complete the campus's own general education requirements after you transfer instead.",
+  selection:
+    'Meeting the pattern makes an application eligible, not competitive. Campuses and majors screen on major preparation and on a higher grade point average than the minimum.',
+} as const;
+
 // ---------------------------------------------------------------- Cal-GETC
 //
 // Cal-GETC Standards, Version 1.4 (July 2026), section 2, "Areas of
@@ -169,6 +236,13 @@ const CALGETC: Pattern = {
       { id: 'critical', label: 'Critical thinking and composition', code: '1B' },
       { id: 'math', label: 'Mathematical concepts and quantitative reasoning', code: '2' },
     ],
+  },
+  // 1A and 1B are the two UC-E composition courses; Area 2 is UC-M. Area 1C is
+  // CSU's oral communication and Area 6 is Ethnic Studies, and neither appears
+  // in UC's pattern.
+  ucGate: {
+    required: ['1A', '1B', '2'],
+    breadth: { areas: ['3', '4', '5'], courses: 4, leastAreas: 2 },
   },
   areas: [
     { id: '1A', label: 'English Composition', courses: 1, semesterUnits: 3, from: ['1A'] },
@@ -259,6 +333,13 @@ const IGETC: Pattern = {
       { id: 'critical', label: 'Critical thinking', code: '1B' },
       { id: 'math', label: 'Mathematics or quantitative reasoning', code: '2A' },
     ],
+  },
+  // Same reading as Cal-GETC's, one area code apart: IGETC states mathematics
+  // as 2A. Area 6A, the language other than English, is IGETC's own UC
+  // requirement and not part of the 7-course pattern; nor is Area 7.
+  ucGate: {
+    required: ['1A', '1B', '2A'],
+    breadth: { areas: ['3', '4', '5'], courses: 4, leastAreas: 2 },
   },
   areas: [
     { id: '1A', label: 'English Composition', courses: 1, semesterUnits: 3, from: ['1A'] },

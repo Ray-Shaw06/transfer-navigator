@@ -1,6 +1,6 @@
 import type { GeneralEducation } from '../assist/ge';
 import { normalizeCode } from './catalog';
-import { areasFor, type AreaRule, type Destination, type Pattern } from './patterns';
+import { areasFor, patternFor, type AreaRule, type Destination, type Pattern, type PatternKey } from './patterns';
 import type { AndGroup } from '../parser/groups';
 import type { Course } from '../parser/types';
 
@@ -122,6 +122,7 @@ export function betterByDoubleCount(
 
 import type { GeStatus } from './ge';
 import type { ScheduleItem } from './schedule';
+import { admissionNeeds } from './minimum';
 
 // How the area's units split across the courses it takes. Cal-GETC Area 5 is
 // seven units over two courses because one of them carries a one-unit
@@ -138,6 +139,15 @@ export function splitUnits(totalUnits: number, courses: number): number[] {
 export function geScheduleItems(status: GeStatus): ScheduleItem[] {
   const items: ScheduleItem[] = [];
 
+  // Which of these slots the destination's own admission rule asks for. The
+  // rest are certification: real work, but work neither system requires
+  // before the application. See minimum.ts.
+  const needs = admissionNeeds(
+    patternFor(status.patternKey as PatternKey),
+    status.destination,
+    status.areas,
+  );
+
   for (const area of status.areas) {
     if (area.required === 0) continue;
 
@@ -148,13 +158,19 @@ export function geScheduleItems(status: GeStatus): ScheduleItem[] {
     if (outstanding <= 0) continue;
 
     const units = splitUnits(area.semesterUnits, area.required);
+    // Critical slots come first within the area, so the one the gate needs is
+    // the one that gets a place when only part of an area fits.
+    const critical = needs.get(area.id);
     for (let i = 0; i < outstanding; i++) {
+      const admission = i < (critical?.count ?? 0);
       items.push({
         kind: 'area',
         units: units[i] ?? 3,
         areaId: area.id,
         label: area.label,
         pattern: status.pattern,
+        priority: admission ? 'admission' : 'certification',
+        ...(admission && critical?.need ? { need: critical.need } : {}),
       });
     }
   }

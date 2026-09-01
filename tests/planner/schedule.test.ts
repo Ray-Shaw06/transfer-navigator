@@ -6,6 +6,7 @@ import {
   sequenceKey,
   termIndex,
   termLabel,
+  type Priority,
 } from '../../src/planner/schedule';
 import type { AndGroup } from '../../src/parser/groups';
 
@@ -18,6 +19,15 @@ const group = (...courses: { code: string; title: string; units: number }[]): An
 const FALL_26 = { kind: 'Fall' as const, year: 2026 };
 
 const base = { start: FALL_26, unitsPerTerm: 15, includeSummer: false };
+
+const area = (id: string, units: number, priority: Priority = 'certification') => ({
+  kind: 'area' as const,
+  units,
+  areaId: id,
+  label: `Area ${id}`,
+  pattern: 'Cal-GETC',
+  priority,
+});
 
 describe('term arithmetic', () => {
   it('runs Fall into the next calendar year', () => {
@@ -200,14 +210,6 @@ describe('buildSchedule', () => {
 });
 
 describe('buildSchedule with general education', () => {
-  const area = (id: string, units: number) => ({
-    kind: 'area' as const,
-    units,
-    areaId: id,
-    label: `Area ${id}`,
-    pattern: 'Cal-GETC',
-  });
-
   const kinds = (schedule: ReturnType<typeof buildSchedule>) =>
     schedule.terms.map((t) => t.items.map((i) => (i.kind === 'course' ? 'C' : 'G')).join(''));
 
@@ -291,8 +293,8 @@ describe('buildSchedule with general education', () => {
       [group(course('CS 003B', 3), course('CS 033', 3), course('CS 003BL', 1))],
       { start: FALL_26, unitsPerTerm: 12, includeSummer: false },
       [
-        { kind: 'area' as const, units: 3, areaId: '1A', label: 'Area 1A', pattern: 'Cal-GETC' },
-        { kind: 'area' as const, units: 3, areaId: '1B', label: 'Area 1B', pattern: 'Cal-GETC' },
+        { kind: 'area' as const, units: 3, areaId: '1A', label: 'Area 1A', pattern: 'Cal-GETC', priority: 'certification' as const },
+        { kind: 'area' as const, units: 3, areaId: '1B', label: 'Area 1B', pattern: 'Cal-GETC', priority: 'certification' as const },
       ],
     );
 
@@ -303,3 +305,148 @@ describe('buildSchedule with general education', () => {
   });
 });
 
+
+describe('a target that cannot hold everything', () => {
+  const FALL_28 = { kind: 'Fall' as const, year: 2028 };
+  // Fall 26, Spring 27, Fall 27, Spring 28, Fall 28: five terms at 9 units is
+  // 45, so a plan larger than that has to give something up.
+  const tight = { start: FALL_26, unitsPerTerm: 9, includeSummer: false, target: FALL_28 };
+
+  const majorPrep = [
+    group(course('AAA 1', 3)),
+    group(course('AAA 2', 3)),
+    group(course('BBB 1', 3)),
+    group(course('BBB 2', 3)),
+    group(course('CCC 1', 3)),
+    group(course('CCC 2', 3)),
+  ];
+  // Six areas, three of them the ones admission turns on, interleaved rather
+  // than listed first. Real patterns are like this: Cal-GETC puts Oral
+  // Communication between the two composition areas and mathematics, and CSU
+  // GE-Breadth buries quantitative reasoning inside a three-course Area B.
+  // A pattern that happened to list the critical areas first would front-load
+  // them by accident and prove nothing.
+  const pattern = [
+    area('3', 3, 'certification'),
+    area('3b', 3, 'certification'),
+    area('4', 3, 'certification'),
+    area('4b', 3, 'certification'),
+    area('5', 3, 'certification'),
+    area('1A', 3, 'admission'),
+    area('5b', 3, 'certification'),
+    area('6', 3, 'certification'),
+    area('6b', 3, 'certification'),
+    area('7', 3, 'certification'),
+    area('1B', 3, 'admission'),
+    area('2', 3, 'admission'),
+  ];
+
+  const late = (s: ReturnType<typeof buildSchedule>) =>
+    s.terms.filter((t) => termIndex(t.ref) > termIndex(FALL_28)).flatMap((t) => t.items);
+
+  it('puts everything admission turns on inside the target and the rest after', () => {
+    const schedule = buildSchedule(majorPrep, tight, pattern);
+
+    // 18 units of major preparation plus 9 of admission general education is
+    // 27, which is three terms of 9. The 27 units of certification behind it
+    // do not fit before the target, and do not have to.
+    expect(schedule.transferByTarget).toBe(true);
+    expect(schedule.meetsTarget).toBe(false);
+    expect(late(schedule).every((i) => i.priority === 'certification')).toBe(true);
+  });
+
+  it('is the target that rescues it, not the order it was already in', () => {
+    // The same work with no term to aim at is scheduled in pattern order, and
+    // in pattern order the courses admission turns on land after Fall 2028.
+    // This is the whole feature in one comparison: naming a target changes
+    // what gets a place, not just what gets a warning.
+    const unaimed = buildSchedule(majorPrep, { ...tight, target: null }, pattern);
+    expect(late(unaimed).some((i) => i.priority !== 'certification')).toBe(true);
+
+    const aimed = buildSchedule(majorPrep, tight, pattern);
+    expect(aimed.reordered).toBe(true);
+    expect(late(aimed).some((i) => i.priority !== 'certification')).toBe(false);
+  });
+
+  it('reports what fell past the target rather than only that something did', () => {
+    const schedule = buildSchedule(majorPrep, tight, pattern);
+    expect(schedule.afterTarget).toEqual(late(schedule));
+    expect(schedule.overflowUnits).toBe(
+      schedule.afterTarget.reduce((sum, i) => sum + i.units, 0),
+    );
+  });
+
+  it('says so plainly when even the minimum does not fit', () => {
+    // Three times the major preparation, which is the half that cannot be
+    // deferred, so no amount of reordering rescues the target.
+    const schedule = buildSchedule(
+      [...majorPrep, ...majorPrep, ...majorPrep],
+      tight,
+      pattern,
+    );
+    expect(schedule.transferByTarget).toBe(false);
+    expect(late(schedule).some((i) => i.priority !== 'certification')).toBe(true);
+  });
+
+  it('leaves a plan that fits exactly as it was', () => {
+    // The even mix is the better plan whenever both are on time, so nothing
+    // is reordered when nothing needs to be.
+    const roomy = { start: FALL_26, unitsPerTerm: 15, includeSummer: false, target: FALL_28 };
+    const schedule = buildSchedule(majorPrep, roomy, pattern);
+    expect(schedule.meetsTarget).toBe(true);
+    expect(schedule.transferByTarget).toBe(true);
+    expect(schedule.reordered).toBe(false);
+    expect(schedule.afterTarget).toEqual([]);
+  });
+
+  it('does not reorder a plan with no target to reorder against', () => {
+    const schedule = buildSchedule(majorPrep, { ...tight, target: null }, pattern);
+    expect(schedule.transferByTarget).toBeNull();
+    expect(schedule.afterTarget).toEqual([]);
+    expect(schedule.reordered).toBe(false);
+  });
+
+  it('never buys the target by dropping major preparation', () => {
+    // Major preparation is the agreement, which is the thing this tool reads.
+    // Deferring it would meet the target by answering a different question.
+    const schedule = buildSchedule(majorPrep, tight, pattern);
+    const scheduled = schedule.terms.flatMap((t) => t.courses).map((c) => c.code);
+    expect(scheduled).toEqual(['AAA 1', 'AAA 2', 'BBB 1', 'BBB 2', 'CCC 1', 'CCC 2']);
+    expect(late(schedule).some((i) => i.kind === 'course')).toBe(false);
+  });
+
+  it('takes no more terms overall than it would have without reordering', () => {
+    // Moving work about must not add work. The finish date is allowed to stay
+    // where it was; it is not allowed to get worse.
+    const reordered = buildSchedule(majorPrep, tight, pattern);
+    const plain = buildSchedule(majorPrep, { ...tight, target: null }, pattern);
+    expect(reordered.totalUnits).toBe(plain.totalUnits);
+    expect(reordered.terms.length).toBeLessThanOrEqual(plain.terms.length);
+  });
+});
+
+describe('when the target can be moved rather than met', () => {
+  const FALL_28 = { kind: 'Fall' as const, year: 2028 };
+
+  it('says which term the minimum actually lands in, not which term the pattern does', () => {
+    // A student told only that the plan runs to Spring 2030 cannot tell how
+    // far the target has to move. The answer they need is the term the work
+    // that cannot wait finishes in, which is earlier and is the one that
+    // decides whether transferring a term later is enough.
+    const schedule = buildSchedule(
+      [group(course('AAA 1', 3)), group(course('AAA 2', 3))],
+      { start: FALL_26, unitsPerTerm: 3, includeSummer: false, target: FALL_28 },
+      [area('1A', 3, 'admission'), area('3', 3, 'certification'), area('4', 3, 'certification')],
+    );
+
+    // Three units a term: major, major, admission, then the two that can wait.
+    expect(termLabel(schedule.readyToTransfer!)).toBe('Fall 2027');
+    expect(termLabel(schedule.readyAfter!)).toBe('Fall 2028');
+  });
+
+  it('leaves it null when there is nothing that has to be done first', () => {
+    const schedule = buildSchedule([], base, [area('3', 3, 'certification')]);
+    expect(schedule.readyToTransfer).toBeNull();
+    expect(schedule.readyAfter).not.toBeNull();
+  });
+});

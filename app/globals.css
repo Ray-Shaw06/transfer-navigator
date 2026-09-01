@@ -413,6 +413,52 @@ input::placeholder { color: var(--ink-3); }
 
 .term:last-of-type { padding-bottom: 0.75rem; }
 
+/* ---- the line a student is actually planning against
+
+   When the plan runs past the term they named but everything admission turns
+   on still fits inside it, the route splits rather than simply running long.
+   Drawn as a bar across the rail, the way the terminus is, because for the
+   question they asked this IS the end of the line: what sits below is the
+   rest of a general education pattern, which neither system requires before
+   transferring. */
+.route-split {
+  position: relative;
+  margin: 0.125rem 0 1.5rem 5.25rem;
+  padding-left: 1.0625rem;
+  display: grid;
+  gap: 0.3125rem;
+}
+
+.route-split::before {
+  content: '';
+  position: absolute;
+  left: -0.75rem;
+  top: 0.5rem;
+  width: 1.0625rem;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--signal);
+}
+
+.route-split b { font-weight: 620; color: var(--ink); }
+.route-split span {
+  color: var(--ink-2);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  max-width: 62ch;
+}
+
+/* Below the line the rail stops being the route. It is still drawn, because
+   this is still work with a term attached to it, but it is no longer the
+   thing being planned, so it drops to a plain rule and the term loses the
+   emphasis the ones above it carry. */
+.term[data-after='true']::before { background: var(--line-strong); opacity: 0.55; }
+.term[data-after='true'] .term-body::before { background: var(--line-strong); }
+.term[data-after='true'] .term-season,
+.term[data-after='true'] .term-year,
+.term[data-after='true'] .term-load { color: var(--ink-3); }
+
+
 .term-when { text-align: right; padding-top: 0.125rem; }
 
 .term-season { font-size: 0.9375rem; font-weight: 620; letter-spacing: -0.012em; }

@@ -342,6 +342,7 @@ export default function Home() {
                 unitsPerTerm={settings.unitsPerTerm}
                 doubleCount={doubleCount}
                 pattern={patternFor(activePattern).name}
+                target={settings.target}
               />
             </section>
           )}
