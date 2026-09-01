@@ -1,0 +1,14 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "layout-transition",
+        "value": "width var(--base) var(--ease)",
+        "createdAt": "2026-09-01T17:29:52.330Z",
+        "reason": "Claude: .ge-bar span is a progress pill with border-radius 999px; transform:scaleX distorts the rounded caps into ellipses, so width is the correct property here. Single small element, transitions once per user tick."
+      }
+    ]
+  }
+}
