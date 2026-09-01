@@ -304,15 +304,33 @@ input::placeholder { color: var(--ink-3); }
    the panels around it are the inputs and the evidence. Deeper ground, a
    heavier rule above it, and the only type on the page at this size. */
 .verdict {
+  position: relative;
   margin: 1.75rem 0;
-  padding: 1.5rem 1.625rem;
+  padding: 1.5rem var(--verdict-gutter);
   border-radius: var(--radius-lg);
   border: 1px solid var(--line-strong);
-  border-top: 3px solid var(--signal);
   background: var(--bg-deep);
   box-shadow: var(--shadow);
   display: grid;
   gap: 0.625rem;
+  --verdict-gutter: 1.625rem;
+  --verdict-rule: var(--signal);
+}
+
+/* The heavy rule this panel is ranked by, drawn inside the box and inset to
+   the same gutter as the text rather than run as a border-top. A 3px border
+   on a 14px radius tapers away into the side borders at both corners, so it
+   reads as a rule that got clipped instead of one that was placed. Inset, it
+   lines up with the sentence under it and keeps its full weight end to end. */
+.verdict::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: var(--verdict-gutter);
+  right: var(--verdict-gutter);
+  height: 3px;
+  border-radius: 0 0 3px 3px;
+  background: var(--verdict-rule);
 }
 
 .verdict-line {
@@ -326,13 +344,12 @@ input::placeholder { color: var(--ink-3); }
 .verdict-sub { color: var(--ink-2); font-size: 0.9375rem; max-width: 68ch; }
 
 /* Finished reads as settled: the ground itself, no colour shouting. */
-.verdict[data-tone='ready'] { border-top-color: var(--ink-3); }
+.verdict[data-tone='ready'] { --verdict-rule: var(--ink-3); }
 .verdict[data-tone='ready'] .verdict-line { color: var(--ink); }
 
 /* Nothing articulated is the one thing that must never be mistaken for done. */
 .verdict[data-tone='blocked'] {
   border-color: var(--signal);
-  border-top-width: 3px;
   background: var(--signal-soft);
 }
 .verdict[data-tone='blocked'] .verdict-line { color: var(--signal-ink); }
@@ -340,8 +357,8 @@ input::placeholder { color: var(--ink-3); }
 
 .verdict[data-tone='late'] {
   border-color: var(--caution);
-  border-top-color: var(--caution);
   background: var(--caution-soft);
+  --verdict-rule: var(--caution);
 }
 .verdict[data-tone='late'] .verdict-line { color: var(--caution); }
 .verdict[data-tone='late'] .verdict-sub { color: var(--ink); }
@@ -732,7 +749,7 @@ details.more[open] > summary::before { content: '–'; }
   .term, .terminus { grid-template-columns: 3.25rem 1fr; gap: 0.75rem; }
   .term::before { left: calc(3.25rem + 0.375rem - 1.5px); }
   .verdict-line { font-size: 1.25rem; }
-  .verdict { padding: 1.125rem 1.125rem; }
+  .verdict { --verdict-gutter: 1.125rem; padding: 1.125rem var(--verdict-gutter); }
 }
 
 /* ----------------------------------- theme toggle
