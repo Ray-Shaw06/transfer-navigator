@@ -885,6 +885,126 @@ details.more[open] > summary::before { content: '–'; }
   .subject-name { padding-top: 0; }
 }
 
+/* ----------------------------------- the Golden Four
+
+   Four areas that are admission rather than certification, for a CSU-bound
+   student only. It sits above the pattern it belongs to and outranks it, so it
+   gets the one device nothing else on the page uses: a full signal rule down
+   the leading edge, the way a statute is marked in a margin.
+
+   Once all four are done the rule goes quiet, like everything else finished
+   here. Done recedes. */
+
+.gate {
+  margin: 0 0 1.5rem;
+  padding: 1rem 1.125rem;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--signal);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.gate[data-met='true'] { border-left-color: var(--line-strong); }
+
+.gate-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.gate-head h4 {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 620;
+  color: var(--ink);
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+/* The nickname, not the claim. Students hear "Golden Four" from counsellors,
+   so it earns a place, but it is not what the regulation calls them. */
+.gate-head h4 em {
+  font-style: normal;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--ink-3);
+  letter-spacing: 0.02em;
+}
+
+.gate-lead {
+  margin: 0.5rem 0 0;
+  font-size: 0.875rem;
+  color: var(--ink-2);
+  max-width: 68ch;
+}
+
+.gate-lead b { color: var(--ink); font-weight: 620; }
+
+.gate-list { list-style: none; margin: 0.875rem 0 0; padding: 0; display: grid; gap: 0.25rem; }
+
+.gate-list li {
+  display: grid;
+  grid-template-columns: 2.5rem 1fr auto;
+  align-items: baseline;
+  gap: 0.75rem;
+  /* The transparent border is load-bearing: the open state below adds a real
+     one, and without a placeholder every other row would shift by a pixel. */
+  padding: 0.4375rem 0.5rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem;
+  background: var(--surface-2);
+}
+
+/* Only the unfinished ones carry the signal, and only when nothing is even
+   heading for them: a subject already in the route is underway, not owed.
+   Same border-plus-tint the requirement rows use for work still owed, so a
+   student reads it as the thing they have already learned it means. */
+.gate-list li[data-state='open'] { background: var(--row-todo); border-color: var(--signal); }
+
+.gate-code {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-weight: 620;
+  font-size: 0.8125rem;
+  color: var(--ink-3);
+}
+
+.gate-list li[data-state='open'] .gate-code { color: var(--signal-ink); }
+.gate-name { color: var(--ink); }
+.gate-course { color: var(--ink-3); font-size: 0.8125rem; text-align: right; }
+.gate-course b { color: var(--ink-2); font-weight: 620; }
+
+.gate-source { margin-top: 0.875rem; }
+
+.gate-source > summary {
+  cursor: pointer;
+  font-size: 0.8125rem;
+  color: var(--ink-3);
+  list-style-position: outside;
+}
+
+.gate-source > summary:hover { color: var(--signal-ink); }
+
+.gate-source-body { margin-top: 0.625rem; font-size: 0.8125rem; color: var(--ink-3); max-width: 72ch; }
+.gate-source-body p { margin: 0.625rem 0 0; }
+.gate-source-body ul { margin: 0.375rem 0 0; padding-left: 1.125rem; display: grid; gap: 0.25rem; }
+
+.gate-source-body blockquote {
+  margin: 0;
+  padding-left: 0.75rem;
+  border-left: 2px solid var(--line-strong);
+  color: var(--ink-2);
+}
+
+@media (max-width: 34rem) {
+  .gate-list li { grid-template-columns: 2.25rem 1fr; }
+  .gate-course { grid-column: 2; text-align: left; }
+}
+
 /* ----------------------------------- general education
 
    The overlap is the lede: a course that clears a major requirement and a

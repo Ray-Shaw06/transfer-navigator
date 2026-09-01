@@ -271,3 +271,124 @@ describe('progress against the ICAS standard', () => {
     expect(status([]).citation).toContain('Cal-GETC Standards 1.4');
   });
 });
+
+// ---------------------------------------------------- the Golden Four
+//
+// Four areas that decide CSU admission rather than certification. The point of
+// these tests is that the question "is the Quantitative Reasoning course done"
+// is not the same question as "is the area it lives in done", and on CSU
+// GE-Breadth it is not even asked at the same granularity.
+describe('the CSU admission gate', () => {
+  const calgetc = toGeneralEducation(
+    list([
+      { prefixCode: 'ENGL', courseNumber: '001A', areas: [['1A', 'English Composition']] },
+      { prefixCode: 'ENGL', courseNumber: '001B', areas: [['1B', 'Critical Thinking']] },
+      { prefixCode: 'COMM', courseNumber: '001', areas: [['1C', 'Oral Communication']] },
+      { prefixCode: 'MATH', courseNumber: '005A', areas: [['2', 'Maths']] },
+      { prefixCode: 'ART', courseNumber: '001', areas: [['3A', 'Arts']] },
+    ]),
+  );
+
+  const csuge = toGeneralEducation(
+    list([
+      { prefixCode: 'COMM', courseNumber: '001', areas: [['A1', 'Oral Communication']] },
+      { prefixCode: 'ENGL', courseNumber: '001A', areas: [['A2', 'Written Communication']] },
+      { prefixCode: 'PHIL', courseNumber: '005', areas: [['A3', 'Critical Thinking']] },
+      { prefixCode: 'PHYS', courseNumber: '001', areas: [['B1', 'Physical Science']] },
+      { prefixCode: 'BIO', courseNumber: '011', areas: [['B2', 'Life Science']] },
+      { prefixCode: 'MATH', courseNumber: '005A', areas: [['B4', 'Quantitative Reasoning']] },
+      { prefixCode: 'STAT', courseNumber: '010', areas: [['B4', 'Quantitative Reasoning']] },
+    ]),
+  );
+
+  const gate = (
+    ge: Parameters<typeof geStatus>[0],
+    key: 'CALGETC' | 'CSUGE' | 'IGETC',
+    destination: 'CSU' | 'UC' | null,
+    done: string[] = [],
+    planned: { code: string; title: string; units: number }[] = [],
+  ) => geStatus(ge, patternFor(key), destination, new Set(done), planned).gate;
+
+  it('is absent for anywhere that is not a CSU', () => {
+    // Saying "a CSU will not consider your application" to a UC-bound student
+    // would simply be false, so the gate is not built at all.
+    expect(gate(calgetc, 'CALGETC', 'UC')).toBeUndefined();
+    expect(gate(calgetc, 'CALGETC', null)).toBeUndefined();
+  });
+
+  it('names the four subjects in the regulation own words', () => {
+    const g = gate(calgetc, 'CALGETC', 'CSU')!;
+    expect(g.items.map((i) => i.code)).toEqual(['1A', '1C', '1B', '2']);
+    expect(g.items.map((i) => i.label)).toEqual([
+      'English composition',
+      'Oral communication',
+      'Critical thinking and composition',
+      'Mathematical concepts and quantitative reasoning',
+    ]);
+    expect(g.citation).toBe('5 CCR § 40803(a)');
+    expect(g.grade).toBe('C- or better');
+  });
+
+  it('quotes the clause that governs the pattern the student is on', () => {
+    // Cal-GETC students are admitted under (a)(1); the two older patterns are
+    // exactly the cohort (a)(2) describes as remaining in attendance.
+    expect(gate(calgetc, 'CALGETC', 'CSU')!.clause).toContain('fall term 2025, has completed');
+    expect(gate(csuge, 'CSUGE', 'CSU')!.clause).toContain('remain in attendance');
+  });
+
+  it('counts a finished course against the subject it was applied to', () => {
+    const g = gate(calgetc, 'CALGETC', 'CSU', ['ENGL 001A', 'MATH 005A'])!;
+    expect(g.doneCount).toBe(2);
+    expect(g.items.find((i) => i.id === 'composition')!.done?.code).toBe('ENGL 001A');
+    expect(g.items.find((i) => i.id === 'math')!.done?.code).toBe('MATH 005A');
+    expect(g.items.find((i) => i.id === 'oral')!.done).toBeNull();
+  });
+
+  it('separates a subject in the route from one that is finished', () => {
+    const g = gate(calgetc, 'CALGETC', 'CSU', [], [
+      { code: 'COMM 001', title: 'Public Speaking', units: 3 },
+    ])!;
+    const oral = g.items.find((i) => i.id === 'oral')!;
+    expect(oral.done).toBeNull();
+    expect(oral.planned?.code).toBe('COMM 001');
+    // Planned is not done: the count is what a campus would see today.
+    expect(g.doneCount).toBe(0);
+  });
+
+  it('says how many courses could fill a subject nothing has touched', () => {
+    const g = gate(csuge, 'CSUGE', 'CSU')!;
+    expect(g.items.find((i) => i.id === 'math')!.offered).toBe(2);
+    expect(g.items.find((i) => i.id === 'oral')!.offered).toBe(1);
+  });
+
+  it('reads Quantitative Reasoning at the subarea, not at Area B', () => {
+    // THE CASE THIS EXISTS FOR. On CSU GE-Breadth, B4 is one of three
+    // minimums inside Area B, so Area B is two thirds done either way and
+    // says nothing about which two. These two students look identical at the
+    // area level and are in completely different positions for admission.
+    const withMath = geStatus(csuge, patternFor('CSUGE'), 'CSU', new Set(['PHYS 001', 'MATH 005A']), []);
+    const withoutMath = geStatus(csuge, patternFor('CSUGE'), 'CSU', new Set(['PHYS 001', 'BIO 011']), []);
+
+    const areaB = (s: typeof withMath) => s.areas.find((a) => a.id === 'B')!;
+    expect(areaB(withMath).done.length).toBe(2);
+    expect(areaB(withoutMath).done.length).toBe(2);
+    expect(areaB(withMath).met).toBe(false);
+    expect(areaB(withoutMath).met).toBe(false);
+
+    expect(withMath.gate!.items.find((i) => i.id === 'math')!.done?.code).toBe('MATH 005A');
+    expect(withoutMath.gate!.items.find((i) => i.id === 'math')!.done).toBeNull();
+  });
+
+  it('uses each pattern own code for the same subject', () => {
+    expect(gate(calgetc, 'CALGETC', 'CSU')!.items.find((i) => i.id === 'math')!.code).toBe('2');
+    expect(gate(csuge, 'CSUGE', 'CSU')!.items.find((i) => i.id === 'math')!.code).toBe('B4');
+    expect(gate(calgetc, 'IGETC', 'CSU')!.items.find((i) => i.id === 'math')!.code).toBe('2A');
+  });
+
+  it('carries the rest of the subsection it does not check', () => {
+    const g = gate(calgetc, 'CALGETC', 'CSU')!;
+    expect(g.minimums.some((m) => m.includes('60 semester'))).toBe(true);
+    expect(g.minimums.some((m) => m.includes('2.0 or better'))).toBe(true);
+    expect(g.adt).toContain('Associate Degree for Transfer');
+  });
+});

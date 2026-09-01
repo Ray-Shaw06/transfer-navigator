@@ -419,7 +419,8 @@ export default function Home() {
           <div className="scope">
             <p>
               <b>What this covers.</b> Major preparation on this agreement, plus how it lands
-              against Cal-GETC.
+              against {patternFor(activePattern).name}
+              {destination === 'CSU' ? ', including the four courses CSU admission turns on' : ''}.
             </p>
             <p>
               <b>What it does not.</b> The minimum transferable units your campus asks for, GPA, and

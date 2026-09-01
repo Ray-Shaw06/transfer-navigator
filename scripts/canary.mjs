@@ -121,6 +121,63 @@ async function main() {
   const rejected = await fetch(`${BASE}/api/assist/ge?college=${college.id}&year=${geYear}&pattern=NOPE`);
   check('unknown pattern is refused', rejected.status === 400, `${rejected.status}`);
 
+  // 6. A CSU agreement specifically.
+  //
+  //    Everything above walks whichever partner came first, which in practice
+  //    is usually a UC. CSU agreements are published by different campuses on
+  //    a different schedule, and their section headings ("MAJOR REQUIRED", not
+  //    a numbered "Complete at least N") come out of a different template, so
+  //    a UC agreement mapping cleanly is not evidence that a CSU one does.
+  //    Derived like the rest: the CSU campus is whichever one this college
+  //    partners with, never a named campus.
+  const csuIds = new Set((catalog.campuses ?? []).filter((c) => c.system === 'CSU').map((c) => c.id));
+  const csu = (partners ?? []).find((p) => csuIds.has(p.id) && p.years?.length > 0);
+  check('college partners with a CSU', Boolean(csu), `${csuIds.size} CSU campuses in the catalog`);
+
+  if (csu) {
+    const { majors: csuMajors } = await getJson(
+      `/api/assist/majors?sending=${college.id}&receiving=${csu.id}&year=${csu.years[0]}`,
+    );
+    check('CSU: majors for the pair', csuMajors?.length >= 1, `${csuMajors?.length}`);
+
+    if (csuMajors?.[0]) {
+      const { agreement: csuAgreement } = await getJson(
+        `/api/assist/agreement?key=${encodeURIComponent(csuMajors[0].key)}`,
+      );
+      check('CSU: agreement has requirements', csuAgreement?.rows?.length >= 1, `${csuAgreement?.rows?.length} rows`);
+      check(
+        'CSU: agreement is sectioned',
+        csuAgreement?.sections?.length >= 1,
+        `${csuAgreement?.sections?.length} sections`,
+      );
+      check(
+        'CSU: section rules are ones the planner knows',
+        (csuAgreement?.sections ?? []).every((s) =>
+          ['all', 'choose', 'choose_units', 'choose_route', 'advisory'].includes(s.rule?.kind),
+        ),
+        (csuAgreement?.sections ?? []).map((s) => s.rule?.kind).join(','),
+      );
+      // At least one row a student can act on. An agreement that mapped to
+      // nothing but not_articulated would pass every check above and still be
+      // useless, which is the failure this is really watching for.
+      check(
+        'CSU: agreement articulates something',
+        (csuAgreement?.rows ?? []).some((r) => r.sending?.kind === 'options'),
+      );
+    }
+  }
+
+  // 7. The four areas CSU admission turns on have to exist in the pattern
+  //    lists, or the gate renders four empty subjects and tells a student
+  //    nothing. Checked per pattern because each names them differently.
+  const gateCodes = { CALGETC: ['1A', '1B', '1C', '2'], IGETC: ['1A', '1B', '1C', '2A'], CSUGE: ['A1', 'A2', 'A3', 'B4'] };
+  for (const [key, codes] of Object.entries(gateCodes)) {
+    const { ge } = await getJson(`/api/assist/ge?college=${college.id}&year=${geYear}&pattern=${key}`);
+    const offered = new Set((ge?.byCourse ?? []).flatMap((c) => c.areas ?? []));
+    const missing = codes.filter((c) => !offered.has(c));
+    check(`${key}: the four admission areas have courses`, missing.length === 0, missing.join(',') || 'all four');
+  }
+
   console.log(notes.join('\n'));
   if (failures.length > 0) {
     console.error(`\n${failures.length} check(s) failed:\n${failures.join('\n')}`);
