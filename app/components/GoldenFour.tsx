@@ -16,7 +16,7 @@ export function GoldenFour({ gate }: { gate: GateStatus }) {
   const met = gate.doneCount === gate.items.length;
 
   return (
-    <section className="gate" data-met={met} aria-labelledby="gate-head">
+    <section className="gate" aria-labelledby="gate-head">
       <div className="gate-head">
         <h4 id="gate-head">
           The four that decide admission

@@ -892,19 +892,18 @@ details.more[open] > summary::before { content: '–'; }
    gets the one device nothing else on the page uses: a full signal rule down
    the leading edge, the way a statute is marked in a margin.
 
-   Once all four are done the rule goes quiet, like everything else finished
-   here. Done recedes. */
+   It outranks the pattern it sits above, and it says so the way the verdict
+   block already does: by dropping to the deeper ground rather than by wearing
+   an accent stripe. The signal stays where it means something, on the one
+   subject still owed. */
 
 .gate {
   margin: 0 0 1.5rem;
   padding: 1rem 1.125rem;
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--signal);
+  border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm);
-  background: var(--surface);
+  background: var(--bg-deep);
 }
-
-.gate[data-met='true'] { border-left-color: var(--line-strong); }
 
 .gate-head {
   display: flex;
