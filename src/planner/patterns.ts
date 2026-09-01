@@ -55,9 +55,88 @@ export type Pattern = {
   // A course carrying this area code also carries a laboratory. Cal-GETC and
   // IGETC both attach it to an Area 5 course rather than making it a course.
   labArea?: string;
+  // The four areas of this pattern that CSU admission itself turns on. Only
+  // read for a CSU-bound student; see CSU_GATE below.
+  csuGate?: AdmissionGate;
 };
 
 export type PatternKey = 'CALGETC' | 'IGETC' | 'CSUGE';
+
+// -------------------------------------------------------- the Golden Four
+//
+// Four of a pattern's areas are not like the others when the destination is a
+// CSU. Finishing the rest late costs a term; finishing these late costs the
+// application, because they are an admission requirement rather than a
+// certification one, and they carry a grade floor no other area does.
+//
+// Title 5, California Code of Regulations, section 40803(a), "Applicants Who
+// Are California Residents and Who Have Completed the Prescribed Number of
+// Units of College Credit", as amended 24 July 2024:
+//
+//   (1) Commencing with admission to the fall term 2025, has completed with a
+//   grade of C- or better: courses in English composition; oral
+//   communication; critical thinking and composition, and mathematical
+//   concepts and quantitative reasoning at a level satisfying general
+//   education requirements;
+//
+//   (2) For admission prior to the fall term 2025 or for those who remain in
+//   attendance as defined by 5 CCR Section 40401 has completed with a grade of
+//   C- or better: courses in written communication in the English language;
+//   oral communication in the English language; critical thinking, and
+//   mathematics or quantitative reasoning at a level satisfying general
+//   education requirements;
+//
+// Read at https://govt.westlaw.com/calregs/Document/I8B3C7C2050BE11EFB192F93929D89113
+// (the free public California Code of Regulations, current through Register
+// 2026 No. 34), because calstate.edu serves its own copies of this material
+// only behind a human-verification check.
+//
+// WHY EACH PATTERN CARRIES ITS OWN WORDING. The regulation names subjects, not
+// area codes, and it names them twice in two different vocabularies. Clause
+// (a)(1) uses Cal-GETC's own area titles almost verbatim, which is no accident:
+// it was amended into the regulation the year Cal-GETC took effect. Clause
+// (a)(2) uses the older vocabulary, which is the one IGETC and CSU GE-Breadth
+// were written in, and it governs exactly the students still certified in
+// those two patterns: the ones who "remain in attendance" from before Fall
+// 2025. So the mapping from subject to area code is done per pattern, with the
+// clause that actually applies to a student on it quoted alongside.
+//
+// Section 40803.1 asks the same four subjects of applicants who are not
+// California residents, so nothing here depends on residency.
+
+export type GateItem = {
+  id: string;
+  // The regulation's own words for the subject.
+  label: string;
+  // The ASSIST area code, in this pattern, that a course must carry to be it.
+  code: string;
+};
+
+export type AdmissionGate = { clause: string; items: GateItem[] };
+
+export const CSU_GATE = {
+  name: 'the Golden Four',
+  grade: 'C- or better',
+  citation: '5 CCR § 40803(a)',
+  // Cornell LII rather than the Westlaw copy this was read from. Both serve
+  // the section publicly and the text was compared word for word across them;
+  // LII wins only on being a clean, stable URL rather than a GUID carrying
+  // session query parameters.
+  citationUrl: 'https://www.law.cornell.edu/regulations/california/5-CCR-40803',
+  // The rest of section 40803(a), quoted for what it is: the floor this tool
+  // has always said it does not check. It still does not check any of it, but
+  // stating the numbers beats sending a student away with "ask a counselor"
+  // when the regulation is this short.
+  minimums: [
+    'at least 60 semester (90 quarter) units of transferable college credit, of which 30 semester (45 quarter) units are at a level equivalent to general education courses',
+    'a grade point average of 2.0 or better across all transferable college courses attempted',
+    'good standing at the last college attended',
+  ],
+  // Section 40803(b) and (c), which decide how much the four are worth.
+  impaction:
+    'Impacted campuses and programs may require supplemental admission criteria, including a higher grade point average or additional specified courses.',
+  adt: 'An Associate Degree for Transfer earned at a California community college guarantees admission with junior status to the CSU, though not to any particular campus or program, and takes priority over other community college transfers.',
+} as const;
 
 // ---------------------------------------------------------------- Cal-GETC
 //
@@ -79,6 +158,17 @@ const CALGETC: Pattern = {
   dualCertify: {
     note: 'A course applied to Area 5A or 5B may also carry the one-unit laboratory.',
     areas: ['5C'],
+  },
+  // Clause (a)(1), whose four subjects are Cal-GETC's own area titles.
+  csuGate: {
+    clause:
+      'Commencing with admission to the fall term 2025, has completed with a grade of C- or better: courses in English composition; oral communication; critical thinking and composition, and mathematical concepts and quantitative reasoning at a level satisfying general education requirements.',
+    items: [
+      { id: 'composition', label: 'English composition', code: '1A' },
+      { id: 'oral', label: 'Oral communication', code: '1C' },
+      { id: 'critical', label: 'Critical thinking and composition', code: '1B' },
+      { id: 'math', label: 'Mathematical concepts and quantitative reasoning', code: '2' },
+    ],
   },
   areas: [
     { id: '1A', label: 'English Composition', courses: 1, semesterUnits: 3, from: ['1A'] },
@@ -156,6 +246,19 @@ const IGETC: Pattern = {
     // both areas 3B and 6A."
     note: 'A Language Other Than English course may be certified in both Area 3B and Area 6A, and an Area 5 course may also carry the laboratory.',
     areas: ['5C', '6A'],
+  },
+  // Clause (a)(2), the vocabulary IGETC was written in. Area 1C is already
+  // CSU-only on this pattern, which is the same fact from the other side: it
+  // is there because the CSU asks for it.
+  csuGate: {
+    clause:
+      'For admission prior to the fall term 2025 or for those who remain in attendance as defined by 5 CCR Section 40401 has completed with a grade of C- or better: courses in written communication in the English language; oral communication in the English language; critical thinking, and mathematics or quantitative reasoning at a level satisfying general education requirements.',
+    items: [
+      { id: 'composition', label: 'Written communication in the English language', code: '1A' },
+      { id: 'oral', label: 'Oral communication in the English language', code: '1C' },
+      { id: 'critical', label: 'Critical thinking', code: '1B' },
+      { id: 'math', label: 'Mathematics or quantitative reasoning', code: '2A' },
+    ],
   },
   areas: [
     { id: '1A', label: 'English Composition', courses: 1, semesterUnits: 3, from: ['1A'] },
@@ -276,6 +379,19 @@ const CSUGE: Pattern = {
   dualCertify: {
     note: 'The laboratory is associated with one of the Area B science courses rather than being a course of its own.',
     areas: ['B3'],
+  },
+  // Clause (a)(2) again. Three of these are whole areas of this pattern; the
+  // fourth, B4, is a subarea inside Area B, which is why the gate is stated in
+  // ASSIST area codes rather than in this pattern's own area ids.
+  csuGate: {
+    clause:
+      'For admission prior to the fall term 2025 or for those who remain in attendance as defined by 5 CCR Section 40401 has completed with a grade of C- or better: courses in written communication in the English language; oral communication in the English language; critical thinking, and mathematics or quantitative reasoning at a level satisfying general education requirements.',
+    items: [
+      { id: 'composition', label: 'Written communication in the English language', code: 'A2' },
+      { id: 'oral', label: 'Oral communication in the English language', code: 'A1' },
+      { id: 'critical', label: 'Critical thinking', code: 'A3' },
+      { id: 'math', label: 'Mathematics or quantitative reasoning', code: 'B4' },
+    ],
   },
   areas: [
     { id: 'A1', label: 'Oral Communication', courses: 1, semesterUnits: 3, from: ['A1'] },

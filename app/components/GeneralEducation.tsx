@@ -1,5 +1,6 @@
 import type { GeStatus } from '../../src/planner/ge';
 import { CourseChooser } from './CourseChooser';
+import { GoldenFour } from './GoldenFour';
 import type { Course } from '../../src/parser/types';
 
 // General education alongside major preparation.
@@ -29,6 +30,8 @@ export function GeneralEducation({
 
   return (
     <>
+      {status.gate && <GoldenFour gate={status.gate} />}
+
       {status.overlap.length > 0 ? (
         <>
           <p className="ge-lead">

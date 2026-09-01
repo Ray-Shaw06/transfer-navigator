@@ -254,6 +254,14 @@ section, a receiving-side OR, and a section spanning a page break.
 | `app/` | The three pages, shared data hooks in `app/lib/` |
 | `docs/plans/` | The plans this was built from, including what was left out |
 
+## Where the rules come from
+
+Every number this tool applies is sourced in
+[docs/rule-sources.md](docs/rule-sources.md): the regulation or published
+standard behind it, quoted, and graded Primary, Derived or Practical so a
+default is never mistaken for a rule. Most of it is Primary, which is the
+advantage of building on ASSIST and ICAS rather than on folklore.
+
 ## Write-up
 
 [Reading ASSIST](docs/reading-assist.md) covers the parts of this that are

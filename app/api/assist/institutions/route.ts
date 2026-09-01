@@ -1,4 +1,5 @@
 import { academicYears, institutions } from '../../../../src/assist/client';
+import { currentName } from '../../../../src/assist/institutions';
 import { cached, failed, DAY } from '../../../../src/assist/http';
 
 // ASSIST's own numbering for what kind of school an institution is.
@@ -9,14 +10,6 @@ const SYSTEMS: Record<number, string> = {
   5: 'Private or independent',
 };
 
-// A school can be listed under several names over the years (a campus
-// renamed, for instance). The first entry is the current one, and entries
-// flagged hideInList are not meant to be offered.
-function displayName(names: { name: string; hideInList?: boolean }[] | undefined): string | null {
-  const visible = (names ?? []).filter((n) => !n.hideInList);
-  return visible[0]?.name ?? null;
-}
-
 export async function GET() {
   try {
     const [all, years] = await Promise.all([institutions(), academicYears()]);
@@ -24,7 +17,7 @@ export async function GET() {
     const colleges = [];
     const campuses = [];
     for (const school of all) {
-      const name = displayName(school.names);
+      const name = currentName(school.names);
       if (!name) continue;
       if (school.isCommunityCollege) {
         colleges.push({ id: school.id, name });

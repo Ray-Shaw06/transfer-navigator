@@ -4,6 +4,7 @@ import {
   areasFor,
   slotsFor,
   totalSemesterUnits,
+  CSU_GATE,
   type AreaRule,
   type Destination,
   type Pattern,
@@ -52,6 +53,36 @@ export type GeOverlap = {
   finished: boolean;
 };
 
+// One of the four courses CSU admission turns on, and where the student is on
+// it. Reported per subject rather than folded into the area list because the
+// consequence is different: an unfinished area costs a term, an unfinished one
+// of these costs the application.
+export type GateCoverage = {
+  id: string;
+  label: string;
+  code: string;
+  // The completed course applied to it, if the assignment put one there.
+  done: Course | null;
+  // A course from the route heading for it, when nothing is finished yet.
+  planned: Course | null;
+  // Courses at this college that carry the code, so an empty subject can say
+  // how many ways there are to fill it rather than only that it is empty.
+  offered: number;
+};
+
+export type GateStatus = {
+  name: string;
+  grade: string;
+  clause: string;
+  citation: string;
+  citationUrl: string;
+  minimums: readonly string[];
+  impaction: string;
+  adt: string;
+  items: GateCoverage[];
+  doneCount: number;
+};
+
 export type GeStatus = {
   pattern: string;
   patternKey: string;
@@ -76,6 +107,9 @@ export type GeStatus = {
   // discipline.
   oneDepartment: boolean;
   dualCertifyNote?: string;
+  // Present only for a CSU-bound student, because it is a CSU admission rule
+  // and saying it to a UC-bound one would be false.
+  gate?: GateStatus;
 };
 
 type Entry = { course: Course; areas: string[]; department: string };
@@ -244,6 +278,55 @@ export function geStatus(
 
   const counted = pattern.areas.length > 0 && pattern.citation !== undefined;
 
+  // The Golden Four, read off the assignment rather than off the area list.
+  //
+  // It has to be the assignment because one of the four is not an area at all:
+  // CSU GE-Breadth states Quantitative Reasoning as B4, a subarea inside Area
+  // B, so "Area B is met" does not answer whether the B4 course was taken. A
+  // subject counts as done when some slot that accepts its code was filled by
+  // a finished course that carries that code, which is exactly the question
+  // the regulation asks and is answerable for a subarea and an area alike.
+  const gate: GateStatus | undefined =
+    destination === 'CSU' && pattern.csuGate && pattern.areas.length > 0
+      ? (() => {
+          const filledBy = (
+            slots: Slot[],
+            owner: Map<number, number>,
+            pool: Entry[],
+            code: string,
+          ): Course | null => {
+            for (const [slotIndex, courseIndex] of owner) {
+              if (!slots[slotIndex].eligible.includes(code)) continue;
+              const entry = pool[courseIndex];
+              if (entry.areas.includes(code)) return entry.course;
+            }
+            return null;
+          };
+
+          const items = pattern.csuGate.items.map((item) => ({
+            id: item.id,
+            label: item.label,
+            code: item.code,
+            done: filledBy(consuming, doneOwner, doneEntries, item.code),
+            planned: filledBy(freeSlots, plannedOwner, plannedEntries, item.code),
+            offered: ge.byCourse.filter((c) => c.areas.includes(item.code)).length,
+          }));
+
+          return {
+            name: CSU_GATE.name,
+            grade: CSU_GATE.grade,
+            clause: pattern.csuGate.clause,
+            citation: CSU_GATE.citation,
+            citationUrl: CSU_GATE.citationUrl,
+            minimums: CSU_GATE.minimums,
+            impaction: CSU_GATE.impaction,
+            adt: CSU_GATE.adt,
+            items,
+            doneCount: items.filter((i) => i.done !== null).length,
+          };
+        })()
+      : undefined;
+
   return {
     pattern: pattern.name,
     patternKey: pattern.key,
@@ -264,5 +347,6 @@ export function geStatus(
       (disciplineArea?.required ?? 0) > 1 &&
       departments.size === 1,
     dualCertifyNote: pattern.dualCertify?.note,
+    gate,
   };
 }
