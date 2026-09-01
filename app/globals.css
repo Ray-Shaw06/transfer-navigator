@@ -1355,12 +1355,19 @@ details.more[open] > summary::before { content: '–'; }
   overflow: hidden;
 }
 
+/* Filled by clipping a full-width pill rather than by animating its width.
+   Two things had to hold at once: the caps stay round at every fill, and the
+   transition stays off the layout path. transform: scaleX satisfies the
+   second and breaks the first, squashing the 999px caps into ellipses. An
+   inset clip with its own radius keeps both. */
 .ge-bar span {
   display: block;
   height: 100%;
+  width: 100%;
   background: var(--signal);
   border-radius: 999px;
-  transition: width var(--base) var(--ease);
+  clip-path: inset(0 calc(100% - var(--fill)) 0 0 round 999px);
+  transition: clip-path var(--base) var(--ease);
 }
 
 .ge-list li { grid-template-columns: 2.5rem 1fr auto auto; }

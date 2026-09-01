@@ -83,7 +83,13 @@ export function GeneralEducation({
       {status.counted && (
       <div className="ge-progress">
         <div className="ge-bar" role="img" aria-label={`${status.coursesDone} of ${status.coursesRequired} ${status.pattern} courses finished`}>
-          <span style={{ width: `${(status.coursesDone / status.coursesRequired) * 100}%` }} />
+          <span
+            style={
+              {
+                '--fill': `${(status.coursesDone / status.coursesRequired) * 100}%`,
+              } as React.CSSProperties
+            }
+          />
         </div>
         <p>
           <b>
