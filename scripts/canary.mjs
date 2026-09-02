@@ -85,7 +85,7 @@ async function main() {
   check(
     'agreement: section rules are ones the planner knows',
     (agreement?.sections ?? []).every((s) =>
-      ['all', 'choose', 'choose_units', 'choose_route', 'advisory'].includes(s.rule?.kind),
+      ['all', 'choose', 'choose_units', 'choose_route', 'advisory', 'reference'].includes(s.rule?.kind),
     ),
     (agreement?.sections ?? []).map((s) => s.rule?.kind).join(','),
   );
@@ -153,7 +153,7 @@ async function main() {
       check(
         'CSU: section rules are ones the planner knows',
         (csuAgreement?.sections ?? []).every((s) =>
-          ['all', 'choose', 'choose_units', 'choose_route', 'advisory'].includes(s.rule?.kind),
+          ['all', 'choose', 'choose_units', 'choose_route', 'advisory', 'reference'].includes(s.rule?.kind),
         ),
         (csuAgreement?.sections ?? []).map((s) => s.rule?.kind).join(','),
       );
