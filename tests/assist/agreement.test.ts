@@ -1,11 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { toAgreement, toSectionRule } from '../../src/assist/agreement';
 import { UnrecognisedAgreementError } from '../../src/parser/document';
+import { buildPlan } from '../../src/planner/plan';
 import type {
   AssistArticulation,
   AssistAsset,
   AssistCell,
   AssistCourse,
+  AssistInstruction,
   AssistResult,
   AssistRow,
   AssistSection,
@@ -410,8 +412,134 @@ describe('toSectionRule', () => {
 
   it('falls back to advisory for a rule it has never seen', () => {
     expect(toSectionRule({ type: 'SomethingNew' }).kind).toBe('advisory');
+    // An amount with nothing saying what it counts, whatever the rule type.
     expect(toSectionRule({ type: 'NFromConjunction', conjunction: 'And', amount: 2 }).kind).toBe(
       'advisory',
     );
+  });
+});
+
+// The real shape this exists for: a CSU agreement stating "complete 12
+// semester units" over one section of twenty-five science rows. Read as
+// advisory, every one of the twenty-five became required.
+describe('toSectionRule over an NFromConjunction', () => {
+  const nfc = (extra: Partial<AssistInstruction>): AssistInstruction => ({
+    type: 'NFromConjunction',
+    conjunction: 'And',
+    amountQuantifier: 'None',
+    ...extra,
+  });
+
+  it('counts the rows of the one section it has', () => {
+    expect(toSectionRule(nfc({ amount: 12, amountUnitType: 'SemesterUnit' }), 1)).toEqual({
+      kind: 'choose_units',
+      least: 12,
+      unitLabel: 'semester units',
+    });
+    expect(toSectionRule(nfc({ amount: 2, amountUnitType: 'Course' }), 1)).toEqual({
+      kind: 'choose',
+      least: 2,
+    });
+  });
+
+  it('counts a series the way it counts a course, since each is one row', () => {
+    expect(toSectionRule(nfc({ amount: 1, amountUnitType: 'Series' }), 1)).toEqual({
+      kind: 'choose',
+      least: 1,
+    });
+  });
+
+  it('reads it the same way whichever conjunction it carries', () => {
+    // Across real agreements the field is sometimes And and sometimes Or
+    // without the member shape following it, so it is not what decides this.
+    // With one section there is nothing for a section-level choice to pick
+    // between, and the amount can only be counting rows either way.
+    expect(toSectionRule(nfc({ conjunction: 'Or', amount: 1, amountUnitType: 'Course' }), 1)).toEqual({
+      kind: 'choose',
+      least: 1,
+    });
+  });
+
+  it('stays advisory when more than one section leaves the members ambiguous', () => {
+    // Two sections could mean "one course from all of them" or "one whole
+    // section", and those are different requirements. Guessing understates
+    // the work in one direction and overstates it in the other, so neither
+    // is guessed.
+    const rule = toSectionRule(nfc({ amount: 1, amountUnitType: 'Course' }), 3);
+    expect(rule.kind).toBe('advisory');
+    if (rule.kind !== 'advisory') return;
+    expect(rule.text).toContain('1 course');
+  });
+
+  it('keeps every guard the area quantifier already had', () => {
+    // A ceiling is not a floor, and an unknown unit type must not silently
+    // become a course count.
+    expect(
+      toSectionRule(nfc({ amount: 2, amountUnitType: 'Course', amountQuantifier: 'UpTo' }), 1).kind,
+    ).toBe('advisory');
+    expect(toSectionRule(nfc({ amount: 3, amountUnitType: 'Fortnight' }), 1).kind).toBe('advisory');
+    expect(toSectionRule(nfc({ amount: 0, amountUnitType: 'Course' }), 1).kind).toBe('advisory');
+  });
+});
+
+describe('an NFromConjunction group end to end', () => {
+  // Four science courses under "complete 6 units", the shape that made a real
+  // CSU agreement ask for every science sequence it listed.
+  const build = (sectionCount: 1 | 2) => {
+    const codes = ['SCI 1', 'SCI 2', 'SCI 3', 'SCI 4'];
+    const cells = codes.map((code, i) =>
+      courseCell(`cell-${i}`, course('SCI', String(i + 1), 3)),
+    );
+    const rows = cells.map((c) => ({ cells: [c] }) as AssistRow);
+    const sections =
+      sectionCount === 1 ? [section(rows)] : [section(rows.slice(0, 2)), section(rows.slice(2))];
+
+    return toAgreement(
+      result(
+        [
+          group(
+            {
+              type: 'NFromConjunction',
+              conjunction: 'And',
+              amount: 6,
+              amountUnitType: 'SemesterUnit',
+              amountQuantifier: 'None',
+            },
+            sections,
+          ),
+        ],
+        cells.map((c, i) => articulated(c.id!, 'And', [course('LOCAL', String(i + 1), 3)])),
+      ),
+    );
+  };
+
+  it('carries the quantifier through to a section the planner can act on', () => {
+    const agreement = build(1);
+    expect(agreement.sections[0].rule).toEqual({
+      kind: 'choose_units',
+      least: 6,
+      unitLabel: 'semester units',
+    });
+    expect(agreement.rows).toHaveLength(4);
+  });
+
+  it('asks for the units stated rather than for every row listed', () => {
+    // The whole point. Four three-unit rows under "complete 6 units" is two
+    // rows of work, not four, and the other two are optional rather than
+    // owed.
+    const plan = buildPlan(build(1), []);
+    const remaining = plan.statuses.filter((s) => s.state === 'remaining');
+    expect(remaining).toHaveLength(2);
+    expect(plan.statuses.filter((s) => s.state === 'optional')).toHaveLength(2);
+    expect(plan.remainingUnits).toBe(6);
+  });
+
+  it('still asks for all of them when the group has sections to choose between', () => {
+    // Two sections make the members ambiguous, so the rule stays advisory and
+    // nothing is demoted. Overstating here is the safe direction: the UI
+    // shows the rule it did not apply.
+    const agreement = build(2);
+    expect(agreement.sections[0].rule.kind).toBe('advisory');
+    expect(buildPlan(agreement, []).remainingUnits).toBe(12);
   });
 });

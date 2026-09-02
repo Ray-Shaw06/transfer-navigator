@@ -109,7 +109,13 @@ function sendingRequirement(entry: AssistArticulation | undefined): Requirement 
 // four rules the planner can act on. Anything not recognised becomes
 // advisory rather than being treated as plain 'all', so a rule that was
 // never applied is visible in the UI instead of silently absent.
-export function toSectionRule(instruction: AssistInstruction | null | undefined): SectionRule {
+//
+// `sectionCount` is how many content Sections the group holds, which decides
+// what an NFromConjunction quantifier is counting. See below.
+export function toSectionRule(
+  instruction: AssistInstruction | null | undefined,
+  sectionCount = 1,
+): SectionRule {
   if (!instruction) return { kind: 'all' };
 
   if (instruction.type === 'Following') return { kind: 'all' };
@@ -120,7 +126,25 @@ export function toSectionRule(instruction: AssistInstruction | null | undefined)
     return instruction.conjunction === 'Or' ? { kind: 'choose_route' } : { kind: 'all' };
   }
 
-  if (instruction.type === 'NFromArea') {
+  // An NFromConjunction states an amount over a group whose members are
+  // either its Sections or the rows inside them, and ASSIST does not say
+  // which. Across real agreements its `conjunction` field is sometimes 'And'
+  // and sometimes 'Or' without the member shape following it, so reading the
+  // members off that field would be a guess, and a wrong guess here is
+  // expensive in both directions: counting rows as sections understates a
+  // requirement, counting sections as rows overstates it.
+  //
+  // One case is not a guess. A group holding exactly one Section has nothing
+  // for a section-level quantifier to choose between, so the amount can only
+  // be counting that section's rows, which is what every other quantifier in
+  // this file already counts. Those are read; the rest stay advisory.
+  //
+  // This is what the "MATHEMATICS AND SCIENCE COURSES" group on a real CSU
+  // agreement is: one section, twenty-five rows of chemistry, physics,
+  // biology and geology, and "complete 12 semester units" over them. Read as
+  // advisory it became "take all twenty-five", which is how that agreement
+  // came back as nineteen terms of work.
+  if (instruction.type === 'NFromArea' || (instruction.type === 'NFromConjunction' && sectionCount === 1)) {
     const amount = num(instruction.amount);
     // 'UpTo' is a ceiling, not a floor: it says how much may count, not how
     // much is owed, and this project has no way to decide which of them a
@@ -265,16 +289,16 @@ export function toAgreement(result: AssistResult): Agreement {
 
     if (asset.type !== 'RequirementGroup') continue;
 
-    const rule = toSectionRule(asset.instruction);
-    const sectionIndex = sections.length;
-    sections.push({ label: groupLabel(asset, heading), rule });
-
     // Each Section under a 'choose_route' group is one route. Under any
     // other rule the route index is meaningless and is left unset, which is
     // what keeps the planner's existing single-row grouping in charge.
     const contentSections = (asset.sections ?? []).filter(
       (s): s is AssistSection => s.type === 'Section',
     );
+
+    const rule = toSectionRule(asset.instruction, contentSections.length);
+    const sectionIndex = sections.length;
+    sections.push({ label: groupLabel(asset, heading), rule });
 
     let emitted = 0;
     contentSections.forEach((section, routeIndex) => {
