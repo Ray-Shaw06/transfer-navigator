@@ -589,8 +589,10 @@ input::placeholder { color: var(--ink-3); }
 
 /* Not something to do: quieter still, but never hidden. */
 .row[data-state='alternative'],
+.row[data-state='reference'],
 .row[data-state='optional'] { background: transparent; border-style: dashed; }
 .row[data-state='alternative'] .row-title,
+.row[data-state='reference'] .row-title,
 .row[data-state='optional'] .row-title { color: var(--ink-2); font-weight: 550; }
 
 .row[data-state='unreadable'] { border-color: var(--caution); background: var(--caution-soft); }

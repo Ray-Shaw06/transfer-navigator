@@ -250,6 +250,20 @@ function academicYearLabel(raw: string | undefined): string {
 const byPosition = <T extends { position?: number }>(items: T[]): T[] =>
   [...items].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
 
+// ASSIST's own name for the section that carries course combination
+// equivalencies rather than requirements. Matched on the heading because
+// nothing else separates it: the group arrives with the same shape, the same
+// empty instruction and the same absent attributes as a real requirement
+// group sitting two positions above it.
+//
+// Anchored at the start so a heading that merely mentions the phrase is not
+// caught, and tolerant of a suffix so a campus adding to the standard name
+// still matches.
+const ARTICULATION_DETAILS = /^articulation details?\b/i;
+
+const isArticulationDetails = (heading: string): boolean =>
+  ARTICULATION_DETAILS.test(heading.trim());
+
 // A group's label: the last RequirementTitle seen above it, plus the
 // group's own SectionHeader when it has one. Both are the campus's words.
 function groupLabel(group: AssistAsset, heading: string): string {
@@ -296,7 +310,15 @@ export function toAgreement(result: AssistResult): Agreement {
       (s): s is AssistSection => s.type === 'Section',
     );
 
-    const rule = toSectionRule(asset.instruction, contentSections.length);
+    const stated = toSectionRule(asset.instruction, contentSections.length);
+    // A group under ASSIST's Articulation Details heading is equivalency
+    // information, not work. Guarded twice so this stays narrow: the heading
+    // has to be that heading, and the group must carry no quantifier of its
+    // own, since a group that states "complete 6 units" is asking for
+    // something whatever it is filed under. Every instance measured carried
+    // no instruction at all.
+    const rule: SectionRule =
+      stated.kind === 'all' && isArticulationDetails(heading) ? { kind: 'reference' } : stated;
     const sectionIndex = sections.length;
     sections.push({ label: groupLabel(asset, heading), rule });
 

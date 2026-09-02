@@ -78,6 +78,8 @@ const MARKS: Record<RowStatus['state'], React.ReactNode> = {
   // not something to do
   optional: <path d="M4.5 8h7" />,
   alternative: <path d="M4.5 8h7" />,
+  // not a thing to do at all: an equivalency, shown for reading
+  reference: <path d="M8 4.5v7M4.5 8h7" transform="rotate(45 8 8)" />,
 };
 
 function Mark({ state }: { state: RowStatus['state'] }) {
@@ -226,6 +228,17 @@ function Row({
           </>
         )}
 
+        {/* No per-row explanation. The section says once what all of these
+            are, and thirteen identical paragraphs under thirteen rows is
+            noise that buries the one thing here worth reading, which is
+            which courses are equal to which. */}
+        {status.state === 'reference' && status.allOptions.length > 0 && (
+          <details className="more">
+            <summary>Equal to</summary>
+            <Options options={status.allOptions} doubleCount={doubleCount} />
+          </details>
+        )}
+
         {status.state === 'unreadable' && (
           <p className="row-detail">
             This tool could not read this requirement. Do not rely on the plan for this row: check
@@ -266,6 +279,15 @@ function RuleLine({ section, count }: { section: Plan['sections'][number]; count
       </p>
     );
   }
+  if (rule.kind === 'reference') {
+    return (
+      <p className="section-rule">
+        Not requirements. This is the campus&rsquo;s own list of which combinations of courses are
+        equal to which, and every course in it is already asked for above. Nothing here is counted
+        toward what you have left, because that would charge you twice for the same courses.
+      </p>
+    );
+  }
   if (rule.kind === 'advisory') {
     return (
       <p className="section-rule" data-advisory="true">
@@ -279,6 +301,8 @@ function RuleLine({ section, count }: { section: Plan['sections'][number]; count
 }
 
 function Tally({ section }: { section: Plan['sections'][number] }) {
+  // Nothing to finish, so nothing to count towards.
+  if (section.rule.kind === 'reference') return null;
   if (section.rule.kind === 'choose_units') {
     return (
       <span className="tally" data-met={section.met}>

@@ -543,3 +543,90 @@ describe('an NFromConjunction group end to end', () => {
     expect(buildPlan(agreement, []).remainingUnits).toBe(12);
   });
 });
+
+// ASSIST's Articulation Details section restates combinations already
+// required above it. Counting them charges a student twice for the same
+// courses, which on a real CSU agreement tripled the work reported.
+describe('the Articulation Details section', () => {
+  const title = (content: string, position: number): AssistAsset => ({
+    type: 'RequirementTitle',
+    area: 'Requirements',
+    position,
+    content,
+  });
+
+  const positioned = (asset: AssistAsset, position: number): AssistAsset => ({ ...asset, position });
+
+  // A real requirement for MATH 1 and MATH 2, then an equivalency restating
+  // the pair, both satisfied by the same two sending courses.
+  const build = (heading: string, instruction: AssistAsset['instruction'] = null) => {
+    const a = courseCell('req-a', course('MATH', '1', 3));
+    const b = courseCell('req-b', course('MATH', '2', 3));
+    const combo: AssistCell = {
+      type: 'Series',
+      id: 'combo',
+      series: { conjunction: 'And', courses: [course('MATH', '1', 3), course('MATH', '2', 3)] },
+    };
+
+    return toAgreement(
+      result(
+        [
+          title('MATHEMATICS REQUIREMENTS', 0),
+          positioned(group(null, [section([{ cells: [a] }, { cells: [b] }])]), 1),
+          title(heading, 2),
+          positioned(group(instruction, [section([{ cells: [combo] }])]), 3),
+        ],
+        [
+          articulated('req-a', 'And', [course('LOCAL', '10', 4)]),
+          articulated('req-b', 'And', [course('LOCAL', '11', 4)]),
+          articulated('combo', 'And', [course('LOCAL', '10', 4), course('LOCAL', '11', 4)]),
+        ],
+      ),
+    );
+  };
+
+  it('is read as reference rather than as work', () => {
+    const agreement = build('ARTICULATION DETAILS');
+    expect(agreement.sections[1].rule).toEqual({ kind: 'reference' });
+
+    const plan = buildPlan(agreement, []);
+    // Eight units of real requirement, and the equivalency adds none.
+    expect(plan.remainingUnits).toBe(8);
+    expect(plan.statuses.filter((s) => s.state === 'reference')).toHaveLength(1);
+    expect(plan.remainingGroups.flatMap((g) => g.courses.map((c) => c.code))).toEqual([
+      'LOCAL 10',
+      'LOCAL 11',
+    ]);
+  });
+
+  it('never takes a completed course away from the requirement that needs it', () => {
+    // The failure this guards. Rows are walked in document order and a
+    // satisfied row claims its sending courses so nothing else can reuse
+    // them. An equivalency running through that walk would claim LOCAL 10 and
+    // LOCAL 11 for itself and leave the real requirement above reading as
+    // unsatisfied, which is worse than the double count it replaced.
+    const plan = buildPlan(build('ARTICULATION DETAILS'), ['LOCAL 10', 'LOCAL 11']);
+    const real = plan.statuses.filter((s) => s.section === 0);
+    expect(real.map((s) => s.state)).toEqual(['satisfied', 'satisfied']);
+    expect(plan.remainingUnits).toBe(0);
+  });
+
+  it('leaves a section alone when the heading is not that heading', () => {
+    const agreement = build('ADDITIONAL APPROVED COURSES FOR THE MAJOR');
+    expect(agreement.sections[1].rule).toEqual({ kind: 'all' });
+    expect(buildPlan(agreement, []).remainingUnits).toBe(16);
+  });
+
+  it('respects a group that states a quantifier of its own', () => {
+    // A heading is weaker evidence than a rule. A group asking for two
+    // courses is asking for something whatever it is filed under, so the
+    // quantifier wins and the section is not treated as reference.
+    const agreement = build('ARTICULATION DETAILS', {
+      type: 'NFromArea',
+      amount: 2,
+      amountUnitType: 'Course',
+      amountQuantifier: 'AtLeast',
+    });
+    expect(agreement.sections[1].rule).toEqual({ kind: 'choose', least: 2 });
+  });
+});

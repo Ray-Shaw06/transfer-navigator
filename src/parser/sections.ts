@@ -20,7 +20,16 @@ export type SectionRule =
   // receiving campus's own words for it. Planned as if every row were
   // required, which overstates the work rather than hiding a requirement,
   // and displayed with the text so the student can see what was not applied.
-  | { kind: 'advisory'; text: string };
+  | { kind: 'advisory'; text: string }
+  // Not a requirement at all. ASSIST's own "Articulation Details" section
+  // restates combinations already required above it, to show which
+  // combination of sending courses equals which combination of receiving
+  // ones. The agreement's own prose points at it in those words: "Please
+  // review the Articulation Details section to view course combination
+  // equivalencies." Its rows are shown and never counted, because counting
+  // them charges a student twice for the same courses. Only the API sets
+  // this; a printed agreement has no such section.
+  | { kind: 'reference' };
 export type Section = { label: string; rule: SectionRule };
 
 // Headers carry a leading section number. "Select A or B" is the same rule as

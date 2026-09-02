@@ -15,7 +15,17 @@ export type RowStatus = {
   // itself. Undefined only for hand-built rows (tests) that never set a
   // section; real parsed agreements always tag one.
   section?: number;
-  state: 'satisfied' | 'remaining' | 'not_articulated' | 'unreadable' | 'alternative' | 'optional';
+  // 'reference' is the one state that is not a verdict on a requirement:
+  // the row is equivalency information restating work required elsewhere, so
+  // it is displayed and never counted. See SectionRule 'reference'.
+  state:
+    | 'satisfied'
+    | 'remaining'
+    | 'not_articulated'
+    | 'unreadable'
+    | 'alternative'
+    | 'optional'
+    | 'reference';
   satisfiedBy: Course[];
   cheapestOption: Course[];
   // Every accepted alternative for this requirement, not just the one the
@@ -360,6 +370,20 @@ function resolveSections(
   }
 
   const sections: SectionStatus[] = agreement.sections.map((section, index) => {
+    // Nothing to satisfy, so nothing to report progress against. Reported as
+    // met so no part of the interface shows a student a bar they can never
+    // move.
+    if (section.rule.kind === 'reference') {
+      return {
+        label: section.label,
+        rule: section.rule,
+        satisfiedCount: 0,
+        needed: 0,
+        satisfiedUnits: 0,
+        met: true,
+      };
+    }
+
     const rows = agreement.rows
       .map((row, i) => (row.section === index ? i : -1))
       .filter((i) => i >= 0);
@@ -417,9 +441,35 @@ export function buildPlan(agreement: Agreement, completed: string[]): Plan {
   // already ran and found them taken, since baseStatus commits `consumed`
   // as it walks. Skipping the demoted row entirely on the next walk is what
   // frees the course for whatever later row wants it.
+  // A reference row never runs through baseStatus, which matters for more
+  // than its own state: baseStatus claims the sending courses of whatever it
+  // satisfies, and an equivalency restating MATH 150A and MATH 150B would
+  // claim the very courses the real mathematics requirement needs, leaving
+  // that one looking unsatisfied. Skipping them entirely is what keeps the
+  // requirements they duplicate first in line for the work a student has
+  // actually done.
+  const isReference = (row: ArticulationRow): boolean =>
+    row.section !== undefined && agreement.sections[row.section]?.rule.kind === 'reference';
+
+  const referenceStatus = (row: ArticulationRow): RowStatus => ({
+    receiving: row.receiving,
+    receivingKind: row.receivingKind,
+    orGroup: row.orGroup,
+    section: row.section,
+    state: 'reference',
+    satisfiedBy: [],
+    cheapestOption: [],
+    allOptions: row.sending.kind === 'options' ? row.sending.options : [],
+    remainingUnits: 0,
+  });
+
   const computeStatuses = (excluded: Set<number>, fixed: RowStatus[]): RowStatus[] => {
     const consumed = new Set<string>();
-    return agreement.rows.map((row, i) => (excluded.has(i) ? fixed[i] : baseStatus(row, done, consumed)));
+    return agreement.rows.map((row, i) => {
+      if (excluded.has(i)) return fixed[i];
+      if (isReference(row)) return referenceStatus(row);
+      return baseStatus(row, done, consumed);
+    });
   };
 
   // resolveSections can demote a member that baseStatus had already marked

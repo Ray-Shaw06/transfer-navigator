@@ -34,8 +34,11 @@ function verdictFor(
   const blocked = plan.statuses.filter((s) => s.state === 'not_articulated');
   const satisfied = plan.statuses.filter((s) => s.state === 'satisfied');
   const remaining = plan.statuses.filter((s) => s.state === 'remaining');
+  // Everything that is a verdict on a requirement. 'reference' joins the two
+  // demoted states here: an equivalency is not a requirement, and counting it
+  // would report a denominator a student can never finish.
   const countable = plan.statuses.filter(
-    (s) => s.state !== 'optional' && s.state !== 'alternative',
+    (s) => s.state !== 'optional' && s.state !== 'alternative' && s.state !== 'reference',
   );
 
   // Nothing at this college counts toward anything on this agreement.
