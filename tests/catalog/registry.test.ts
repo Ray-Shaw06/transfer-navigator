@@ -5,8 +5,15 @@ describe('the catalog registry', () => {
   it('holds one entry per college', () => {
     const ids = CATALOGS.map((c) => c.college);
     expect(new Set(ids).size).toBe(ids.length);
-    const hosts = CATALOGS.map((c) => c.host);
-    expect(new Set(hosts).size).toBe(hosts.length);
+  });
+
+  it('lets a district catalog serve every college in it', () => {
+    // Moorpark, Oxnard and Ventura are one district publishing one catalog,
+    // whose courses carry the district's own M prefix and whose prerequisites
+    // are stated district-wide. Three colleges sharing a host is correct here,
+    // so the registry must not require hosts to be unique.
+    const vcccd = CATALOGS.filter((c) => c.host === 'catalog.vcccd.edu');
+    expect(vcccd.map((c) => c.college).sort((a, b) => a - b)).toEqual([87, 95, 139]);
   });
 
   it('has no college without a host, or host without a college', () => {

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { parseCourseLeafCourse } from '../../src/catalog/courseleaf';
-import { normalizeCourseCode, padCourseCode } from '../../src/catalog/normalize';
+import { catalogSpellings, normalizeCourseCode, padCourseCode } from '../../src/catalog/normalize';
 
 // The shapes below are the real ones, trimmed. Every variant here was seen in
 // Pasadena City College's live catalog while this was written: a single
@@ -134,5 +134,20 @@ describe('padCourseCode', () => {
   it('leaves alone what is already padded, and what is not a plain number', () => {
     expect(padCourseCode('CS 003A')).toBe('CS 003A');
     expect(padCourseCode('ENGL C1000')).toBe('ENGL C1000');
+  });
+});
+
+describe('the spellings a catalog might answer to', () => {
+  it('covers the ways colleges disagree about a code', () => {
+    // Pasadena writes MATH 005A, Foothill writes MATH 12, Mt. San Jacinto
+    // writes MATH-105. A catalog answers to its own spelling and to no other,
+    // so all of them are tried.
+    expect(catalogSpellings('MATH 5A')).toContain('MATH 005A');
+    expect(catalogSpellings('MATH 005A')).toContain('MATH 5A');
+    expect(catalogSpellings('MATH 105')).toContain('MATH-105');
+  });
+
+  it('reads a hyphenated code as the same course as a spaced one', () => {
+    expect(normalizeCourseCode('MATH-105')).toBe(normalizeCourseCode('MATH 105'));
   });
 });
