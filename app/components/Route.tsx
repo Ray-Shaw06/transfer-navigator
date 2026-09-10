@@ -42,6 +42,15 @@ export function RouteView({
 
   return (
     <>
+      {schedule.terms.some((t) => t.sequenced.length > 0) && (
+        <p className="route-note">
+          Some of these are ordered because one comes before another. That is read from how the
+          courses are numbered and from which of them the agreement groups together, since the
+          agreement lists no prerequisites at all. Two courses it puts in the same term may still
+          have one between them, so check what you are taking together against your
+          college&rsquo;s catalog before you register.
+        </p>
+      )}
       {(doubled > 0 || areaSlots > 0) && (
         <p className="route-note">
           {doubled > 0 && (
@@ -149,9 +158,8 @@ export function RouteView({
               </div>
               {term.sequenced.length > 0 && (
                 <p className="term-note">
-                  {term.sequenced.join(', ')} looks like part of a numbered sequence, so the rest of
-                  it sits in later terms. That is read from how the courses are numbered, not from
-                  the agreement, which lists no prerequisites at all.
+                  <b>{term.sequenced.join(', ')}</b> looks like part of a chain, so the rest of it
+                  sits in later terms.
                 </p>
               )}
             </div>

@@ -457,7 +457,11 @@ export default function Home() {
             </p>
             <p>
               <b>What it does not.</b> The minimum transferable units your campus asks for, GPA, and
-              admission itself. Confirm all of that with a counselor before you register.
+              admission itself. Nor prerequisites: no articulation agreement carries them, so the
+              order here is read from course numbers and from which courses the agreement groups
+              together. It catches a chain like CS 2 before CS 3A before CS 3B; it cannot know that
+              a course in one requirement is a prerequisite for a course in another. Confirm all of
+              that with a counselor before you register.
             </p>
             <p>
               <b>Where it can be wrong.</b> When a course you finished could count toward two

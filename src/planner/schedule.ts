@@ -196,41 +196,64 @@ export function earliestTerm(now = new Date()): TermRef {
   return { kind: 'Winter', year: year + 1 };
 }
 
-// Two courses are parts of one sequence when they share a prefix and a number
-// and carry DIFFERENT sequence letters: MATH 005A then MATH 005B. This is a
-// reading of how California colleges number courses, not something any
-// agreement states, so it only ever spreads a sequence across terms and never
-// claims an order is required.
+// Where a course sits in its subject's own order: CS 002 before CS 003A before
+// CS 003B before CS 033.
+//
+// No articulation agreement carries prerequisites, so this is read from how
+// California colleges number their courses and from nothing else. Within one
+// subject a lower number comes first, and within one number a lower sequence
+// letter comes first. That is a convention rather than a rule, which is why
+// the route says in as many words where the ordering came from.
 //
 // Two suffix letters are not sequence steps and must be stripped first, or
-// this rule does real damage:
+// this does real damage:
 //
-//   L  a lab. CS 003BL is the lab for CS 003B, normally taken WITH it, so
-//      reading the L as a later step splits a lecture from its own lab and
-//      tells a student to take them a term apart.
+//   L  a lab. CS 003BL is the lab for CS 003B, taken WITH it, so reading the
+//      L as a later step splits a lecture from its own lab and tells a
+//      student to take them a term apart.
 //   H  an honours section. MATH 010H is MATH 010, not a second part of it.
 const STEM = /^([A-Z&\s]+?)\s*(\d+)([A-Z]*)$/i;
 
-export type SequenceKey = { stem: string; step: string };
+// `subject` is the alpha prefix, `number` the numeric part, `step` the
+// sequence letter or '' when there is none. Two courses may share a term only
+// when all three match, which is exactly the lecture-and-its-lab case.
+export type CourseOrder = { subject: string; number: number; step: string };
 
-export function sequenceKey(code: string): SequenceKey | null {
+export function courseOrder(code: string): CourseOrder | null {
   const match = STEM.exec(code.trim());
   if (!match) return null;
   const [, prefix, digits, rawSuffix] = match;
 
-  // Strip lab and honours markers wherever they trail, then whatever letters
-  // remain are the actual sequence step.
-  const step = rawSuffix.toUpperCase().replace(/[LH]+$/, '');
-  if (!step) return null;
-
-  return { stem: `${prefix.trim().toUpperCase()} ${digits}`, step };
+  return {
+    subject: prefix.trim().toUpperCase(),
+    number: Number(digits),
+    step: rawSuffix.toUpperCase().replace(/[LH]+$/, ''),
+  };
 }
+
+// Ascending within a subject. Only meaningful between two courses that share
+// one, which every caller checks first.
+export const compareOrder = (a: CourseOrder, b: CourseOrder): number =>
+  a.number - b.number || a.step.localeCompare(b.step);
+
+// Whether two courses in the same subject are the same rung of it, and so may
+// share a term. A lecture and its lab are; anything else is not.
+const sameRung = (a: CourseOrder, b: CourseOrder): boolean =>
+  a.number === b.number && a.step === b.step;
+
+
 
 const total = (items: { units: number }[]) => items.reduce((sum, i) => sum + i.units, 0);
 
 // One unit of scheduling: a course, or a course and the lab that has to sit
 // beside it, carrying the priority of the requirement it came from.
-type Block = { courses: Course[]; priority: Priority };
+type Block = {
+  courses: Course[];
+  priority: Priority;
+  // Which requirement this came from. Two blocks of the same requirement are
+  // the reason a term can be refused: see the clash rule in pack().
+  group: number;
+};
 
 // What this schedules. `priority` is optional so a caller that has not yet
 // made the distinction, including every hand-built group in the tests, keeps
@@ -289,7 +312,7 @@ export function buildSchedule(
   // Blocks rather than adjacency because the two are not always neighbours:
   // one real requirement lists CS 003B, CS 033, CS 003BL in that order, and a
   // run of adjacent courses would not catch it.
-  const queue = groups.flatMap((group) => {
+  const queue = groups.flatMap((group, groupIndex) => {
     // A group with no stated priority is a minimum. Hand-built groups in
     // tests and any caller predating the distinction keep the old behaviour,
     // where every requirement gated the target.
@@ -298,10 +321,12 @@ export function buildSchedule(
     const byKey = new Map<string, Block>();
 
     for (const course of group.courses) {
-      const key = sequenceKey(course.code);
-      const id = key ? `${key.stem}|${key.step}` : null;
+      const order = courseOrder(course.code);
+      // A code this cannot parse is its own block. Nothing is ordered against
+      // it, which is the safe reading of a code the convention does not cover.
+      const id = order ? `${order.subject}|${order.number}|${order.step}` : null;
       if (id === null) {
-        blocks.push({ courses: [course], priority });
+        blocks.push({ courses: [course], priority, group: groupIndex });
         continue;
       }
       const existing = byKey.get(id);
@@ -309,13 +334,40 @@ export function buildSchedule(
         existing.courses.push(course);
         continue;
       }
-      const block: Block = { courses: [course], priority };
+      const block: Block = { courses: [course], priority, group: groupIndex };
       byKey.set(id, block);
       blocks.push(block);
     }
 
     return blocks;
   });
+
+  // Put each subject's blocks into its own ascending order, in place.
+  //
+  // In place, rather than sorting the whole queue, because the order the
+  // agreement lists its requirements in is meaningful and this has no business
+  // rewriting it. Only the slots a subject already occupies are rewritten, so
+  // CS blocks land in CS slots and every other requirement stays where the
+  // agreement put it.
+  //
+  // Without this the packer places blocks in document order, and the real UCI
+  // agreement lists CS 003A, CS 002, CS 003AL as one requirement, which put
+  // CS 002 in the same term as the course it is a prerequisite for.
+  const bySubject = new Map<string, number[]>();
+  queue.forEach((block, i) => {
+    const order = courseOrder(block.courses[0].code);
+    if (!order) return;
+    bySubject.set(order.subject, [...(bySubject.get(order.subject) ?? []), i]);
+  });
+  for (const slots of bySubject.values()) {
+    if (slots.length < 2) continue;
+    const sorted = slots
+      .map((i) => queue[i])
+      .sort((a, b) => compareOrder(courseOrder(a.courses[0].code)!, courseOrder(b.courses[0].code)!));
+    slots.forEach((slot, k) => {
+      queue[slot] = sorted[k];
+    });
+  }
 
   // One pass of the packer.
   //
@@ -329,10 +381,10 @@ export function buildSchedule(
     let items: ScheduleItem[] = [];
     let sequenced: string[] = [];
     const pendingGe = [...order];
-    // For each stem, which sequence step was placed in which term. A course
-    // clashes only with a DIFFERENT step of the same stem in the same term, so
-    // a lecture and its lab still sit together.
-    const placed = new Map<string, { step: string; term: number }[]>();
+    // For each subject, which rung of it was placed in which term. A course
+    // clashes only with a DIFFERENT rung of the same subject in the same term,
+    // so a lecture and its lab still sit together.
+    const placed = new Map<string, { order: CourseOrder; term: number; group: number }[]>();
 
     const reserved = new Set(reserveFor);
 
@@ -410,21 +462,43 @@ export function buildSchedule(
       // Then major preparation, which owns the rest of the term.
       while (next < queue.length) {
         const block = queue[next].courses;
+        // Two readings of the same evidence, and a course clashes with anything
+        // already in this term that either one catches.
+        //
+        // The first is the numbering itself: MATH 005A and MATH 005B are two
+        // parts of one course and the second follows the first, wherever the
+        // agreement happens to list them. Same number, different letter.
+        //
+        // The second is ASSIST's own grouping. Listing CS 003A, CS 002 and
+        // CS 003AL as ONE requirement is the campus saying those courses go
+        // together, and courses that go together in one subject at one college
+        // are a chain: CS 002 is the prerequisite for CS 003A. So a different
+        // rung of the same requirement is a different term, lowest first.
+        //
+        // What is deliberately NOT read is a pair of different numbers in
+        // different requirements. Most such pairs are siblings rather than a
+        // chain, and treating them as one stretched twenty-two units of real
+        // work across four terms of four to eight units each: a full-time
+        // student told they needed two years for one year of work. The cost of
+        // that reading is a plan the student cannot act on, which is worse than
+        // the gap it closes. The gap is stated on the route instead.
         const clashes = block.some((course) => {
-          const key = sequenceKey(course.code);
-          return (
-            key !== null &&
-            (placed.get(key.stem) ?? []).some((p) => p.term === terms.length && p.step !== key.step)
-          );
+          const order = courseOrder(course.code);
+          if (order === null) return false;
+          return (placed.get(order.subject) ?? []).some((p) => {
+            if (p.term !== terms.length) return false;
+            if (sameRung(p.order, order)) return false;
+            return p.order.number === order.number || p.group === queue[next].group;
+          });
         });
         if (clashes || total(items) + total(block) > budget) break;
 
         for (const course of block) {
-          const key = sequenceKey(course.code);
-          if (key) {
-            placed.set(key.stem, [
-              ...(placed.get(key.stem) ?? []),
-              { step: key.step, term: terms.length },
+          const order = courseOrder(course.code);
+          if (order) {
+            placed.set(order.subject, [
+              ...(placed.get(order.subject) ?? []),
+              { order, term: terms.length, group: queue[next].group },
             ]);
             sequenced.push(course.code);
           }
@@ -460,23 +534,25 @@ export function buildSchedule(
       closeTerm();
     }
 
-    // Only a term that actually held something back deserves the caveat. A
-    // course whose stem has just one step in the whole plan was never split, so
-    // saying so would be noise.
-    for (const term of terms) {
+    // Only a course that actually has something waiting behind it deserves the
+    // caveat, since the caveat says the rest sits in later terms. A course in
+    // the last term of its own subject was ordered against nothing that
+    // follows, so naming it there is noise, and on the final term it is a note
+    // that contradicts itself.
+    const later = (termIdx: number, order: CourseOrder) =>
+      terms.slice(termIdx + 1).some((t) =>
+        t.courses.some((c) => {
+          const other = courseOrder(c.code);
+          return other !== null && other.subject === order.subject && compareOrder(order, other) < 0;
+        }),
+      );
+
+    terms.forEach((term, i) => {
       term.sequenced = term.sequenced.filter((code) => {
-        const key = sequenceKey(code);
-        if (!key) return false;
-        const steps = new Set(
-          queue
-            .flatMap((b) => b.courses)
-            .map((c) => sequenceKey(c.code))
-            .filter((k): k is SequenceKey => k !== null && k.stem === key.stem)
-            .map((k) => k.step),
-        );
-        return steps.size > 1;
+        const order = courseOrder(code);
+        return order !== null && later(i, order);
       });
-    }
+    });
 
     return terms;
   };

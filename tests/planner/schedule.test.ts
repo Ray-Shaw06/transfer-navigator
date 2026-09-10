@@ -4,7 +4,8 @@ import {
   currentTerm,
   earliestTerm,
   nextTerm,
-  sequenceKey,
+  compareOrder,
+  courseOrder,
   termIndex,
   termLabel,
   type Priority,
@@ -57,20 +58,36 @@ describe('term arithmetic', () => {
   });
 });
 
-describe('sequenceKey', () => {
-  it('reads a sequence letter as a step', () => {
-    expect(sequenceKey('MATH 005A')).toEqual({ stem: 'MATH 005', step: 'A' });
-    expect(sequenceKey('I&C SCI 6B')).toEqual({ stem: 'I&C SCI 6', step: 'B' });
+describe('courseOrder', () => {
+  it('reads a subject, a number and a sequence letter', () => {
+    expect(courseOrder('MATH 005A')).toEqual({ subject: 'MATH', number: 5, step: 'A' });
+    expect(courseOrder('I&C SCI 6B')).toEqual({ subject: 'I&C SCI', number: 6, step: 'B' });
   });
 
-  it('treats a lab as the same step as its lecture, not a later one', () => {
-    expect(sequenceKey('CS 003BL')).toEqual({ stem: 'CS 003', step: 'B' });
-    expect(sequenceKey('CS 003B')).toEqual({ stem: 'CS 003', step: 'B' });
+  it('reads a course with no sequence letter, which is most of them', () => {
+    // The gap this closes. A bare number used to have no key at all, so CS 002
+    // was ordered against nothing and could land in the same term as CS 003A,
+    // the course it is a prerequisite for at Pasadena City College.
+    expect(courseOrder('CS 002')).toEqual({ subject: 'CS', number: 2, step: '' });
+    expect(courseOrder('CS 033')).toEqual({ subject: 'CS', number: 33, step: '' });
+  });
+
+  it('ignores the padding, so CS 2 and CS 002 are one course', () => {
+    expect(courseOrder('CS 2')).toEqual(courseOrder('CS 002'));
+  });
+
+  it('treats a lab as the same rung as its lecture, not a later one', () => {
+    expect(courseOrder('CS 003BL')).toEqual(courseOrder('CS 003B'));
   });
 
   it('treats an honours section as the same course', () => {
-    expect(sequenceKey('MATH 010H')).toBeNull();
-    expect(sequenceKey('MATH 010')).toBeNull();
+    expect(courseOrder('MATH 010H')).toEqual(courseOrder('MATH 010'));
+  });
+
+  it('orders by number first, then by sequence letter', () => {
+    const codes = ['CS 033', 'CS 003B', 'CS 002', 'CS 008', 'CS 003A'];
+    const sorted = [...codes].sort((a, b) => compareOrder(courseOrder(a)!, courseOrder(b)!));
+    expect(sorted).toEqual(['CS 002', 'CS 003A', 'CS 003B', 'CS 008', 'CS 033']);
   });
 });
 
@@ -115,20 +132,14 @@ describe('buildSchedule', () => {
       base,
     );
 
-    expect(schedule.terms).toHaveLength(1);
-    // All three in the one term is the point. The lab now sits next to the
-    // lecture it belongs to rather than in the order the requirement listed
-    // them, because the two are scheduled as one block.
-    expect(schedule.terms[0].courses.map((c) => c.code).sort()).toEqual([
-      'CS 003B',
-      'CS 003BL',
-      'CS 033',
-    ]);
-    expect(schedule.terms[0].courses.map((c) => c.code).slice(0, 2)).toEqual([
-      'CS 003B',
-      'CS 003BL',
-    ]);
-    expect(schedule.terms[0].sequenced).toEqual([]);
+    // The lab sits next to the lecture it belongs to rather than in the order
+    // the requirement listed them, because the two are scheduled as one block.
+    expect(schedule.terms[0].courses.map((c) => c.code)).toEqual(['CS 003B', 'CS 003BL']);
+
+    // CS 033 is a later rung of the same requirement, so it moves on. That is
+    // the prerequisite rule, not the lab rule: what matters here is that it
+    // did not take the lab with it.
+    expect(schedule.terms[1].courses.map((c) => c.code)).toEqual(['CS 033']);
   });
 
   it('does not flag a course whose stem it never had to split', () => {
@@ -716,5 +727,103 @@ describe('the earliest term worth offering', () => {
   it('offers the summer ahead of a Fall default', () => {
     expect(on('2026-04-01T00:00:00Z')).toEqual({ kind: 'Summer', year: 2026 });
     expect(currentTerm(new Date('2026-04-01T00:00:00Z'))).toEqual({ kind: 'Fall', year: 2026 });
+  });
+});
+
+describe('prerequisite order', () => {
+  const g = (...cs: { code: string; title: string; units: number }[]) => group(...cs);
+
+  it('puts CS 2 before the CS 3A it is a prerequisite for', () => {
+    // The case reported against Pasadena City College. ASSIST lists CS 003A,
+    // CS 002 and CS 003AL as one requirement, in that order, and the packer
+    // took them in that order, which put CS 002 in the same term as the course
+    // it has to come before.
+    const schedule = buildSchedule(
+      [g(course('CS 003A', 3), course('CS 002', 3), course('CS 003AL', 1))],
+      base,
+    );
+
+    expect(schedule.terms.map((t) => t.courses.map((c) => c.code))).toEqual([
+      ['CS 002'],
+      ['CS 003A', 'CS 003AL'],
+    ]);
+  });
+
+  it('runs the whole chain in order across requirements', () => {
+    const schedule = buildSchedule(
+      [
+        g(course('CS 003A', 3), course('CS 002', 3), course('CS 003AL', 1)),
+        g(course('CS 003B', 3), course('CS 033', 3), course('CS 003BL', 1)),
+      ],
+      base,
+    );
+
+    expect(schedule.terms.map((t) => t.courses.map((c) => c.code))).toEqual([
+      ['CS 002'],
+      ['CS 003A', 'CS 003AL'],
+      ['CS 003B', 'CS 003BL'],
+      ['CS 033'],
+    ]);
+  });
+
+  it('separates two parts of one numbered course wherever they are listed', () => {
+    // Same number, different letter, in two separate requirements. The
+    // numbering alone settles this one: MATH 005B follows MATH 005A.
+    const schedule = buildSchedule(
+      [g(course('MATH 005B', 5)), g(course('MATH 005A', 5))],
+      base,
+    );
+
+    expect(schedule.terms.map((t) => t.courses.map((c) => c.code))).toEqual([
+      ['MATH 005A'],
+      ['MATH 005B'],
+    ]);
+  });
+
+  it('lets separate requirements in one subject share a term', () => {
+    // The limit of what the numbering can say, and the reason it stops here.
+    // CS 008 and CS 033 both follow CS 003B and neither follows the other, so
+    // reading every pair of numbers as a chain would spread a term's work over
+    // three terms for nothing.
+    const schedule = buildSchedule(
+      [g(course('CS 008', 3)), g(course('CS 033', 3)), g(course('CS 045', 3))],
+      base,
+    );
+
+    expect(schedule.terms).toHaveLength(1);
+    expect(schedule.terms[0].courses.map((c) => c.code).sort()).toEqual([
+      'CS 008',
+      'CS 033',
+      'CS 045',
+    ]);
+  });
+
+  it('keeps a lab with its lecture even inside a chained requirement', () => {
+    const schedule = buildSchedule(
+      [g(course('CS 002', 3), course('CS 003B', 3), course('CS 003BL', 1))],
+      base,
+    );
+
+    const withLecture = schedule.terms.find((t) => t.courses.some((c) => c.code === 'CS 003B'))!;
+    expect(withLecture.courses.map((c) => c.code)).toEqual(['CS 003B', 'CS 003BL']);
+  });
+});
+
+describe('the note that says why a term was split', () => {
+  it('names a course only while something of its subject still follows', () => {
+    // The note reads "the rest of it sits in later terms", so on the last term
+    // of a subject it contradicts itself.
+    const schedule = buildSchedule(
+      [group(course('CS 002', 3), course('CS 003A', 3)), group(course('MATH 010', 4))],
+      base,
+    );
+
+    expect(schedule.terms[0].sequenced).toEqual(['CS 002']);
+    expect(schedule.terms[1].sequenced).toEqual([]);
+  });
+
+  it('says nothing at all when no subject was ordered', () => {
+    const schedule = buildSchedule([group(course('CS 008', 3)), group(course('ENGL 001A', 3))], base);
+    expect(schedule.terms.flatMap((t) => t.sequenced)).toEqual([]);
   });
 });
