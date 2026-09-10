@@ -2,6 +2,7 @@ import { Fragment } from 'react';
 import type { Schedule, ScheduleItem, TermRef } from '../../src/planner/schedule';
 import { termIndex, termLabel } from '../../src/planner/schedule';
 import { areasCleared, type DoubleCountIndex } from '../../src/planner/doubleCount';
+import { padCourseCode } from '../../src/catalog/normalize';
 import type { Course } from '../../src/parser/types';
 
 // The plan drawn as a route: a rail, a station per term, a terminus. The
@@ -12,9 +13,13 @@ export function RouteView({
   doubleCount,
   pattern,
   target,
+  catalog,
 }: {
   schedule: Schedule;
   doubleCount: DoubleCountIndex;
+  // Whether the order came from the college's own catalog or from reading
+  // course numbers.
+  catalog: boolean;
   pattern: string;
   // The term the student is aiming at, so the route can draw the line they
   // are actually planning against rather than only its own end.
@@ -42,13 +47,51 @@ export function RouteView({
 
   return (
     <>
+      {schedule.missingPrereqs.length > 0 && (
+        <div className="route-block" data-warn="true">
+          {/* The one thing on this page a student cannot find out from the
+              agreement, and the one that stops them at the registration page.
+              Named as courses, with what opens each, so it can be acted on. */}
+          <b>
+            {schedule.missingPrereqs.length === 1
+              ? 'One course here needs something first that this plan does not include.'
+              : `${schedule.missingPrereqs.length} courses here need something first that this plan does not include.`}
+          </b>
+          <ul>
+            {schedule.missingPrereqs.map((m) => (
+              <li key={m.course}>
+                <b>{m.course}</b> needs {m.needs.map(padCourseCode).join(' or ')}
+              </li>
+            ))}
+          </ul>
+          <span>
+            Your college requires these; the agreement does not list them, so they are not in the
+            plan above. If you have already taken one, tick it under &ldquo;Where you are&rdquo; or
+            mark the requirement as already held. If you have not, it is real work to add and worth
+            taking to a counselor.
+          </span>
+        </div>
+      )}
+
       {schedule.terms.some((t) => t.sequenced.length > 0) && (
         <p className="route-note">
-          Some of these are ordered because one comes before another. That is read from how the
-          courses are numbered and from which of them the agreement groups together, since the
-          agreement lists no prerequisites at all. Two courses it puts in the same term may still
-          have one between them, so check what you are taking together against your
-          college&rsquo;s catalog before you register.
+          {/* Which of the two ordered this plan changes how far a student
+              should trust it, so it is said rather than left to be assumed. */}
+          {catalog ? (
+            <>
+              Some of these are ordered because one comes before another, read from your
+              college&rsquo;s own catalog. The agreement carries no prerequisites; the catalog
+              does, and it is what put these terms in this order.
+            </>
+          ) : (
+            <>
+              Some of these are ordered because one comes before another. This site cannot read
+              your college&rsquo;s catalog, so that is a reading of how the courses are numbered
+              and of which of them the agreement groups together, not a list of real
+              prerequisites. Check what you are taking together against your college&rsquo;s
+              catalog before you register.
+            </>
+          )}
         </p>
       )}
       {(doubled > 0 || areaSlots > 0) && (

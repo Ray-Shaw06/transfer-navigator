@@ -31,6 +31,7 @@ import {
   useGeneralEducation,
   useMajors,
   usePartners,
+  usePrereqs,
   yearsFor,
 } from './lib/assist';
 import { readPlanUrl, writePlanUrl } from './lib/urlState';
@@ -196,6 +197,15 @@ export default function Home() {
     );
   }, [ge, plan, completed, activePattern, destination]);
 
+  // Asked for after the plan, because the plan decides which courses are worth
+  // asking the catalog about. Until it answers, and for a college whose
+  // catalog cannot be read at all, the schedule orders by course numbers.
+  const planCodes = useMemo(
+    () => (plan ? plan.remainingGroups.flatMap((g) => g.courses.map((c) => c.code)) : []),
+    [plan],
+  );
+  const prereqs = usePrereqs(college, planCodes);
+
   const schedule = useMemo(
     () =>
       plan
@@ -207,13 +217,17 @@ export default function Home() {
               includeSummer: settings.includeSummer,
               includeWinter: settings.includeWinter,
               target: settings.target,
+              prereqs: prereqs.index.size > 0 ? prereqs.index : undefined,
+              // So a prerequisite the student already holds is not reported
+              // back to them as missing.
+              held: [...completed, ...cleared],
             },
             // General education fills whatever room each term has left after
             // major preparation, which is the part with sequences to respect.
             geView ? geScheduleItems(geView) : [],
           )
         : null,
-    [plan, settings, geView],
+    [plan, settings, geView, prereqs, completed, cleared],
   );
 
   // Mirror the plan into the address bar. replaceState rather than pushState:
@@ -370,6 +384,7 @@ export default function Home() {
                 doubleCount={doubleCount}
                 pattern={patternFor(activePattern).name}
                 target={settings.target}
+                catalog={prereqs.index.size > 0}
               />
             </section>
           )}
@@ -456,12 +471,21 @@ export default function Home() {
               reason to call your plan late.
             </p>
             <p>
-              <b>What it does not.</b> The minimum transferable units your campus asks for, GPA, and
-              admission itself. Nor prerequisites: no articulation agreement carries them, so the
-              order here is read from course numbers and from which courses the agreement groups
-              together. It catches a chain like CS 2 before CS 3A before CS 3B; it cannot know that
-              a course in one requirement is a prerequisite for a course in another. Confirm all of
-              that with a counselor before you register.
+              <b>What it does not.</b> The minimum transferable units your campus asks for, GPA,
+              and admission itself. Confirm those with a counselor before you register.{' '}
+              {prereqs.index.size > 0 ? (
+                <>
+                  Prerequisites here come from {agreement.sendingInstitution}&rsquo;s own catalog,
+                  not from the agreement, which carries none. A course whose catalog entry could
+                  not be read is ordered by its number instead.
+                </>
+              ) : (
+                <>
+                  Nor prerequisites: the agreement carries none, and this site cannot read your
+                  college&rsquo;s catalog, so the order is a reading of course numbers and of
+                  which courses the agreement groups together.
+                </>
+              )}
             </p>
             <p>
               <b>Where it can be wrong.</b> When a course you finished could count toward two

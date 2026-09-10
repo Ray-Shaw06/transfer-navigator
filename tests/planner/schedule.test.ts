@@ -827,3 +827,182 @@ describe('the note that says why a term was split', () => {
     expect(schedule.terms.flatMap((t) => t.sequenced)).toEqual([]);
   });
 });
+
+describe('prerequisites read from the college catalog', () => {
+  const g = (...cs: { code: string; title: string; units: number }[]) => group(...cs);
+
+  // Pasadena City College's real catalog, for the courses this agreement uses.
+  // Three of these contradict what reading the numbers alone would guess, which
+  // is the whole reason the catalog is worth fetching.
+  const pcc = new Map([
+    ['CS 2', { code: 'CS 2', prerequisites: [], corequisites: [], recommended: [] }],
+    ['CS 3A', { code: 'CS 3A', prerequisites: ['CS 2'], corequisites: ['CS 3AL'], recommended: [] }],
+    ['CS 3AL', { code: 'CS 3AL', prerequisites: [], corequisites: ['CS 3A'], recommended: [] }],
+    // No prerequisite at all: CS 003B is Java where CS 003A is C++, so they are
+    // parallel and not a sequence.
+    ['CS 3B', { code: 'CS 3B', prerequisites: [], corequisites: ['CS 3BL'], recommended: ['CS 1'] }],
+    ['CS 3BL', { code: 'CS 3BL', prerequisites: [], corequisites: ['CS 3B'], recommended: [] }],
+    // Follows CS 003A, not CS 003B.
+    ['CS 8', { code: 'CS 8', prerequisites: ['CS 3A'], corequisites: [], recommended: [] }],
+    ['CS 33', { code: 'CS 33', prerequisites: ['CS 3B'], corequisites: [], recommended: [] }],
+  ]);
+
+  const termOf = (s: ReturnType<typeof buildSchedule>, code: string) =>
+    s.terms.findIndex((t) => t.courses.some((c) => c.code === code));
+
+  it('puts a stated prerequisite in a strictly earlier term', () => {
+    const schedule = buildSchedule(
+      [g(course('CS 003A', 3), course('CS 002', 3), course('CS 003AL', 1))],
+      { ...base, prereqs: pcc },
+    );
+
+    expect(termOf(schedule, 'CS 002')).toBeLessThan(termOf(schedule, 'CS 003A'));
+  });
+
+  it('follows the catalog where the numbering would have guessed wrong', () => {
+    // CS 008 follows CS 003A. Reading the numbers put CS 008 beside CS 003B,
+    // which is a term a student cannot register for.
+    const schedule = buildSchedule(
+      [
+        g(course('CS 003A', 3), course('CS 002', 3), course('CS 003AL', 1)),
+        g(course('CS 008', 3)),
+      ],
+      { ...base, prereqs: pcc },
+    );
+
+    expect(termOf(schedule, 'CS 003A')).toBeLessThan(termOf(schedule, 'CS 008'));
+  });
+
+  it('stops separating two courses the catalog says are not a sequence', () => {
+    // CS 003A and CS 003B share a number and differ by a letter, so reading the
+    // numbers chains them. The catalog says CS 003B has no prerequisite: it is
+    // the Java course where CS 003A is the C++ one. With the catalog in hand
+    // they may share a term, and the plan is a term shorter for it.
+    const withCatalog = buildSchedule(
+      [g(course('CS 003A', 3)), g(course('CS 003B', 3))],
+      { ...base, prereqs: pcc },
+    );
+    const guessing = buildSchedule([g(course('CS 003A', 3)), g(course('CS 003B', 3))], base);
+
+    expect(withCatalog.terms).toHaveLength(1);
+    expect(guessing.terms).toHaveLength(2);
+  });
+
+  it('keeps a corequisite in the same term, from the catalog rather than the code', () => {
+    const schedule = buildSchedule(
+      [g(course('CS 003B', 3)), g(course('CS 003BL', 1))],
+      { ...base, prereqs: pcc },
+    );
+
+    expect(termOf(schedule, 'CS 003B')).toBe(termOf(schedule, 'CS 003BL'));
+  });
+
+  it('ignores a prerequisite this plan does not schedule', () => {
+    // CS 002's own prerequisite at Pasadena is a mathematics course the
+    // student has already done, so it is not in the plan. Ordering against a
+    // course that is not being taken would stall the plan forever.
+    const outside = new Map(pcc);
+    outside.set('CS 2', {
+      code: 'CS 2',
+      prerequisites: ['MATH 8'],
+      corequisites: [],
+      recommended: [],
+    });
+
+    const schedule = buildSchedule([g(course('CS 002', 3))], { ...base, prereqs: outside });
+    expect(schedule.terms).toHaveLength(1);
+    expect(schedule.terms[0].courses.map((c) => c.code)).toEqual(['CS 002']);
+  });
+
+  it('never drops a course, even if the catalog states a cycle', () => {
+    // A catalog should never say this, and if one does the scheduler must not
+    // spin or quietly lose the courses.
+    const cyclic = new Map([
+      ['AAA 1', { code: 'AAA 1', prerequisites: ['AAA 2'], corequisites: [], recommended: [] }],
+      ['AAA 2', { code: 'AAA 2', prerequisites: ['AAA 1'], corequisites: [], recommended: [] }],
+    ]);
+
+    const schedule = buildSchedule(
+      [g(course('AAA 1', 3)), g(course('AAA 2', 3))],
+      { ...base, prereqs: cyclic },
+    );
+
+    expect(schedule.terms.flatMap((t) => t.courses.map((c) => c.code)).sort()).toEqual([
+      'AAA 1',
+      'AAA 2',
+    ]);
+  });
+
+  it('steps over a blocked course rather than leaving the term empty', () => {
+    // CS 008 is waiting on CS 003A, which is no reason to leave the rest of
+    // the term unused when something unrelated fits.
+    const schedule = buildSchedule(
+      [g(course('CS 008', 3)), g(course('CS 003A', 3)), g(course('BIO 001', 4))],
+      { ...base, prereqs: pcc },
+    );
+
+    expect(schedule.terms[0].courses.map((c) => c.code).sort()).toEqual(['BIO 001', 'CS 003A']);
+    expect(termOf(schedule, 'CS 008')).toBe(1);
+  });
+});
+
+describe('a prerequisite the plan does not contain', () => {
+  const g = (...cs: { code: string; title: string; units: number }[]) => group(...cs);
+  const pcc = new Map([
+    ['CS 8', { code: 'CS 8', prerequisites: ['CS 3A'], corequisites: [], recommended: [] }],
+    ['CS 3A', { code: 'CS 3A', prerequisites: ['CS 2'], corequisites: [], recommended: [] }],
+    ['MATH 5B', {
+      code: 'MATH 5B',
+      prerequisites: ['MATH 5A', 'MATH 5AH'],
+      corequisites: [],
+      recommended: [],
+    }],
+  ]);
+
+  it('names the course a student would be turned away from', () => {
+    // The real case. ASSIST says Pasadena's CS 008 satisfies UCI's I&C SCI 46,
+    // and says nothing about CS 003A, which Pasadena requires first. The plan
+    // schedules CS 008 alone and the student is refused at registration.
+    const schedule = buildSchedule([g(course('CS 008', 3))], { ...base, prereqs: pcc });
+
+    expect(schedule.missingPrereqs).toEqual([{ course: 'CS 008', needs: ['CS 3A'] }]);
+  });
+
+  it('says nothing when the prerequisite is in the plan', () => {
+    const schedule = buildSchedule([g(course('CS 008', 3)), g(course('CS 003A', 3))], {
+      ...base,
+      prereqs: pcc,
+    });
+
+    expect(schedule.missingPrereqs.map((m) => m.course)).toEqual(['CS 003A']);
+  });
+
+  it('says nothing when the student has already done it', () => {
+    const schedule = buildSchedule([g(course('CS 008', 3))], {
+      ...base,
+      prereqs: pcc,
+      held: ['CS 003A'],
+    });
+
+    expect(schedule.missingPrereqs).toEqual([]);
+  });
+
+  it('takes either side of an either/or as covering it', () => {
+    // "MATH 005A or MATH 005AH" is satisfied by one of them, so holding one is
+    // not something to warn about.
+    const schedule = buildSchedule([g(course('MATH 005B', 5))], {
+      ...base,
+      prereqs: pcc,
+      held: ['MATH 005AH'],
+    });
+
+    expect(schedule.missingPrereqs).toEqual([]);
+  });
+
+  it('warns about nothing at a college whose catalog cannot be read', () => {
+    // Nothing is known there, and a warning invented from nothing is worse
+    // than no warning.
+    const schedule = buildSchedule([g(course('CS 008', 3))], base);
+    expect(schedule.missingPrereqs).toEqual([]);
+  });
+});

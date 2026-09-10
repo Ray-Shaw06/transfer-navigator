@@ -1,5 +1,7 @@
 import type { AndGroup } from '../parser/groups';
 import type { Course } from '../parser/types';
+import type { PrereqIndex } from '../catalog/types';
+import { normalizeCourseCode } from '../catalog/normalize';
 
 // Turns the work a plan says is left into named terms a student can actually
 // register against: Fall 2026, Spring 2027, and so on.
@@ -75,6 +77,23 @@ export type ScheduledTerm = {
   sequenced: string[];
 };
 
+// A course this plan schedules whose college requires something first that
+// the plan does not contain and the student has not said they hold.
+//
+// This is the failure a student actually meets at the registration page, and
+// no articulation agreement can warn them about it. ASSIST names the course at
+// their college that satisfies a university requirement; it does not name the
+// two courses their own college makes them take first. Pasadena's CS 008
+// satisfies UCI's I&C SCI 46 and requires CS 003A, which appears nowhere in
+// the agreement.
+export type MissingPrereq = {
+  // The scheduled course that cannot be registered for yet.
+  course: string;
+  // What its catalog says has to come first, as the catalog writes it. More
+  // than one means alternatives: any of them opens the course.
+  needs: string[];
+};
+
 export type Schedule = {
   terms: ScheduledTerm[];
   totalUnits: number;
@@ -113,6 +132,10 @@ export type Schedule = {
   // flat sentence "you cannot be ready to transfer", for a student who could.
   // Null when there is no target.
   transferByTarget: boolean | null;
+  // Courses whose prerequisites are missing from the plan entirely. Empty
+  // when the college's catalog could not be read, since nothing is known then
+  // and a warning invented from nothing is worse than none.
+  missingPrereqs: MissingPrereq[];
   // What is scheduled after the target, in the order it falls. Empty when
   // there is no target or when everything fits.
   afterTarget: ScheduleItem[];
@@ -271,6 +294,14 @@ export type ScheduleOptions = {
   includeWinter?: boolean;
   winterUnits?: number;
   target?: TermRef | null;
+  // What the college's own catalog says has to come before what, keyed by
+  // normalised course code. Absent for a college whose catalog this cannot
+  // read, and the schedule then falls back to reading order out of course
+  // numbers, which is what it did everywhere before catalogs were read at all.
+  prereqs?: PrereqIndex;
+  // Courses the student has already finished or claimed. Only read to keep a
+  // prerequisite they already hold from being reported as missing.
+  held?: Iterable<string>;
 };
 
 export function buildSchedule(
@@ -281,7 +312,28 @@ export function buildSchedule(
   // is, rather than filling the gaps major preparation leaves.
   generalEducation: ScheduleItem[] = [],
 ): Schedule {
-  const { start, unitsPerTerm, includeSummer, includeWinter = false, target = null } = options;
+  const {
+    start,
+    unitsPerTerm,
+    includeSummer,
+    includeWinter = false,
+    target = null,
+    prereqs,
+  } = options;
+
+  const held = new Set([...(options.held ?? [])].map(normalizeCourseCode));
+
+  // Whether the catalog had anything to say about this course. It decides
+  // which of the two orderings governs it: a course the catalog covers is
+  // ordered by what the catalog says and by nothing else, because layering the
+  // number-reading guess on top would put back the very mistakes the real data
+  // corrects. Pasadena's catalog says CS 003B has no prerequisite at all and
+  // that CS 008 follows CS 003A rather than CS 003B; the guess said otherwise
+  // on both.
+  const known = (code: string) => prereqs?.has(normalizeCourseCode(code)) ?? false;
+
+  const statedPrereqs = (code: string): string[] =>
+    prereqs?.get(normalizeCourseCode(code))?.prerequisites ?? [];
   // Summer terms are short. Half a normal load, at least one course's worth,
   // unless the caller states otherwise.
   const summerUnits = options.summerUnits ?? Math.max(3, Math.round(unitsPerTerm / 2));
@@ -342,6 +394,54 @@ export function buildSchedule(
     return blocks;
   });
 
+  // Merge blocks the catalog says are corequisites of one another.
+  //
+  // A corequisite is the catalog stating outright what the lab rule could only
+  // guess from a trailing L: these are taken together. Where it is stated, it
+  // is better evidence than the code shape, and it catches pairs the code
+  // shape misses entirely.
+  if (prereqs) {
+    const home = new Map<string, number>();
+    queue.forEach((block, i) => {
+      for (const c of block.courses) home.set(normalizeCourseCode(c.code), i);
+    });
+
+    // Union-find over corequisite edges, so a lecture, its lab and anything
+    // else chained to them end up as one block however they were listed.
+    const parent = queue.map((_, i) => i);
+    const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+    const union = (a: number, b: number) => {
+      const [x, y] = [find(a), find(b)];
+      if (x !== y) parent[Math.max(x, y)] = Math.min(x, y);
+    };
+
+    queue.forEach((block, i) => {
+      for (const c of block.courses) {
+        for (const co of prereqs.get(normalizeCourseCode(c.code))?.corequisites ?? []) {
+          const other = home.get(co);
+          if (other !== undefined) union(i, other);
+        }
+      }
+    });
+
+    if (parent.some((p, i) => p !== i)) {
+      const merged = new Map<number, Block>();
+      const order: number[] = [];
+      queue.forEach((block, i) => {
+        const root = find(i);
+        const existing = merged.get(root);
+        if (existing) {
+          existing.courses.push(...block.courses);
+          return;
+        }
+        merged.set(root, { ...block, courses: [...block.courses] });
+        order.push(root);
+      });
+      queue.length = 0;
+      queue.push(...order.map((root) => merged.get(root)!));
+    }
+  }
+
   // Put each subject's blocks into its own ascending order, in place.
   //
   // In place, rather than sorting the whole queue, because the order the
@@ -384,7 +484,10 @@ export function buildSchedule(
     // For each subject, which rung of it was placed in which term. A course
     // clashes only with a DIFFERENT rung of the same subject in the same term,
     // so a lecture and its lab still sit together.
-    const placed = new Map<string, { order: CourseOrder; term: number; group: number }[]>();
+    const placed = new Map<
+      string,
+      { order: CourseOrder; term: number; group: number; code: string }[]
+    >();
 
     const reserved = new Set(reserveFor);
 
@@ -444,13 +547,44 @@ export function buildSchedule(
     const geShare =
       majorUnits + reservedUnits > 0 ? reservedUnits / (majorUnits + reservedUnits) : 0;
 
-    let next = 0;
+    // Which term each course was placed in, by normalised code, so a stated
+    // prerequisite can be checked against it.
+    const termOf = new Map<string, number>();
+    // Every course this plan actually schedules. A prerequisite outside it is
+    // one the student already holds or never needed, and ordering against a
+    // course that is not in the plan would stall it forever.
+    const inPlan = new Set(
+      queue.flatMap((b) => b.courses.map((c) => normalizeCourseCode(c.code))),
+    );
+
+    // A block may go in this term only once every prerequisite the catalog
+    // states for it, and that this plan also schedules, sits in an EARLIER
+    // term. Strictly earlier: a prerequisite in the same term is a course the
+    // student has not passed yet when registration opens.
+    // Set only if the stated prerequisites turn out to be unsatisfiable, which
+    // in practice means a catalog stating a cycle. Ordering is then abandoned
+    // rather than the courses: a plan in a doubtful order is recoverable, and a
+    // plan missing a course a student has to take is not.
+    let ignoreReady = false;
+
+    const ready = (block: Block, term: number): boolean =>
+      ignoreReady ||
+      block.courses.every((course) =>
+        statedPrereqs(course.code).every((need) => {
+          if (!inPlan.has(need)) return true;
+          const at = termOf.get(need);
+          return at !== undefined && at < term;
+        }),
+      );
+
+    const done = queue.map(() => false);
+    let remaining = queue.length;
     let guard = 0;
     // Bounded so an item larger than a whole term cannot spin forever. Such an
     // item is placed alone in its own term instead.
     const limit = (queue.length + order.length) * 4 + 16;
 
-    while ((next < queue.length || pendingGe.length > 0) && guard++ < limit) {
+    while ((remaining > 0 || pendingGe.length > 0) && guard++ < limit) {
       const budget = budgetFor(ref);
 
       // General education goes in first, up to its share of the term. It is the
@@ -460,51 +594,84 @@ export function buildSchedule(
       fillGeUpTo(Math.round(budget * geShare), true);
 
       // Then major preparation, which owns the rest of the term.
-      while (next < queue.length) {
-        const block = queue[next].courses;
-        // Two readings of the same evidence, and a course clashes with anything
-        // already in this term that either one catches.
-        //
-        // The first is the numbering itself: MATH 005A and MATH 005B are two
-        // parts of one course and the second follows the first, wherever the
-        // agreement happens to list them. Same number, different letter.
-        //
-        // The second is ASSIST's own grouping. Listing CS 003A, CS 002 and
-        // CS 003AL as ONE requirement is the campus saying those courses go
-        // together, and courses that go together in one subject at one college
-        // are a chain: CS 002 is the prerequisite for CS 003A. So a different
-        // rung of the same requirement is a different term, lowest first.
-        //
-        // What is deliberately NOT read is a pair of different numbers in
-        // different requirements. Most such pairs are siblings rather than a
-        // chain, and treating them as one stretched twenty-two units of real
-        // work across four terms of four to eight units each: a full-time
-        // student told they needed two years for one year of work. The cost of
-        // that reading is a plan the student cannot act on, which is worse than
-        // the gap it closes. The gap is stated on the route instead.
-        const clashes = block.some((course) => {
-          const order = courseOrder(course.code);
-          if (order === null) return false;
-          return (placed.get(order.subject) ?? []).some((p) => {
-            if (p.term !== terms.length) return false;
-            if (sameRung(p.order, order)) return false;
-            return p.order.number === order.number || p.group === queue[next].group;
-          });
-        });
-        if (clashes || total(items) + total(block) > budget) break;
+      //
+      // A valid set of prerequisites always leaves something to start with, so
+      // nothing being ready while work remains means the catalog described a
+      // cycle. Stop enforcing the order rather than dropping the courses.
+      if (remaining > 0 && !queue.some((block, i) => !done[i] && ready(block, terms.length))) {
+        ignoreReady = true;
+      }
 
-        for (const course of block) {
-          const order = courseOrder(course.code);
-          if (order) {
-            placed.set(order.subject, [
-              ...(placed.get(order.subject) ?? []),
-              { order, term: terms.length, group: queue[next].group },
-            ]);
-            sequenced.push(course.code);
+      // A walk down the queue, in the order the agreement lists its
+      // requirements, with one exception: a block held back for its
+      // prerequisite is stepped over rather than allowed to close the term.
+      // CS 008 waiting on CS 003A is no reason to leave the rest of the term
+      // empty when a mathematics course would fit.
+      //
+      // Stepping over is all it does. Anything that is ready and still does not
+      // fit ends the term, exactly as before, so a term is filled in the
+      // agreement's own order and not greedily backfilled with whatever
+      // happens to be small.
+      //
+      // One pass is enough. Readiness asks for a prerequisite in a STRICTLY
+      // earlier term, so placing a block can never make another one ready in
+      // the term it was just placed in.
+      {
+        for (let i = 0; i < queue.length; i++) {
+          if (done[i]) continue;
+          const block = queue[i].courses;
+
+          // What the college's catalog says, where it says anything.
+          if (!ready(queue[i], terms.length)) continue;
+
+          // Two readings of the numbering, for the courses the catalog does
+          // not cover. A course it DOES cover is ordered by the catalog alone,
+          // because layering this guess on top would put back the mistakes the
+          // real data corrects: Pasadena states that CS 003B has no
+          // prerequisite and that CS 008 follows CS 003A, and this guess said
+          // otherwise on both.
+          //
+          // The first reading is the numbering itself: MATH 005A and MATH 005B
+          // are two parts of one course and the second follows the first,
+          // wherever the agreement happens to list them.
+          //
+          // The second is ASSIST's own grouping. Listing CS 003A, CS 002 and
+          // CS 003AL as ONE requirement is the campus saying those go
+          // together, and courses that go together in one subject at one
+          // college are a chain.
+          //
+          // What is deliberately NOT read is a pair of different numbers in
+          // different requirements. Most such pairs are siblings, and treating
+          // them as a chain stretched twenty-two units of real work across four
+          // terms of four to eight units each.
+          const clashes = block.some((course) => {
+            if (known(course.code)) return false;
+            const order = courseOrder(course.code);
+            if (order === null) return false;
+            return (placed.get(order.subject) ?? []).some((p) => {
+              if (p.term !== terms.length) return false;
+              if (sameRung(p.order, order)) return false;
+              if (known(p.code)) return false;
+              return p.order.number === order.number || p.group === queue[i].group;
+            });
+          });
+          if (clashes || total(items) + total(block) > budget) break;
+
+          for (const course of block) {
+            const order = courseOrder(course.code);
+            if (order) {
+              placed.set(order.subject, [
+                ...(placed.get(order.subject) ?? []),
+                { order, term: terms.length, group: queue[i].group, code: course.code },
+              ]);
+              sequenced.push(course.code);
+            }
+            termOf.set(normalizeCourseCode(course.code), terms.length);
+            items.push({ kind: 'course', units: course.units, course, priority: queue[i].priority });
           }
-          items.push({ kind: 'course', units: course.units, course, priority: queue[next].priority });
+          done[i] = true;
+          remaining--;
         }
-        next++;
       }
 
       // Then anything else that fits, so a term is not left part empty because
@@ -515,17 +682,28 @@ export function buildSchedule(
         // Nothing fitted an empty term. Either this is a short summer and the
         // next thing belongs after it, or one item is larger than any term and
         // goes in alone: an honest oversized term beats a silent omission.
+        //
+        // The first block still unplaced, which with the scan above is the
+        // first one nothing could make room for this term.
+        const stuck = queue.findIndex((_, i) => !done[i]);
         const upNext =
-          next < queue.length ? total(queue[next].courses) : (pendingGe[0]?.units ?? 0);
+          stuck >= 0 ? total(queue[stuck].courses) : (pendingGe[0]?.units ?? 0);
         if (upNext <= unitsPerTerm) {
           skipTerm();
           continue;
         }
-        if (next < queue.length && total(queue[next].courses) > unitsPerTerm) {
-          for (const course of queue[next].courses) {
-            items.push({ kind: 'course', units: course.units, course, priority: queue[next].priority });
+        if (stuck >= 0 && total(queue[stuck].courses) > unitsPerTerm) {
+          for (const course of queue[stuck].courses) {
+            termOf.set(normalizeCourseCode(course.code), terms.length);
+            items.push({
+              kind: 'course',
+              units: course.units,
+              course,
+              priority: queue[stuck].priority,
+            });
           }
-          next++;
+          done[stuck] = true;
+          remaining--;
         } else if (pendingGe.length > 0) {
           items.push(pendingGe.shift()!);
         }
@@ -609,6 +787,27 @@ export function buildSchedule(
     }
   }
 
+  // Every course the plan schedules whose college requires something first
+  // that is neither scheduled here nor already held.
+  //
+  // Only alternatives ALL missing count. A catalog stating "MATH 005A or
+  // MATH 005AH" is satisfied by either, so reporting it while the student
+  // holds one of them would be a warning about nothing.
+  const scheduled = new Set(
+    terms.flatMap((t) => t.courses.map((c) => normalizeCourseCode(c.code))),
+  );
+  const covered = (code: string) => scheduled.has(code) || held.has(code);
+
+  const missingPrereqs: MissingPrereq[] = !prereqs
+    ? []
+    : terms
+        .flatMap((t) => t.courses)
+        .flatMap((course) => {
+          const stated = prereqs.get(normalizeCourseCode(course.code))?.prerequisites ?? [];
+          if (stated.length === 0 || stated.some(covered)) return [];
+          return [{ course: course.code, needs: stated }];
+        });
+
   const readyAfter = terms.length > 0 ? terms[terms.length - 1].ref : null;
   const afterTarget = lateItems(terms);
   const overflow = total(afterTarget);
@@ -622,6 +821,7 @@ export function buildSchedule(
     earliestTransfer: lastGating ? nextTerm(lastGating.ref, includeSummer, includeWinter) : null,
     meetsTarget: target ? overflow === 0 : null,
     overflowUnits: overflow,
+    missingPrereqs,
     transferByTarget: target ? afterTarget.every((i) => !gating(i)) : null,
     afterTarget,
     majorAfterTarget: afterTarget.filter((i) => i.priority === 'major'),
