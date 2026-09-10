@@ -9,13 +9,11 @@ import type { Course } from '../../src/parser/types';
 // structure rather than by decoration.
 export function RouteView({
   schedule,
-  unitsPerTerm,
   doubleCount,
   pattern,
   target,
 }: {
   schedule: Schedule;
-  unitsPerTerm: number;
   doubleCount: DoubleCountIndex;
   pattern: string;
   // The term the student is aiming at, so the route can draw the line they
@@ -25,12 +23,15 @@ export function RouteView({
   if (schedule.terms.length === 0) return null;
 
   const onTime = schedule.meetsTarget;
-  // The term the divider goes after: the last one at or before the target.
+  // The term the divider goes after: the last one before the target. Before,
+  // not at: the target is the term the student starts at the university, so
+  // it is not a term they can take a course at their college in.
+  //
   // Only drawn when work genuinely falls past it, and only when that work is
   // work the student can leave until after they transfer.
   const split =
     target !== null && schedule.transferByTarget === true && schedule.meetsTarget === false
-      ? schedule.terms.filter((t) => termIndex(t.ref) <= termIndex(target)).length
+      ? schedule.terms.filter((t) => termIndex(t.ref) < termIndex(target)).length
       : -1;
   const doubled = schedule.terms
     .flatMap((t) => t.courses)
@@ -69,17 +70,24 @@ export function RouteView({
             <div className="route-split" key="split" style={{ '--i': i } as React.CSSProperties}>
               <b>You transfer here, {termLabel(target)}</b>
               <span>
-                Everything above is on this agreement or is what admission itself turns on. The{' '}
-                {schedule.overflowUnits} units below finish {pattern} certification, which neither
-                system asks for before you transfer. Leaving them undone means doing your campus's
-                own general education requirements after you arrive instead.
+                Everything above is what admission turns on. The {schedule.overflowUnits} units
+                below are {pattern} certification and major preparation this agreement lists
+                without marking it required for admission. Neither is asked for before you
+                transfer. Leaving the {pattern} part undone means doing your campus's own general
+                education requirements after you arrive instead.
               </span>
             </div>
           ) : null;
-        // A term over the normal load is worth flagging: it is usually the
+        // A term over its own ceiling is worth flagging: it is usually the
         // result of one course that is simply larger than the budget, and a
         // student should see that rather than discover it at registration.
-        const over = term.units > unitsPerTerm;
+        // Against the term's ceiling, not the student's chosen load, or every
+        // ordinary winter and summer term would read as under-filled and an
+        // overfull one would not read as over at all.
+        const over = term.units > term.budget;
+        // A short session is not a semester and should not be mistaken for
+        // one on a route that lists them side by side.
+        const short = term.ref.kind === 'Winter' || term.ref.kind === 'Summer';
 
         const body = (
           <div
@@ -100,6 +108,7 @@ export function RouteView({
                     yet. Counting only the named ones reads as an empty term. */}
                 {term.units} units · {term.items.length}{' '}
                 {term.items.length === 1 ? 'course' : 'courses'}
+                {short ? ' · short session' : ''}
                 {over ? ' · over a normal load' : ''}
               </div>
               <div className="term-courses">

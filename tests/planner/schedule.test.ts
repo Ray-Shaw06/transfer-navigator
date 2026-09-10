@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   buildSchedule,
   currentTerm,
+  earliestTerm,
   nextTerm,
   sequenceKey,
   termIndex,
@@ -185,16 +186,19 @@ describe('buildSchedule', () => {
       { ...base, target: { kind: 'Spring', year: 2027 } },
     );
 
+    // Spring 2027 is the term the student starts at the university, so it is
+    // not a term they can take a course at their college in. Both it and the
+    // Fall behind it are past the line.
     expect(schedule.terms).toHaveLength(3);
     expect(schedule.meetsTarget).toBe(false);
-    expect(schedule.overflowUnits).toBe(15);
+    expect(schedule.overflowUnits).toBe(30);
     expect(termLabel(schedule.readyAfter!)).toBe('Fall 2027');
   });
 
   it('confirms a plan that does fit', () => {
     const schedule = buildSchedule([group(course('AAA 1', 15)), group(course('BBB 2', 15))], {
       ...base,
-      target: { kind: 'Spring', year: 2027 },
+      target: { kind: 'Fall', year: 2027 },
     });
 
     expect(schedule.meetsTarget).toBe(true);
@@ -308,8 +312,9 @@ describe('buildSchedule with general education', () => {
 
 describe('a target that cannot hold everything', () => {
   const FALL_28 = { kind: 'Fall' as const, year: 2028 };
-  // Fall 26, Spring 27, Fall 27, Spring 28, Fall 28: five terms at 9 units is
-  // 45, so a plan larger than that has to give something up.
+  // Fall 26, Spring 27, Fall 27, Spring 28: four terms at 9 units is 36, so a
+  // plan larger than that has to give something up. Fall 28 is the term the
+  // student starts at the university and is not one of them.
   const tight = { start: FALL_26, unitsPerTerm: 9, includeSummer: false, target: FALL_28 };
 
   const majorPrep = [
@@ -342,14 +347,15 @@ describe('a target that cannot hold everything', () => {
   ];
 
   const late = (s: ReturnType<typeof buildSchedule>) =>
-    s.terms.filter((t) => termIndex(t.ref) > termIndex(FALL_28)).flatMap((t) => t.items);
+    s.terms.filter((t) => termIndex(t.ref) >= termIndex(FALL_28)).flatMap((t) => t.items);
 
   it('puts everything admission turns on inside the target and the rest after', () => {
     const schedule = buildSchedule(majorPrep, tight, pattern);
 
     // 18 units of major preparation plus 9 of admission general education is
-    // 27, which is three terms of 9. The 27 units of certification behind it
-    // do not fit before the target, and do not have to.
+    // 27, which is three of the four terms at 9. The 27 units of
+    // certification behind it do not fit before the target, and do not have
+    // to.
     expect(schedule.transferByTarget).toBe(true);
     expect(schedule.meetsTarget).toBe(false);
     expect(late(schedule).every((i) => i.priority === 'certification')).toBe(true);
@@ -448,5 +454,267 @@ describe('when the target can be moved rather than met', () => {
     const schedule = buildSchedule([], base, [area('3', 3, 'certification')]);
     expect(schedule.readyToTransfer).toBeNull();
     expect(schedule.readyAfter).not.toBeNull();
+  });
+});
+
+describe('major preparation the agreement does not mark as a minimum', () => {
+  const FALL_28 = { kind: 'Fall' as const, year: 2028 };
+  // Fall 26, Spring 27, Fall 27, Spring 28: four usable terms at 9 units.
+  const tight = { start: FALL_26, unitsPerTerm: 9, includeSummer: false, target: FALL_28 };
+
+  const priced = (code: string, units: number, priority: Priority) => ({
+    kind: 'and' as const,
+    priority,
+    courses: [course(code, units)],
+  });
+
+  it('does not make the plan late on its own', () => {
+    // 36 units of minimum fills every usable term exactly, and 4 units of
+    // unmarked preparation spills past the target. The old reading called
+    // that "you cannot be ready to transfer", which was wrong: the campus
+    // never said this course was required to apply.
+    const schedule = buildSchedule(
+      [
+        ...Array.from({ length: 12 }, (_, i) => priced(`REQ ${i}`, 3, 'admission')),
+        priced('EXTRA 1', 4, 'major'),
+      ],
+      tight,
+    );
+
+    expect(schedule.transferByTarget).toBe(true);
+    expect(schedule.meetsTarget).toBe(false);
+    expect(schedule.majorAfterTarget.map((i) => (i.kind === 'course' ? i.course.code : i.areaId)))
+      .toEqual(['EXTRA 1']);
+  });
+
+  it('still makes the plan late when the minimum itself does not fit', () => {
+    const schedule = buildSchedule(
+      Array.from({ length: 14 }, (_, i) => priced(`REQ ${i}`, 3, 'admission')),
+      tight,
+    );
+
+    expect(schedule.transferByTarget).toBe(false);
+    expect(schedule.majorAfterTarget).toEqual([]);
+  });
+
+  it('reads a group with no stated priority as a minimum', () => {
+    // Every caller predating the distinction, and every hand-built group in
+    // these tests, keeps the old reading where all of it gates the target.
+    const schedule = buildSchedule(
+      Array.from({ length: 14 }, (_, i) => group(course(`REQ ${i}`, 3))),
+      tight,
+    );
+
+    expect(schedule.transferByTarget).toBe(false);
+  });
+
+  it('counts the minimum as done in the last term before the target, not in it', () => {
+    const schedule = buildSchedule([priced('REQ 1', 3, 'admission')], {
+      ...tight,
+      start: { kind: 'Spring', year: 2028 },
+    });
+
+    // Spring 2028 is the last term a student can enrol in before starting at
+    // the university in Fall 2028.
+    expect(termLabel(schedule.readyToTransfer!)).toBe('Spring 2028');
+    expect(schedule.transferByTarget).toBe(true);
+  });
+});
+
+describe('the earliest term a student could start', () => {
+  it('is the term after the minimum finishes, not the term it finishes in', () => {
+    // A plan whose last minimum course falls in Fall 2028 does not get the
+    // student to a Fall 2028 start. Reporting the finish term against a Fall
+    // 2028 target read as "you cannot transfer by Fall 2028, you would not be
+    // ready until Fall 2028", which answers nothing.
+    const schedule = buildSchedule(
+      Array.from({ length: 5 }, (_, i) => group(course(`REQ ${i}`, 15))),
+      { ...base, target: { kind: 'Fall', year: 2028 } },
+    );
+
+    expect(termLabel(schedule.readyToTransfer!)).toBe('Fall 2028');
+    expect(termLabel(schedule.earliestTransfer!)).toBe('Spring 2029');
+  });
+
+  it('is null when there is nothing left to take', () => {
+    expect(buildSchedule([], base).earliestTransfer).toBeNull();
+  });
+});
+
+describe('the winter intersession', () => {
+  it('falls between Fall and the Spring after it, not inside a year', () => {
+    // The ordering trap. Winter 2027 runs in January 2027, after Fall 2026 and
+    // before Spring 2027, so a naive "sort by year then season" that put it
+    // beside the other 2027 terms would place it after Summer 2027.
+    expect(nextTerm({ kind: 'Fall', year: 2026 }, false, true)).toEqual({
+      kind: 'Winter',
+      year: 2027,
+    });
+    expect(nextTerm({ kind: 'Winter', year: 2027 }, false, true)).toEqual({
+      kind: 'Spring',
+      year: 2027,
+    });
+    expect(termIndex({ kind: 'Fall', year: 2026 })).toBeLessThan(
+      termIndex({ kind: 'Winter', year: 2027 }),
+    );
+    expect(termIndex({ kind: 'Winter', year: 2027 })).toBeLessThan(
+      termIndex({ kind: 'Spring', year: 2027 }),
+    );
+  });
+
+  it('is skipped entirely unless asked for', () => {
+    expect(nextTerm({ kind: 'Fall', year: 2026 }, false)).toEqual({ kind: 'Spring', year: 2027 });
+    expect(nextTerm({ kind: 'Fall', year: 2026 }, true)).toEqual({ kind: 'Spring', year: 2027 });
+  });
+
+  it('interleaves with summer when both are on', () => {
+    const schedule = buildSchedule(
+      Array.from({ length: 8 }, (_, i) => group(course(`AAA ${i}`, 4))),
+      { start: FALL_26, unitsPerTerm: 12, includeSummer: true, includeWinter: true },
+    );
+
+
+    expect(schedule.terms.map((t) => t.label)).toEqual([
+      'Fall 2026',
+      'Winter 2027',
+      'Spring 2027',
+      'Summer 2027',
+    ]);
+  });
+
+  it('holds one course, not a semester', () => {
+    // Five or six weeks against a semester's sixteen. A winter term packed to
+    // a student's chosen load would be a plan nobody could actually take.
+    const schedule = buildSchedule(
+      Array.from({ length: 6 }, (_, i) => group(course(`AAA ${i}`, 4))),
+      { start: FALL_26, unitsPerTerm: 12, includeSummer: false, includeWinter: true },
+    );
+
+    const winter = schedule.terms.find((t) => t.ref.kind === 'Winter')!;
+    expect(winter.items).toHaveLength(1);
+    expect(winter.units).toBe(4);
+  });
+
+  it('admits a five-unit course, which a fraction of the load would not', () => {
+    // The bug this pins. Budgeting winter as a quarter of a twelve-unit load
+    // gives three units, and three units silently refuses every four- and
+    // five-unit course, so winter reads as on and then takes nothing but the
+    // occasional three-unit elective.
+    for (const units of [3, 4, 5]) {
+      // Fall is filled exactly, so the next course is the first thing the
+      // winter after it is offered.
+      const schedule = buildSchedule(
+        [group(course('AAA 1', 12)), group(course('BBB 2', units))],
+        { start: FALL_26, unitsPerTerm: 12, includeSummer: false, includeWinter: true },
+      );
+      const winter = schedule.terms.find((t) => t.ref.kind === 'Winter');
+      expect(winter?.courses.map((c) => c.code)).toEqual(['BBB 2']);
+    }
+  });
+
+  it('refuses two courses however small they are', () => {
+    const schedule = buildSchedule(
+      [group(course('AAA 1', 12)), group(course('BBB 2', 3)), group(course('CCC 3', 3))],
+      { start: FALL_26, unitsPerTerm: 12, includeSummer: false, includeWinter: true },
+    );
+    const winter = schedule.terms.find((t) => t.ref.kind === 'Winter')!;
+    expect(winter.items).toHaveLength(1);
+  });
+
+  it('is skipped rather than printed empty when nothing fits it', () => {
+    // A 10-unit course does not fit a winter intersession but fits a normal
+    // term. The right answer is the Spring, not a blown budget and not an
+    // empty Winter row.
+    const schedule = buildSchedule([group(course('AAA 1', 6)), group(course('BIG 2', 10))], {
+      start: FALL_26,
+      unitsPerTerm: 12,
+      includeSummer: false,
+      includeWinter: true,
+    });
+
+    expect(schedule.terms.map((t) => t.label)).toEqual(['Fall 2026', 'Spring 2027']);
+  });
+
+  it('shortens a plan that a target could not otherwise hold', () => {
+    // The reason to offer it at all: four semesters at 9 units is 36, and 40
+    // units of minimum does not fit. Three winters buy the terms back.
+    const work = Array.from({ length: 14 }, (_, i) => group(course(`REQ ${i}`, 3)));
+    const target = { kind: 'Fall' as const, year: 2028 };
+
+    const without = buildSchedule(work, {
+      start: FALL_26,
+      unitsPerTerm: 9,
+      includeSummer: false,
+      target,
+    });
+    const withWinter = buildSchedule(work, {
+      start: FALL_26,
+      unitsPerTerm: 9,
+      includeSummer: false,
+      includeWinter: true,
+      target,
+    });
+
+    expect(without.transferByTarget).toBe(false);
+    expect(withWinter.transferByTarget).toBe(true);
+  });
+});
+
+describe('the term a student is planning from', () => {
+  // The next term they can still enrol in, not the one already under way. A
+  // California community college opens Spring in mid-January and Fall at the
+  // end of August.
+  const on = (iso: string) => currentTerm(new Date(iso));
+
+  it('offers Spring only while Spring is still startable', () => {
+    expect(on('2026-01-05T00:00:00Z')).toEqual({ kind: 'Spring', year: 2026 });
+    expect(on('2026-02-20T00:00:00Z')).toEqual({ kind: 'Spring', year: 2026 });
+  });
+
+  it('moves to Fall once Spring is under way', () => {
+    // March, not May. By March a Spring term is half over, and offering it as
+    // the term to plan from is offering a term nobody can join.
+    expect(on('2026-03-02T00:00:00Z')).toEqual({ kind: 'Fall', year: 2026 });
+    expect(on('2026-08-20T00:00:00Z')).toEqual({ kind: 'Fall', year: 2026 });
+  });
+
+  it('moves to next Spring once Fall is under way', () => {
+    // September, not October. Fall opens at the end of August.
+    expect(on('2026-09-09T00:00:00Z')).toEqual({ kind: 'Spring', year: 2027 });
+    expect(on('2026-12-20T00:00:00Z')).toEqual({ kind: 'Spring', year: 2027 });
+  });
+
+  it('never defaults to a short session, since not every college runs one', () => {
+    for (const month of ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12']) {
+      const kind = on(`2026-${month}-15T00:00:00Z`).kind;
+      expect(['Fall', 'Spring']).toContain(kind);
+    }
+  });
+});
+
+describe('the earliest term worth offering', () => {
+  const on = (iso: string) => earliestTerm(new Date(iso));
+
+  it('reaches back to the short session the default skips over', () => {
+    // The gap this closes. In September the default is next Spring, and a term
+    // list starting there has no Winter in it at all, so a student planning to
+    // start in the January intersession could not say so.
+    expect(on('2026-09-09T00:00:00Z')).toEqual({ kind: 'Winter', year: 2027 });
+    expect(currentTerm(new Date('2026-09-09T00:00:00Z'))).toEqual({
+      kind: 'Spring',
+      year: 2027,
+    });
+  });
+
+  it('never sits after the default, or the default would fall off the list', () => {
+    for (const month of ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12']) {
+      const now = new Date(`2026-${month}-15T00:00:00Z`);
+      expect(termIndex(earliestTerm(now))).toBeLessThanOrEqual(termIndex(currentTerm(now)));
+    }
+  });
+
+  it('offers the summer ahead of a Fall default', () => {
+    expect(on('2026-04-01T00:00:00Z')).toEqual({ kind: 'Summer', year: 2026 });
+    expect(currentTerm(new Date('2026-04-01T00:00:00Z'))).toEqual({ kind: 'Fall', year: 2026 });
   });
 });

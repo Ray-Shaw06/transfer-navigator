@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildPlan } from '../../src/planner/plan';
+import { buildPlan, rowKey } from '../../src/planner/plan';
 import type { Agreement } from '../../src/parser/document';
 
 const course = (code: string, units: number) => ({ code, title: code, units });
@@ -533,5 +533,123 @@ describe('buildPlan', () => {
     expect(plan.statuses.map((s) => s.state)).toEqual(['remaining', 'remaining']);
     expect(plan.remainingUnits).toBe(8);
     expect(plan.sections[0]).toMatchObject({ needed: 2, met: false });
+  });
+});
+
+describe('which requirements are a minimum', () => {
+  // The shape of a real UCI agreement: one section the campus marks as
+  // gating admission, one it lists without that mark. Reading the two the
+  // same is what told a student on an ordinary two-year plan that they could
+  // not transfer at all, on the strength of a course the campus never said
+  // was required.
+  const marked = (admission: boolean, label: string) => ({
+    label,
+    rule: { kind: 'all' as const },
+    admission,
+  });
+
+  const row = (receiving: string, sending: string, section: number) => ({
+    receiving: [course(receiving, 4)],
+    section,
+    sending: {
+      kind: 'options' as const,
+      options: [{ kind: 'and' as const, courses: [course(sending, 4)] }],
+    },
+  });
+
+  const build = (sections: ReturnType<typeof marked>[]): Agreement => ({
+    academicYear: '2025-2026',
+    major: 'Widgetry, B.S.',
+    receivingInstitution: 'Test University',
+    sendingInstitution: 'Test College',
+    sections,
+    rows: [row('RECV 10', 'SEND 1', 0), row('RECV 20', 'SEND 2', 1)],
+  });
+
+  it('splits an agreement that marks its minimums', () => {
+    const plan = buildPlan(
+      build([
+        marked(true, 'MAJOR PREPARATION REQUIRED FOR TRANSFER — REQUIRED FOR ADMISSION'),
+        marked(false, 'ADDITIONAL APPROVED COURSES FOR THE MAJOR'),
+      ]),
+      [],
+    );
+
+    expect(plan.remainingGroups.map((g) => [g.courses[0].code, g.priority])).toEqual([
+      ['SEND 1', 'admission'],
+      ['SEND 2', 'major'],
+    ]);
+  });
+
+  it('treats every requirement as a minimum when the agreement marks none', () => {
+    // An agreement that never draws the distinction is not one where nothing
+    // is required. Demoting its requirements would understate the work, which
+    // is the one direction this project does not go.
+    const plan = buildPlan(
+      build([marked(false, 'MAJOR PREPARATION'), marked(false, 'MORE PREPARATION')]),
+      [],
+    );
+
+    expect(plan.remainingGroups.every((g) => g.priority === 'admission')).toBe(true);
+  });
+});
+
+describe('credit this tool cannot see', () => {
+  // The gap this closes. A student with an AP score, or a course from another
+  // college, or a course ASSIST does not list for this pairing, had no way to
+  // say so, and the plan went on scheduling work they had already done.
+  it('clears a requirement the student says they already hold', () => {
+    const plan = buildPlan(agreement, [], ['RECV 30']);
+
+    expect(plan.statuses[2].state).toBe('satisfied');
+    expect(plan.statuses[2].clearedByCredit).toBe(true);
+    expect(plan.statuses[2].satisfiedBy).toEqual([]);
+    expect(plan.remainingGroups.flatMap((g) => g.courses.map((c) => c.code))).not.toContain(
+      'SEND 5',
+    );
+  });
+
+  it('names a multi-course requirement by all of its receiving codes', () => {
+    expect(rowKey([course('I&C SCI 31', 4), course('I&C SCI 32', 4)])).toBe(
+      'I&C SCI 31+I&C SCI 32',
+    );
+  });
+
+  it('leaves the sending courses free for a row that genuinely needs them', () => {
+    // A cleared row was not satisfied by any sending course, so it must not
+    // take one out of circulation. Two rows both articulated by SEND 5: with
+    // the first cleared, the second still gets it.
+    const shared: Agreement = {
+      ...agreement,
+      rows: [
+        {
+          receiving: [course('RECV 40', 4)],
+          sending: { kind: 'options', options: [{ kind: 'and', courses: [course('SEND 5', 4)] }] },
+        },
+        {
+          receiving: [course('RECV 50', 4)],
+          sending: { kind: 'options', options: [{ kind: 'and', courses: [course('SEND 5', 4)] }] },
+        },
+      ],
+    };
+
+    const plan = buildPlan(shared, ['SEND 5'], ['RECV 40']);
+    expect(plan.statuses[0].clearedByCredit).toBe(true);
+    expect(plan.statuses[1].state).toBe('satisfied');
+    expect(plan.statuses[1].satisfiedBy.map((c) => c.code)).toEqual(['SEND 5']);
+    expect(plan.remainingUnits).toBe(0);
+  });
+
+  it('clears a requirement nothing at the college articulates', () => {
+    // The case with no other way to be said: the college has nothing for it,
+    // but an AP score still might.
+    const plan = buildPlan(agreement, [], ['RECV 20']);
+    expect(plan.statuses[1].state).toBe('satisfied');
+    expect(plan.notArticulated).toEqual([]);
+  });
+
+  it('changes nothing when the claim names no row on this agreement', () => {
+    const plan = buildPlan(agreement, [], ['NOT A ROW']);
+    expect(plan.remainingUnits).toBe(buildPlan(agreement, []).remainingUnits);
   });
 });

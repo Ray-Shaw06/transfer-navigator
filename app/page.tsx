@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { parseAgreement, UnrecognisedAgreementError } from '../src/parser/document';
 import type { Agreement } from '../src/parser/agreement';
 import { buildPlan } from '../src/planner/plan';
-import { buildSchedule, currentTerm } from '../src/planner/schedule';
+import { buildSchedule, currentTerm, earliestTerm } from '../src/planner/schedule';
 import { geStatus } from '../src/planner/ge';
 import { buildDoubleCountIndex, geScheduleItems } from '../src/planner/doubleCount';
 import {
@@ -46,7 +46,13 @@ function Skeleton({ rows }: { rows: number }) {
 }
 
 export default function Home() {
-  const earliest = useMemo(() => currentTerm(), []);
+  // Two different terms, on purpose. `earliest` is the floor of the term list,
+  // counting winter and summer sessions, so nothing a student might choose is
+  // unreachable. `defaultStart` is what the picker lands on when a student has
+  // said nothing, and that has to be a full semester, since not every college
+  // runs a winter intersession.
+  const earliest = useMemo(() => earliestTerm(), []);
+  const defaultStart = useMemo(() => currentTerm(), []);
 
   // Read once, synchronously, before anything fetches. Reading it in an effect
   // instead would let the pickers settle on empty values first and then jump.
@@ -60,8 +66,20 @@ export default function Home() {
   const [year, setYear] = useState<number | null>(initial.year);
   const [major, setMajor] = useState<string | null>(initial.major);
   const [completed, setCompleted] = useState<Set<string>>(initial.completed);
+  // Requirements the student says they already hold by credit this tool has
+  // no way to check. Kept beside `completed` rather than folded into it: a
+  // ticked course is something the tool verified against the agreement, and a
+  // cleared requirement is the student's word, and the plan says which is
+  // which.
+  const [cleared, setCleared] = useState<Set<string>>(initial.cleared);
   const [settings, setSettings] = useState<PlanSettings>(
-    initial.settings ?? { start: earliest, unitsPerTerm: 12, includeSummer: false, target: null },
+    initial.settings ?? {
+      start: defaultStart,
+      unitsPerTerm: 15,
+      includeSummer: false,
+      includeWinter: false,
+      target: null,
+    },
   );
 
   // A major restored from the link. The majors effect clears the selection
@@ -145,8 +163,8 @@ export default function Home() {
   );
 
   const plan = useMemo(
-    () => (agreement ? buildPlan(agreement, [...completed]) : null),
-    [agreement, completed],
+    () => (agreement ? buildPlan(agreement, [...completed], cleared) : null),
+    [agreement, completed, cleared],
   );
 
 
@@ -187,6 +205,7 @@ export default function Home() {
               start: settings.start,
               unitsPerTerm: settings.unitsPerTerm,
               includeSummer: settings.includeSummer,
+              includeWinter: settings.includeWinter,
               target: settings.target,
             },
             // General education fills whatever room each term has left after
@@ -200,7 +219,16 @@ export default function Home() {
   // Mirror the plan into the address bar. replaceState rather than pushState:
   // ticking a course is not a navigation, and filling the back button with
   // every tick would make it useless.
-  const query = writePlanUrl({ college, campus, year, major, completed, settings, pattern });
+  const query = writePlanUrl({
+    college,
+    campus,
+    year,
+    major,
+    completed,
+    cleared,
+    settings,
+    pattern,
+  });
   useEffect(() => {
     if (typeof window === 'undefined') return;
     if (window.location.search === query) return;
@@ -339,7 +367,6 @@ export default function Home() {
               </div>
               <RouteView
                 schedule={schedule}
-                unitsPerTerm={settings.unitsPerTerm}
                 doubleCount={doubleCount}
                 pattern={patternFor(activePattern).name}
                 target={settings.target}
@@ -356,6 +383,8 @@ export default function Home() {
               plan={plan}
               doubleCount={doubleCount}
               pattern={patternFor(activePattern).name}
+              cleared={cleared}
+              onCleared={setCleared}
             />
           </section>
 
@@ -422,6 +451,9 @@ export default function Home() {
               <b>What this covers.</b> Major preparation on this agreement, plus how it lands
               against {patternFor(activePattern).name}
               {destination === 'CSU' ? ', including the four courses CSU admission turns on' : ''}.
+              Where the agreement marks which of its sections are required for admission, only
+              those decide whether you are on time. The rest is preparation worth having, not a
+              reason to call your plan late.
             </p>
             <p>
               <b>What it does not.</b> The minimum transferable units your campus asks for, GPA, and
@@ -430,7 +462,8 @@ export default function Home() {
             <p>
               <b>Where it can be wrong.</b> When a course you finished could count toward two
               requirements it is credited to the first one only, so this can understate what you
-              have done. It never overstates it.
+              have done. It never overstates it, with one exception you control: a requirement you
+              ticked as already held is taken on your word and checked against nothing.
             </p>
           </div>
         </>

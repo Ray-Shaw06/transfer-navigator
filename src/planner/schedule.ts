@@ -11,7 +11,7 @@ import type { Course } from '../parser/types';
 // promise an order is registrable. The one ordering rule below is a reading
 // of course numbering, clearly labelled as such wherever it is shown.
 
-export type TermKind = 'Fall' | 'Spring' | 'Summer';
+export type TermKind = 'Fall' | 'Winter' | 'Spring' | 'Summer';
 
 // `year` is the calendar year the term begins in, so Spring 2027 follows
 // Fall 2026.
@@ -64,6 +64,11 @@ export type ScheduledTerm = {
   // wants the real courses and should not have to filter for them.
   courses: Course[];
   units: number;
+  // What this term was allowed to hold. A winter intersession and a summer
+  // session are shorter than a semester, so "over a normal load" has to be
+  // asked against the term's own ceiling and not against the student's chosen
+  // one. Carried here so nothing downstream has to recompute it.
+  budget: number;
   // Courses held back from an earlier term only because they look like a
   // later part of a sequence. Named so the UI can say why, since this is the
   // one place the schedule acts on a guess.
@@ -83,22 +88,39 @@ export type Schedule = {
   // Units that did not fit before that target. Zero when there is no target
   // or when the plan fits.
   overflowUnits: number;
+  // The first term a student could actually start at the university: the term
+  // after the last one holding work admission turns on. Distinct from
+  // readyToTransfer, which is when the work finishes; a plan whose minimum
+  // ends in Fall 2028 does not get the student to a Fall 2028 start, and
+  // saying "not ready until Fall 2028" against a Fall 2028 target reads as a
+  // contradiction rather than as an answer. Null when nothing is left.
+  earliestTransfer: TermRef | null;
   // The last term holding work that has to be done before transferring, as
   // against readyAfter, which is the last term holding any work at all. When
   // a target cannot be met this is the number that helps: it says how far the
   // target would have to move, rather than how long the whole pattern takes.
   // Null when nothing essential is left to schedule.
   readyToTransfer: TermRef | null;
-  // Whether everything admission turns on, plus the agreement's own major
-  // preparation, fits on or before the target. This is the question a student
-  // short of time is actually asking, and it is a different question from
-  // meetsTarget: a plan can miss the target on units and still get the
-  // student admitted on time, with the rest of a general education pattern
-  // finished afterwards. Null when there is no target.
+  // Whether everything the campus itself gates admission on fits in the terms
+  // before the target. This is the question a student short of time is
+  // actually asking, and it is a different question from meetsTarget: a plan
+  // can miss the target on units and still get the student admitted on time,
+  // with the rest of a general education pattern finished afterwards, or with
+  // major preparation the agreement lists but does not require.
+  //
+  // Deliberately narrower than it once was. It used to turn on the whole
+  // agreement, which meant one unmarked recommended course could produce the
+  // flat sentence "you cannot be ready to transfer", for a student who could.
+  // Null when there is no target.
   transferByTarget: boolean | null;
   // What is scheduled after the target, in the order it falls. Empty when
   // there is no target or when everything fits.
   afterTarget: ScheduleItem[];
+  // The part of afterTarget that is major preparation the agreement does not
+  // mark as required for admission. Not a reason to call a plan late, and not
+  // something to leave unsaid either: it is what a campus screens on, so the
+  // verdict names it rather than folding it into a unit count.
+  majorAfterTarget: ScheduleItem[];
   // Whether the order was changed to protect the target: general education
   // that certification needs but admission does not was moved behind the work
   // that cannot move. False when nothing needed moving, or when moving it
@@ -106,29 +128,72 @@ export type Schedule = {
   reordered: boolean;
 };
 
-const ORDER: TermKind[] = ['Spring', 'Summer', 'Fall'];
+// Calendar order inside one year. Winter comes first because a winter
+// intersession runs in January, before the Spring semester it precedes.
+const ORDER: TermKind[] = ['Winter', 'Spring', 'Summer', 'Fall'];
 
 export const termLabel = (ref: TermRef): string => `${ref.kind} ${ref.year}`;
 
 // Ordinal position of a term on a single timeline, so two terms can be
-// compared without special-casing the year rollover.
-export const termIndex = (ref: TermRef): number => ref.year * 3 + ORDER.indexOf(ref.kind);
+// compared without special-casing the year rollover. Four slots to the year,
+// not three, since winter joined them; only the ordering matters, and nothing
+// outside this file should depend on the number itself.
+export const termIndex = (ref: TermRef): number => ref.year * 4 + ORDER.indexOf(ref.kind);
 
-export function nextTerm(ref: TermRef, includeSummer: boolean): TermRef {
-  if (ref.kind === 'Fall') return { kind: 'Spring', year: ref.year + 1 };
-  if (ref.kind === 'Spring') return includeSummer ? { kind: 'Summer', year: ref.year } : { kind: 'Fall', year: ref.year };
+// The next term on the calendar, skipping the short ones a student has not
+// opted into. `includeWinter` is last and defaults to off so a caller that
+// predates winter keeps the sequence it had.
+export function nextTerm(ref: TermRef, includeSummer: boolean, includeWinter = false): TermRef {
+  if (ref.kind === 'Fall')
+    return includeWinter
+      ? { kind: 'Winter', year: ref.year + 1 }
+      : { kind: 'Spring', year: ref.year + 1 };
+  if (ref.kind === 'Winter') return { kind: 'Spring', year: ref.year };
+  if (ref.kind === 'Spring')
+    return includeSummer ? { kind: 'Summer', year: ref.year } : { kind: 'Fall', year: ref.year };
   return { kind: 'Fall', year: ref.year };
 }
 
-// The term a student is most likely to be planning from, given today. Before
-// October, the coming Spring; after, the coming Fall. Deliberately the next
-// term they can still enrol in rather than the one already under way.
+// The term a student is most likely to be planning from, given today: the next
+// one they can still enrol in, not the one already under way.
+//
+// The boundaries are the terms' own start dates, roughly. A California
+// community college opens Spring in mid-January and Fall at the end of August,
+// so by March a Spring term is half over and by late September a Fall one is.
+// Never a Winter or a Summer: those are short sessions layered onto a plan, not
+// the term a student describes themselves as starting in.
 export function currentTerm(now = new Date()): TermRef {
   const month = now.getMonth();
   const year = now.getFullYear();
-  if (month <= 3) return { kind: 'Spring', year };
-  if (month <= 8) return { kind: 'Fall', year };
+  if (month <= 1) return { kind: 'Spring', year };
+  if (month <= 7) return { kind: 'Fall', year };
   return { kind: 'Spring', year: year + 1 };
+}
+
+// The earliest term worth offering at all, counting the short sessions.
+//
+// Separate from currentTerm because they answer different questions.
+// currentTerm picks a default, and a default has to be a term every California
+// community college actually runs, which a winter intersession is not. This
+// picks the floor of the list, and the floor has to reach back far enough that
+// nothing a student might legitimately choose is missing from it: in September,
+// currentTerm is next Spring, and a list starting there would have no way to
+// say "I am starting in the winter intersession before it".
+//
+// Typical start dates: a winter intersession opens in the first days of
+// January, Spring in the middle of that month, Summer in mid-June, Fall at the
+// end of August.
+export function earliestTerm(now = new Date()): TermRef {
+  const month = now.getMonth();
+  const year = now.getFullYear();
+  // Never later than currentTerm, or the default would not be in its own list.
+  // That is what the January and February cases are doing: a winter
+  // intersession has already opened by then, so the earliest term still worth
+  // offering is the Spring the default has already picked.
+  if (month <= 1) return { kind: 'Spring', year };
+  if (month <= 4) return { kind: 'Summer', year };
+  if (month <= 7) return { kind: 'Fall', year };
+  return { kind: 'Winter', year: year + 1 };
 }
 
 // Two courses are parts of one sequence when they share a prefix and a number
@@ -163,28 +228,57 @@ export function sequenceKey(code: string): SequenceKey | null {
 
 const total = (items: { units: number }[]) => items.reduce((sum, i) => sum + i.units, 0);
 
+// One unit of scheduling: a course, or a course and the lab that has to sit
+// beside it, carrying the priority of the requirement it came from.
+type Block = { courses: Course[]; priority: Priority };
+
+// What this schedules. `priority` is optional so a caller that has not yet
+// made the distinction, including every hand-built group in the tests, keeps
+// the old reading where all of it is a minimum.
+export type PlannedGroup = AndGroup & { priority?: Priority };
+
 export type ScheduleOptions = {
   start: TermRef;
   unitsPerTerm: number;
   includeSummer: boolean;
   summerUnits?: number;
+  // Whether to use the winter intersession between Fall and Spring. Off by
+  // default: not every college runs one, and a plan that quietly assumes a
+  // term a student cannot enrol in is worse than one that runs a term long.
+  includeWinter?: boolean;
+  winterUnits?: number;
   target?: TermRef | null;
 };
 
 export function buildSchedule(
-  groups: AndGroup[],
+  groups: PlannedGroup[],
   options: ScheduleOptions,
   // General education still to be scheduled, in the order it should be taken.
   // Spread across the terms in proportion to how much of the whole plan it
   // is, rather than filling the gaps major preparation leaves.
   generalEducation: ScheduleItem[] = [],
 ): Schedule {
-  const { start, unitsPerTerm, includeSummer, target = null } = options;
+  const { start, unitsPerTerm, includeSummer, includeWinter = false, target = null } = options;
   // Summer terms are short. Half a normal load, at least one course's worth,
   // unless the caller states otherwise.
   const summerUnits = options.summerUnits ?? Math.max(3, Math.round(unitsPerTerm / 2));
+  // A winter intersession is shorter still: five or six weeks against a
+  // summer's eight. In practice it holds exactly one course, so it is budgeted
+  // as one course rather than as a fraction of a load. Five units admits the
+  // largest single course a student normally meets, a five-unit calculus, and
+  // refuses any two together, which is the behaviour wanted.
+  //
+  // A fraction would have been wrong in a way that hid itself: a quarter of a
+  // twelve-unit load is three units, and a three-unit ceiling silently rejects
+  // every four- and five-unit course, so winter would appear to be on and then
+  // never take a STEM course.
+  const winterUnits = options.winterUnits ?? Math.min(5, Math.max(3, unitsPerTerm));
 
-  const budgetFor = (ref: TermRef) => (ref.kind === 'Summer' ? summerUnits : unitsPerTerm);
+  const budgetFor = (ref: TermRef) => {
+    if (ref.kind === 'Summer') return summerUnits;
+    if (ref.kind === 'Winter') return winterUnits;
+    return unitsPerTerm;
+  };
 
   // A course and the lab belonging to it are one thing to schedule. They
   // share a sequence key, so they go into a block and are placed together or
@@ -196,22 +290,26 @@ export function buildSchedule(
   // one real requirement lists CS 003B, CS 033, CS 003BL in that order, and a
   // run of adjacent courses would not catch it.
   const queue = groups.flatMap((group) => {
-    const blocks: Course[][] = [];
-    const byKey = new Map<string, Course[]>();
+    // A group with no stated priority is a minimum. Hand-built groups in
+    // tests and any caller predating the distinction keep the old behaviour,
+    // where every requirement gated the target.
+    const priority: Priority = group.priority ?? 'admission';
+    const blocks: Block[] = [];
+    const byKey = new Map<string, Block>();
 
     for (const course of group.courses) {
       const key = sequenceKey(course.code);
       const id = key ? `${key.stem}|${key.step}` : null;
       if (id === null) {
-        blocks.push([course]);
+        blocks.push({ courses: [course], priority });
         continue;
       }
       const existing = byKey.get(id);
       if (existing) {
-        existing.push(course);
+        existing.courses.push(course);
         continue;
       }
-      const block = [course];
+      const block: Block = { courses: [course], priority };
       byKey.set(id, block);
       blocks.push(block);
     }
@@ -268,9 +366,10 @@ export function buildSchedule(
         items,
         courses: items.filter((i) => i.kind === 'course').map((i) => i.course),
         units: total(items),
+        budget: budgetFor(ref),
         sequenced,
       });
-      ref = nextTerm(ref, includeSummer);
+      ref = nextTerm(ref, includeSummer, includeWinter);
       items = [];
       sequenced = [];
     };
@@ -280,7 +379,7 @@ export function buildSchedule(
     // it in the Fall, not to blow through the summer cap or to print an empty
     // summer nobody asked about.
     const skipTerm = () => {
-      ref = nextTerm(ref, includeSummer);
+      ref = nextTerm(ref, includeSummer, includeWinter);
     };
 
     // Every term aims for the same mix as the whole plan. Filling major
@@ -288,7 +387,7 @@ export function buildSchedule(
     // all of it at the end, which is not how anybody actually enrols: a student
     // with 22 units of major preparation and 31 of general education does not
     // spend two years on one and then two on the other.
-    const majorUnits = queue.reduce((sum, block) => sum + total(block), 0);
+    const majorUnits = queue.reduce((sum, block) => sum + total(block.courses), 0);
     const reservedUnits = total(reserveFor);
     const geShare =
       majorUnits + reservedUnits > 0 ? reservedUnits / (majorUnits + reservedUnits) : 0;
@@ -310,7 +409,7 @@ export function buildSchedule(
 
       // Then major preparation, which owns the rest of the term.
       while (next < queue.length) {
-        const block = queue[next];
+        const block = queue[next].courses;
         const clashes = block.some((course) => {
           const key = sequenceKey(course.code);
           return (
@@ -329,7 +428,7 @@ export function buildSchedule(
             ]);
             sequenced.push(course.code);
           }
-          items.push({ kind: 'course', units: course.units, course, priority: 'major' });
+          items.push({ kind: 'course', units: course.units, course, priority: queue[next].priority });
         }
         next++;
       }
@@ -342,14 +441,15 @@ export function buildSchedule(
         // Nothing fitted an empty term. Either this is a short summer and the
         // next thing belongs after it, or one item is larger than any term and
         // goes in alone: an honest oversized term beats a silent omission.
-        const upNext = next < queue.length ? total(queue[next]) : (pendingGe[0]?.units ?? 0);
+        const upNext =
+          next < queue.length ? total(queue[next].courses) : (pendingGe[0]?.units ?? 0);
         if (upNext <= unitsPerTerm) {
           skipTerm();
           continue;
         }
-        if (next < queue.length && total(queue[next]) > unitsPerTerm) {
-          for (const course of queue[next]) {
-            items.push({ kind: 'course', units: course.units, course, priority: 'major' });
+        if (next < queue.length && total(queue[next].courses) > unitsPerTerm) {
+          for (const course of queue[next].courses) {
+            items.push({ kind: 'course', units: course.units, course, priority: queue[next].priority });
           }
           next++;
         } else if (pendingGe.length > 0) {
@@ -369,7 +469,7 @@ export function buildSchedule(
         if (!key) return false;
         const steps = new Set(
           queue
-            .flat()
+            .flatMap((b) => b.courses)
             .map((c) => sequenceKey(c.code))
             .filter((k): k is SequenceKey => k !== null && k.stem === key.stem)
             .map((k) => k.step),
@@ -382,13 +482,26 @@ export function buildSchedule(
   };
 
   // Everything except the part of a general education pattern that only
-  // certification needs. This is what a target has to make room for.
+  // certification needs. This is what the ordering pass tries to protect: a
+  // student wants their major preparation inside the terms they have, marked
+  // a minimum or not.
   const essential = (item: ScheduleItem) => item.priority !== 'certification';
 
+  // The narrower question, and the only one a yes-or-no verdict may turn on:
+  // what the campus itself says an application is refused without. Major
+  // preparation the agreement lists but does not mark is not that, and
+  // failing a student's whole timeline on it is how this told a student on an
+  // ordinary two-year plan they could not transfer at all.
+  const gating = (item: ScheduleItem) => item.priority === 'admission';
+
+  // Terms at or after the target are not terms a student can enrol in. You
+  // transfer IN the target term, so the last usable one is the term before
+  // it: the Spring before a Fall start, or the Summer between where the
+  // student takes one.
   const lateItems = (terms: ScheduledTerm[]): ScheduleItem[] =>
     target === null
       ? []
-      : terms.filter((t) => termIndex(t.ref) > termIndex(target)).flatMap((t) => t.items);
+      : terms.filter((t) => termIndex(t.ref) >= termIndex(target)).flatMap((t) => t.items);
 
   const lateEssentialUnits = (terms: ScheduledTerm[]) =>
     total(lateItems(terms).filter(essential));
@@ -423,17 +536,19 @@ export function buildSchedule(
   const readyAfter = terms.length > 0 ? terms[terms.length - 1].ref : null;
   const afterTarget = lateItems(terms);
   const overflow = total(afterTarget);
-  const lastEssential = terms.filter((t) => t.items.some(essential)).pop();
+  const lastGating = terms.filter((t) => t.items.some(gating)).pop();
 
   return {
     terms,
     totalUnits: terms.reduce((sum, t) => sum + t.units, 0),
     readyAfter,
-    readyToTransfer: lastEssential?.ref ?? null,
+    readyToTransfer: lastGating?.ref ?? null,
+    earliestTransfer: lastGating ? nextTerm(lastGating.ref, includeSummer, includeWinter) : null,
     meetsTarget: target ? overflow === 0 : null,
     overflowUnits: overflow,
-    transferByTarget: target ? afterTarget.every((i) => !essential(i)) : null,
+    transferByTarget: target ? afterTarget.every((i) => !gating(i)) : null,
     afterTarget,
+    majorAfterTarget: afterTarget.filter((i) => i.priority === 'major'),
     reordered,
   };
 }
