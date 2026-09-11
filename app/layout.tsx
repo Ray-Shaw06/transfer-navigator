@@ -22,10 +22,28 @@ const mono = JetBrains_Mono({
   variable: '--font-mono',
 });
 
+const DESCRIPTION =
+  'Pick your California community college, where you want to transfer, and your major. See exactly what you still need, term by term, straight from the ASSIST articulation agreement.';
+
+// metadataBase is what turns the opengraph-image file convention into the
+// absolute URL that link unfurlers require. Without it Next emits a relative
+// path, and LinkedIn, Slack and iMessage all silently fall back to no image.
 export const metadata = {
+  metadataBase: new URL('https://transfer-navigator.vercel.app'),
   title: 'Transfer Navigator',
-  description:
-    'Pick your California community college, where you want to transfer, and your major. See exactly what you still need, term by term, straight from the ASSIST articulation agreement.',
+  description: DESCRIPTION,
+  openGraph: {
+    type: 'website',
+    siteName: 'Transfer Navigator',
+    title: 'Transfer Navigator',
+    description: DESCRIPTION,
+    url: 'https://transfer-navigator.vercel.app',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Transfer Navigator',
+    description: DESCRIPTION,
+  },
 };
 
 export const viewport = {
