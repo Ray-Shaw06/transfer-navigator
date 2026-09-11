@@ -1,6 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { CATALOGS } from '../../src/catalog/registry';
+import { CATALOGS, type CatalogSource } from '../../src/catalog/registry';
 import { courseLeafUrl, parseCourseLeafCourse } from '../../src/catalog/courseleaf';
+import {
+  elumenCourseUrl,
+  elumenSiteUrl,
+  parseElumenCourse,
+  parseElumenSite,
+} from '../../src/catalog/elumen';
+import type { CoursePrereqs } from '../../src/catalog/types';
 
 // Checks that every college in the registry still answers, and that its
 // prerequisites still come back THROUGH THE PARSER IN THIS REPO.
@@ -66,20 +73,52 @@ it('reports whether the live catalog check ran', () => {
   expect(typeof enabled).toBe('boolean');
 });
 
+// eLumen has no search to ask, so real codes are found by trying the ones
+// colleges commonly use. Broad on purpose: an eLumen college answers an
+// unknown slug with an empty body, which costs nothing.
+const COMMON = [
+  'MATH 1A', 'MATH 1B', 'MATH 2', 'MATH 3A', 'MATH 5A', 'MATH 8', 'MATH 16', 'MATH 20',
+  'MATH 001A', 'MATH 005A', 'MATH 100',
+  'MATH 110', 'MATH 120', 'MATH 150', 'MATH 171', 'MATH 172', 'MATH 180', 'MATH 191', 'MATH 192',
+  'CHEM 1A', 'CHEM 1B', 'CHEM 001A', 'CHEM 101', 'CHEM 110', 'CHEM 120', 'CHM 001A', 'CHM 001B',
+  'BIO 1A', 'BIO 001A', 'BIO 001B', 'BIOL 101', 'BIOL 304', 'PHYS 4A', 'PHYS 101', 'PHYS 221',
+  'CIS 1', 'CS 1', 'CIS 001', 'ENGL 1A', 'ENGL 001A', 'ENGL C1000',
+];
+
+// One course from one registry entry, through the reader for its platform.
+const readOne = async (
+  entry: CatalogSource,
+  site: string | null,
+  code: string,
+): Promise<CoursePrereqs | null> => {
+  if (entry.platform === 'elumen') {
+    return site ? parseElumenCourse(await get(elumenCourseUrl(entry.host, site, code)), code) : null;
+  }
+  return parseCourseLeafCourse(await get(courseLeafUrl(entry.host, code)));
+};
+
 describe.skipIf(!enabled)('every college in the registry', () => {
   for (const entry of CATALOGS) {
-    it(`${entry.name} answers and its prerequisites parse`, { timeout: 180000 }, async () => {
+    it(`${entry.name} answers and its prerequisites parse`, { timeout: 240000 }, async () => {
+      let site: string | null = null;
       const codes: string[] = [];
-      for (const subject of ['CHEM', 'MATH', 'BIOL', 'PHYS', 'ENGL']) {
-        codes.push(...(await search(entry.host, subject)));
-        if (codes.length > 30) break;
+
+      if (entry.platform === 'elumen') {
+        site = entry.site ?? parseElumenSite(await get(elumenSiteUrl(entry.host)));
+        expect(site, `${entry.host} did not resolve a catalog site`).not.toBeNull();
+        codes.push(...COMMON);
+      } else {
+        for (const subject of ['CHEM', 'MATH', 'BIOL', 'PHYS', 'ENGL']) {
+          codes.push(...(await search(entry.host, subject)));
+          if (codes.length > 30) break;
+        }
+        expect(codes.length, `${entry.host} returned no courses from its own search`).toBeGreaterThan(0);
       }
-      expect(codes.length, `${entry.host} returned no courses from its own search`).toBeGreaterThan(0);
 
       let answered = 0;
       const withRequisites: string[] = [];
       for (const code of codes.slice(0, 40)) {
-        const parsed = parseCourseLeafCourse(await get(courseLeafUrl(entry.host, code)));
+        const parsed = await readOne(entry, site, code);
         if (!parsed) continue;
         answered++;
         if (parsed.prerequisites.length > 0 || parsed.corequisites.length > 0) {

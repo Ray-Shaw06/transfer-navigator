@@ -1,5 +1,6 @@
 import { courseLeafUrl, parseCourseLeafCourse } from './courseleaf';
-import { catalogFor } from './registry';
+import { elumenCourseUrl, elumenSiteUrl, parseElumenCourse, parseElumenSite } from './elumen';
+import { catalogFor, type CatalogSource } from './registry';
 import { catalogSpellings, normalizeCourseCode } from './normalize';
 import type { CoursePrereqs } from './types';
 
@@ -16,13 +17,12 @@ const TIMEOUT_MS = 8000;
 // sockets to one college at once. A plan holds ten or so courses.
 const CONCURRENCY = 6;
 
-async function fetchOne(host: string, code: string): Promise<CoursePrereqs | null> {
+async function text(url: string): Promise<string | null> {
   const control = new AbortController();
   const timer = setTimeout(() => control.abort(), TIMEOUT_MS);
   try {
-    const response = await fetch(courseLeafUrl(host, code), { signal: control.signal });
-    if (!response.ok) return null;
-    return parseCourseLeafCourse(await response.text());
+    const response = await fetch(url, { signal: control.signal });
+    return response.ok ? await response.text() : null;
   } catch {
     // A catalog that is slow, moved, or down is not an error a student needs
     // to see. The planner falls back to reading order from course numbers,
@@ -31,6 +31,22 @@ async function fetchOne(host: string, code: string): Promise<CoursePrereqs | nul
   } finally {
     clearTimeout(timer);
   }
+}
+
+// One course from one catalog, whichever platform it is on. `site` is only
+// meaningful for eLumen, where it names the catalog year being published.
+async function fetchOne(
+  source: CatalogSource,
+  code: string,
+  site: string | null,
+): Promise<CoursePrereqs | null> {
+  if (source.platform === 'elumen') {
+    if (!site) return null;
+    const body = await text(elumenCourseUrl(source.host, site, code));
+    return body === null ? null : parseElumenCourse(body, code);
+  }
+  const body = await text(courseLeafUrl(source.host, code));
+  return body === null ? null : parseCourseLeafCourse(body);
 }
 
 // Look up what a college's catalog says has to come before what, for exactly
@@ -58,6 +74,15 @@ export async function prereqsFor(
     wanted.push(code.trim());
   }
 
+  // eLumen publishes under a site id the college chose, which has to be read
+  // from the tenant before any course can be asked for. One request per plan,
+  // and nothing to do for CourseLeaf.
+  const site =
+    source.platform !== 'elumen'
+      ? null
+      : (source.site ?? parseElumenSite((await text(elumenSiteUrl(source.host))) ?? ''));
+  if (source.platform === 'elumen' && !site) return { supported: true, courses: [] };
+
   const found: CoursePrereqs[] = [];
 
   // A plain worker pool. Each worker takes the next index until they run out,
@@ -68,7 +93,7 @@ export async function prereqsFor(
       const i = next++;
       if (i >= wanted.length) return;
       for (const spelling of catalogSpellings(wanted[i])) {
-        const course = await fetchOne(source.host, spelling);
+        const course = await fetchOne(source, spelling, site);
         if (course) {
           found.push(course);
           break;

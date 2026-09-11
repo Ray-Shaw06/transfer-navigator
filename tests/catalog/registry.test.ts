@@ -19,7 +19,11 @@ describe('the catalog registry', () => {
   it('has no college without a host, or host without a college', () => {
     for (const entry of CATALOGS) {
       expect(entry.college).toBeGreaterThan(0);
-      expect(entry.host).toMatch(/^[a-z0-9.-]+\.edu$/);
+      // A CourseLeaf host is the college's own .edu; an eLumen host is the
+      // tenant name on eLumen's domain.
+      expect(entry.host).toMatch(
+        entry.platform === 'elumen' ? /^[a-z0-9-]+\.elumenapp\.com$/ : /^[a-z0-9.-]+\.edu$/,
+      );
       expect(entry.name.length).toBeGreaterThan(0);
     }
   });
@@ -32,5 +36,15 @@ describe('the catalog registry', () => {
     // no entry has to fall through to reading order from course numbers.
     expect(catalogFor(999)).toBeNull();
     expect(catalogFor(49)?.host).toBe('curriculum.pasadena.edu');
+  });
+});
+
+describe('a pinned eLumen site', () => {
+  it('is only ever set on an eLumen entry', () => {
+    // `site` means nothing to a CourseLeaf reader, and one set there would be
+    // a sign the entry was copied from the wrong template.
+    for (const entry of CATALOGS) {
+      if (entry.site !== undefined) expect(entry.platform).toBe('elumen');
+    }
   });
 });

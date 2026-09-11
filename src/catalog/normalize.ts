@@ -15,6 +15,10 @@ export function normalizeCourseCode(code: string): string {
     // A hyphen between subject and number is a separator like any other:
     // Mt. San Jacinto writes MATH-105 where ASSIST prints MATH 105.
     .replace(/^([A-Z&\s]+?)-(?=\d)/, '$1 ')
+    // No separator at all is a separator too: Contra Costa's MATH120 is
+    // ASSIST's MATH 120. Only when the code has no space anywhere, so
+    // ENGL C1000 is left as the two words it is.
+    .replace(/^([A-Z&]+)(\d)/, (m, subject, digit) => (m.includes(' ') ? m : `${subject} ${digit}`))
     .replace(/\s+/g, ' ')
     // Drop leading zeros from the numeric part: MATH 005A and MATH 5A are one
     // course. The letters after it are kept, since they are the sequence.

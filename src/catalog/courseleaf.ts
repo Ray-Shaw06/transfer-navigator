@@ -1,5 +1,6 @@
 import type { CoursePrereqs } from './types';
 import { normalizeCourseCode } from './normalize';
+import { codesFromText, stripHtml } from './text';
 
 // Reads prerequisites out of a CourseLeaf catalog.
 //
@@ -49,31 +50,7 @@ const LINKED_CODE = /showCourse\(this,\s*'([^']+)'\)/g;
 // Not every college links the courses it names. San Jose City College writes
 // "Prerequisite: CHEM 001A with C or better." as plain text in a run of
 // labelled fields, so where a requisite line carries no links at all its codes
-// are read from the words instead.
-//
-// Bounded to the requisite's own sentence before any code is taken. The line it
-// sits in continues "Cal-GETC: 5A,5C District GE: 5A,5C Advisory Level: Read: 3",
-// and reading codes out of THAT would invent prerequisites from a general
-// education listing. The sentence ends at the first full stop or at the next
-// "Label:" that starts a different field.
-const REQUISITE_TEXT = /^([^.]*?)(?=\s+[A-Z][A-Za-z-]*(?:\s+[A-Za-z-]+)?:|\.|$)/;
-
-// A course code as a college writes one: a subject of one to four words in
-// capitals, then a number, then an optional sequence letter. Anchored on a
-// word boundary at both ends so "Read: 3" and a bare "5A" cannot match.
-const TEXT_CODE = /\b([A-Z][A-Z&]{0,9}(?:[ -][A-Z&]{2,9}){0,2})[ -](\d{1,3}[A-Z]{0,2})\b/g;
-
-function codesFromText(inner: string): string[] {
-  const text = inner
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&#160;|&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  const sentence = REQUISITE_TEXT.exec(text)?.[1] ?? text;
-  return [...sentence.matchAll(TEXT_CODE)].map((m) => `${m[1]} ${m[2]}`);
-}
+// are read from the words instead. See text.ts for how that is bounded.
 
 type Kind = 'prerequisites' | 'corequisites' | 'recommended';
 
@@ -111,7 +88,7 @@ export function parseCourseLeafCourse(xml: string): CoursePrereqs | null {
     // and re-reading the surrounding prose would only add what it chose to
     // leave out.
     const linked = [...section[2].matchAll(LINKED_CODE)].map((m) => m[1]);
-    const named = linked.length > 0 ? linked : codesFromText(section[2]);
+    const named = linked.length > 0 ? linked : codesFromText(stripHtml(section[2]));
 
     for (const raw of named) {
       const course = normalizeCourseCode(raw);
