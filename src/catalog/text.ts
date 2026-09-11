@@ -12,20 +12,50 @@
 // first full stop or at the next "Label:" that starts a different field.
 const SENTENCE = /^([^.]*?)(?=\s+[A-Z][A-Za-z-]*(?:\s+[A-Za-z-]+)?:|\.|$)/;
 
-// A course code as a college writes one: a subject of one to three words in
-// capitals, then a number, then an optional sequence letter. Anchored on a
-// word boundary at both ends so "Read: 3" and a bare "5A" cannot match.
+// A course code as a college writes one: a subject, then a number, then an
+// optional sequence letter. Anchored on a word boundary at both ends so
+// "Read: 3" and a bare "5A" cannot match.
 //
-// The separator is optional because eLumen colleges drop it: Contra Costa
-// writes "MATH120 - Intermediate Algebra" and Modesto "MATH171". The number
-// may also be a letter and four digits, which is how the statewide common
-// course numbering writes composition, ENGL C1000.
+// The subject is ONE word. Sending-side codes at California community
+// colleges are one token before the number in every college read so far, and
+// allowing two let the word before a code be absorbed into it: "BIOLOGY BIO
+// 110", "REQUISITE BIO 100", and "C-ID ENGL 100" read as "ID ENGL 100". The
+// cost is a two-word subject such as the Los Angeles district's "CO SCI 101",
+// which would read as "SCI 101" and then match nothing, which is the safe
+// direction.
 //
-// The first word is at least two letters. No college has a one-letter subject,
-// and without the floor a course title ending in a Roman numeral leaks into
-// the code after it: "Calculus I MATH-192" read as subject "I MATH".
-const CODE =
-  /\b([A-Z][A-Z&]{1,9}(?:[ -][A-Z&]{2,9}){0,2})[ -]?(\d{1,3}[A-Z]{0,2}|[A-Z]\d{4})\b/g;
+// The first word is at least two letters. No college has a one-letter
+// subject, and without the floor a course title ending in a Roman numeral
+// leaks into the code after it: "Calculus I MATH-192" as subject "I MATH".
+//
+// The subject may be in Title case, because College of Marin writes
+// "Prerequisites: Math 121." That admits ordinary capitalised words followed
+// by a number, "Fall 2025" and "Grade 12", so those are refused by name
+// below.
+//
+// The number may carry a letter in front, which is how the Kern district
+// writes MATH P101 and the statewide common numbering writes ENGL C1000, and
+// may run to four digits, since College of the Siskiyous numbers courses
+// MFG 1020.
+const CODE = /(?<!-)\b([A-Z][A-Za-z&]{1,9})[ -]?([A-Z]?\d{1,4}[A-Z]{0,2})\b/g;
+
+// Things that pass the pattern above and are not courses.
+//
+// AB 705 and AB 1705 are the assembly bills that govern placement in
+// California, and "placement based on AB705 mandates" is in half the
+// prerequisite lines in the state. The rest are the capitalised words a
+// prerequisite sentence, or the outcomes list that sometimes runs into it,
+// actually contains next to a number. A real subject called AB or SB would be
+// lost here; losing one is the safe direction, since a prerequisite missed
+// falls back to reading course numbers and says so, while a prerequisite
+// invented would order a plan around a bill.
+const NOT_A_COURSE =
+  /^(AB|SB|ACR|SCR|Fall|Spring|Summer|Winter|Effective|Grade|Grades|Chapter|Unit|Units|Section|Level|Tier|Area|Areas|Part|Phase|Step|Group|Page|Room|Building|Age|Within|Past|Minimum|Maximum|Score|Scores|Since|Before|After|Through|Prior|Last|Next|Year|Years|Semester|Quarter|Term|Version|Series|Option|Track|Pathway|Plan|Form|Code|Title|Column|Row|Table|Figure|Item|Number|No|Outcome|Outcomes|Objective|Objectives|Rationale|Requisite|Requisites|Prerequisite|Prerequisites|Corequisite|Corequisites|Advisory|Advisories)$/i;
+
+// A C-ID number is a statewide descriptor a course is equivalent to, not a
+// course a student takes, and colleges cite it right inside the requisite
+// line: "ENGL C1000 (C-ID ENGL 100)". Removed before codes are read.
+const C_ID = /\bC-ID:?\s*[A-Z]{2,10}\s*\d{1,4}[A-Z]{0,2}\b/g;
 
 export function stripHtml(html: string): string {
   return html
@@ -43,6 +73,8 @@ export function stripHtml(html: string): string {
 // an either/or and never both, so requiring whichever of them is in the plan
 // to come first is the same answer with none of the parsing.
 export function codesFromText(text: string): string[] {
-  const sentence = SENTENCE.exec(text)?.[1] ?? text;
-  return [...sentence.matchAll(CODE)].map((m) => `${m[1]} ${m[2]}`);
+  const sentence = (SENTENCE.exec(text)?.[1] ?? text).replace(C_ID, ' ');
+  return [...sentence.matchAll(CODE)]
+    .filter((m) => !NOT_A_COURSE.test(m[1]))
+    .map((m) => `${m[1].toUpperCase()} ${m[2]}`);
 }

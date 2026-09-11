@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { CATALOGS, type CatalogSource } from '../../src/catalog/registry';
 import { courseLeafUrl, parseCourseLeafCourse } from '../../src/catalog/courseleaf';
 import {
-  elumenCourseUrl,
+  elumenCourseUrls,
   elumenSiteUrl,
   parseElumenCourse,
   parseElumenSite,
@@ -83,6 +83,11 @@ const COMMON = [
   'CHEM 1A', 'CHEM 1B', 'CHEM 001A', 'CHEM 101', 'CHEM 110', 'CHEM 120', 'CHM 001A', 'CHM 001B',
   'BIO 1A', 'BIO 001A', 'BIO 001B', 'BIOL 101', 'BIOL 304', 'PHYS 4A', 'PHYS 101', 'PHYS 221',
   'CIS 1', 'CS 1', 'CIS 001', 'ENGL 1A', 'ENGL 001A', 'ENGL C1000',
+  // Marin, Siskiyous, Palo Verde, Solano and Porterville each number
+  // differently again.
+  'MATH 121', 'MATH 122', 'MATH 123', 'CHEM 131', 'CHEM 132', 'MATH 1400', 'MFG 1240',
+  'CHEM 1000', 'BIO 101', 'BIO 111', 'PSYC 004', 'MATH 020', 'CHEM 001', 'MATH P101',
+  'CHEM P101A', 'ACCT P120',
 ];
 
 // One course from one registry entry, through the reader for its platform.
@@ -92,7 +97,12 @@ const readOne = async (
   code: string,
 ): Promise<CoursePrereqs | null> => {
   if (entry.platform === 'elumen') {
-    return site ? parseElumenCourse(await get(elumenCourseUrl(entry.host, site, code)), code) : null;
+    if (!site) return null;
+    for (const url of elumenCourseUrls(entry.host, site, code)) {
+      const parsed = parseElumenCourse(await get(url), code);
+      if (parsed) return parsed;
+    }
+    return null;
   }
   return parseCourseLeafCourse(await get(courseLeafUrl(entry.host, code)));
 };
@@ -117,7 +127,7 @@ describe.skipIf(!enabled)('every college in the registry', () => {
 
       let answered = 0;
       const withRequisites: string[] = [];
-      for (const code of codes.slice(0, 40)) {
+      for (const code of codes.slice(0, 60)) {
         const parsed = await readOne(entry, site, code);
         if (!parsed) continue;
         answered++;

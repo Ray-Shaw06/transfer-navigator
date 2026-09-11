@@ -50,6 +50,19 @@ export const elumenSlug = (code: string): string =>
 export const elumenCourseUrl = (tenant: string, site: string, code: string): string =>
   `${API}/catalog/sites/publish/content/${encodeURIComponent(site)},course,${elumenSlug(code)}?tenant=${encodeURIComponent(tenant)}`;
 
+// Every URL a course might live at, best first.
+//
+// A college that has revised a course publishes the revision under a
+// versioned slug and, sometimes, nothing under the plain one: Porterville's
+// ACCT P120 answers only as acctp120v2, and Solano's NURS 103 as nurs103v2.
+// The plain slug is tried first because it is right nearly everywhere, and an
+// empty answer costs nothing.
+export const elumenCourseUrls = (tenant: string, site: string, code: string): string[] =>
+  ['', 'v2', 'v3', 'v4'].map(
+    (version) =>
+      `${API}/catalog/sites/publish/content/${encodeURIComponent(site)},course,${elumenSlug(code)}${version}?tenant=${encodeURIComponent(tenant)}`,
+  );
+
 // The site id is the first segment of the bar URL the tenant's root page is
 // published under: "24-25/cataloghome" names site "24-25".
 export function parseElumenSite(json: string): string | null {

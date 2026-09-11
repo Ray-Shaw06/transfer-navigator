@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   elumenCourseUrl,
+  elumenCourseUrls,
   elumenSlug,
   parseElumenCourse,
   parseElumenSite,
@@ -146,5 +147,18 @@ describe('a title that ends in a Roman numeral', () => {
     );
 
     expect(parsed?.prerequisites).toEqual(['MATH 192']);
+  });
+});
+
+describe('a revised course', () => {
+  it('is looked for under its versioned slugs after the plain one', () => {
+    // Porterville publishes ACCT P120 only as acctp120v2.
+    const urls = elumenCourseUrls('porterville.elumenapp.com', 'firstcatalog', 'ACCT P120');
+    expect(urls.map((u) => /course,([a-z0-9]+)\?/.exec(u)?.[1])).toEqual([
+      'acctp120',
+      'acctp120v2',
+      'acctp120v3',
+      'acctp120v4',
+    ]);
   });
 });

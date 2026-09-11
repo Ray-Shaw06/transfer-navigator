@@ -14,10 +14,8 @@
 // publishing prerequisites. Of the CourseLeaf colleges, only the ones below
 // actually state requisites in the course document; the others serve the same
 // URL and say nothing in it, so listing them would buy a student nothing but a
-// slower page. Of the eLumen colleges, seven are left out: two tenants do not
-// answer the shared API at all, one publishes no course this could find, and
-// four answered only courses with no requisites stated, which may be the
-// courses tried rather than the college, and is worth another look. Each entry here was checked twice over: the host answers with a
+// slower page. Of the eLumen colleges, two are left out, Mendocino and West
+// Valley, whose tenants do not answer the shared API at all. Each entry here was checked twice over: the host answers with a
 // real course, and that course's requisites come back through the parser in
 // this repo. Every ASSIST id was read back from ASSIST's own institution list.
 //
@@ -70,6 +68,11 @@ export const CATALOGS: CatalogSource[] = [
   { college: 83, name: 'College of the Redwoods', platform: 'elumen', host: 'redwoods.elumenapp.com', site: '2026-2027' },
   { college: 114, name: 'Diablo Valley College', platform: 'elumen', host: 'dvc.elumenapp.com' },
   { college: 121, name: 'Antelope Valley College', platform: 'elumen', host: 'avc.elumenapp.com' },
+  { college: 4, name: 'College of Marin', platform: 'elumen', host: 'marin.elumenapp.com', site: 'current' },
+  { college: 63, name: 'Palo Verde College', platform: 'elumen', host: 'pvc.elumenapp.com', site: '2025-2026' },
+  { college: 94, name: 'Solano Community College', platform: 'elumen', host: 'solano.elumenapp.com' },
+  { college: 102, name: 'College of the Siskiyous', platform: 'elumen', host: 'siskiyous.elumenapp.com', site: 'cos26-27catalog' },
+  { college: 125, name: 'Porterville College', platform: 'elumen', host: 'porterville.elumenapp.com' },
 ];
 
 export const catalogFor = (college: number): CatalogSource | null =>

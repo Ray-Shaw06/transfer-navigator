@@ -64,3 +64,16 @@ export function padCourseCode(code: string): string {
       `${lead}${String(digits).padStart(3, '0')}`,
     );
 }
+
+// The one spelling every comparison uses.
+//
+// Colleges and ASSIST disagree not only about padding but about spacing, and
+// eLumen templates drop spaces inside a code altogether: Solano's own catalog
+// writes PSYCC1000 where ASSIST prints PSYC C1000, and Porterville's MATHP100
+// is ASSIST's MATH P100. Where a space falls inside a code cannot be recovered
+// without knowing the subject, so the key simply has none. Every map, set and
+// membership test in the planner and the catalog client goes through this;
+// normalizeCourseCode is kept for what is shown to a student.
+export function canonicalCourseKey(code: string): string {
+  return normalizeCourseCode(code).replace(/[\s-]+/g, '');
+}

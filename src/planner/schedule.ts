@@ -1,7 +1,7 @@
 import type { AndGroup } from '../parser/groups';
 import type { Course } from '../parser/types';
 import type { PrereqIndex } from '../catalog/types';
-import { normalizeCourseCode } from '../catalog/normalize';
+import { canonicalCourseKey } from '../catalog/normalize';
 
 // Turns the work a plan says is left into named terms a student can actually
 // register against: Fall 2026, Spring 2027, and so on.
@@ -321,7 +321,7 @@ export function buildSchedule(
     prereqs,
   } = options;
 
-  const held = new Set([...(options.held ?? [])].map(normalizeCourseCode));
+  const held = new Set([...(options.held ?? [])].map(canonicalCourseKey));
 
   // Whether the catalog had anything to say about this course. It decides
   // which of the two orderings governs it: a course the catalog covers is
@@ -330,10 +330,12 @@ export function buildSchedule(
   // corrects. Pasadena's catalog says CS 003B has no prerequisite at all and
   // that CS 008 follows CS 003A rather than CS 003B; the guess said otherwise
   // on both.
-  const known = (code: string) => prereqs?.has(normalizeCourseCode(code)) ?? false;
+  const known = (code: string) => prereqs?.has(canonicalCourseKey(code)) ?? false;
 
+  // Canonical on both ends, so it does not matter how the catalog spelled
+  // what it named: PSYCC1000 and PSYC C1000 are one course here.
   const statedPrereqs = (code: string): string[] =>
-    prereqs?.get(normalizeCourseCode(code))?.prerequisites ?? [];
+    (prereqs?.get(canonicalCourseKey(code))?.prerequisites ?? []).map(canonicalCourseKey);
   // Summer terms are short. Half a normal load, at least one course's worth,
   // unless the caller states otherwise.
   const summerUnits = options.summerUnits ?? Math.max(3, Math.round(unitsPerTerm / 2));
@@ -403,7 +405,7 @@ export function buildSchedule(
   if (prereqs) {
     const home = new Map<string, number>();
     queue.forEach((block, i) => {
-      for (const c of block.courses) home.set(normalizeCourseCode(c.code), i);
+      for (const c of block.courses) home.set(canonicalCourseKey(c.code), i);
     });
 
     // Union-find over corequisite edges, so a lecture, its lab and anything
@@ -417,8 +419,8 @@ export function buildSchedule(
 
     queue.forEach((block, i) => {
       for (const c of block.courses) {
-        for (const co of prereqs.get(normalizeCourseCode(c.code))?.corequisites ?? []) {
-          const other = home.get(co);
+        for (const co of prereqs.get(canonicalCourseKey(c.code))?.corequisites ?? []) {
+          const other = home.get(canonicalCourseKey(co));
           if (other !== undefined) union(i, other);
         }
       }
@@ -554,7 +556,7 @@ export function buildSchedule(
     // one the student already holds or never needed, and ordering against a
     // course that is not in the plan would stall it forever.
     const inPlan = new Set(
-      queue.flatMap((b) => b.courses.map((c) => normalizeCourseCode(c.code))),
+      queue.flatMap((b) => b.courses.map((c) => canonicalCourseKey(c.code))),
     );
 
     // A block may go in this term only once every prerequisite the catalog
@@ -666,7 +668,7 @@ export function buildSchedule(
               ]);
               sequenced.push(course.code);
             }
-            termOf.set(normalizeCourseCode(course.code), terms.length);
+            termOf.set(canonicalCourseKey(course.code), terms.length);
             items.push({ kind: 'course', units: course.units, course, priority: queue[i].priority });
           }
           done[i] = true;
@@ -694,7 +696,7 @@ export function buildSchedule(
         }
         if (stuck >= 0 && total(queue[stuck].courses) > unitsPerTerm) {
           for (const course of queue[stuck].courses) {
-            termOf.set(normalizeCourseCode(course.code), terms.length);
+            termOf.set(canonicalCourseKey(course.code), terms.length);
             items.push({
               kind: 'course',
               units: course.units,
@@ -794,7 +796,7 @@ export function buildSchedule(
   // MATH 005AH" is satisfied by either, so reporting it while the student
   // holds one of them would be a warning about nothing.
   const scheduled = new Set(
-    terms.flatMap((t) => t.courses.map((c) => normalizeCourseCode(c.code))),
+    terms.flatMap((t) => t.courses.map((c) => canonicalCourseKey(c.code))),
   );
   const covered = (code: string) => scheduled.has(code) || held.has(code);
 
@@ -803,8 +805,8 @@ export function buildSchedule(
     : terms
         .flatMap((t) => t.courses)
         .flatMap((course) => {
-          const stated = prereqs.get(normalizeCourseCode(course.code))?.prerequisites ?? [];
-          if (stated.length === 0 || stated.some(covered)) return [];
+          const stated = prereqs.get(canonicalCourseKey(course.code))?.prerequisites ?? [];
+          if (stated.length === 0 || stated.some((need) => covered(canonicalCourseKey(need)))) return [];
           return [{ course: course.code, needs: stated }];
         });
 

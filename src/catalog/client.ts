@@ -1,7 +1,7 @@
 import { courseLeafUrl, parseCourseLeafCourse } from './courseleaf';
-import { elumenCourseUrl, elumenSiteUrl, parseElumenCourse, parseElumenSite } from './elumen';
+import { elumenCourseUrls, elumenSiteUrl, parseElumenCourse, parseElumenSite } from './elumen';
 import { catalogFor, type CatalogSource } from './registry';
-import { catalogSpellings, normalizeCourseCode } from './normalize';
+import { canonicalCourseKey, catalogSpellings } from './normalize';
 import type { CoursePrereqs } from './types';
 
 // Server-side catalog client. Like the ASSIST client beside it, this must
@@ -42,8 +42,12 @@ async function fetchOne(
 ): Promise<CoursePrereqs | null> {
   if (source.platform === 'elumen') {
     if (!site) return null;
-    const body = await text(elumenCourseUrl(source.host, site, code));
-    return body === null ? null : parseElumenCourse(body, code);
+    for (const url of elumenCourseUrls(source.host, site, code)) {
+      const body = await text(url);
+      const parsed = body === null ? null : parseElumenCourse(body, code);
+      if (parsed) return parsed;
+    }
+    return null;
   }
   const body = await text(courseLeafUrl(source.host, code));
   return body === null ? null : parseCourseLeafCourse(body);
@@ -68,7 +72,7 @@ export async function prereqsFor(
   const wanted: string[] = [];
   const seen = new Set<string>();
   for (const code of codes) {
-    const key = normalizeCourseCode(code);
+    const key = canonicalCourseKey(code);
     if (!key || seen.has(key)) continue;
     seen.add(key);
     wanted.push(code.trim());

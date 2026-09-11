@@ -11,6 +11,13 @@ import {
   type Priority,
 } from '../../src/planner/schedule';
 import type { AndGroup } from '../../src/parser/groups';
+import { canonicalCourseKey } from '../../src/catalog/normalize';
+import type { CoursePrereqs, PrereqIndex } from '../../src/catalog/types';
+
+// Keyed the way the app keys it: by canonical code, with no spaces, so the
+// fixture cannot pass on a spelling the real index would not have.
+const index = (entries: [string, Omit<CoursePrereqs, 'code'>][]): PrereqIndex =>
+  new Map(entries.map(([code, rest]) => [canonicalCourseKey(code), { code, ...rest }]));
 
 const course = (code: string, units: number) => ({ code, title: code, units });
 const group = (...courses: { code: string; title: string; units: number }[]): AndGroup => ({
@@ -834,17 +841,17 @@ describe('prerequisites read from the college catalog', () => {
   // Pasadena City College's real catalog, for the courses this agreement uses.
   // Three of these contradict what reading the numbers alone would guess, which
   // is the whole reason the catalog is worth fetching.
-  const pcc = new Map([
-    ['CS 2', { code: 'CS 2', prerequisites: [], corequisites: [], recommended: [] }],
-    ['CS 3A', { code: 'CS 3A', prerequisites: ['CS 2'], corequisites: ['CS 3AL'], recommended: [] }],
-    ['CS 3AL', { code: 'CS 3AL', prerequisites: [], corequisites: ['CS 3A'], recommended: [] }],
+  const pcc = index([
+    ['CS 2', { prerequisites: [], corequisites: [], recommended: [] }],
+    ['CS 3A', { prerequisites: ['CS 2'], corequisites: ['CS 3AL'], recommended: [] }],
+    ['CS 3AL', { prerequisites: [], corequisites: ['CS 3A'], recommended: [] }],
     // No prerequisite at all: CS 003B is Java where CS 003A is C++, so they are
     // parallel and not a sequence.
-    ['CS 3B', { code: 'CS 3B', prerequisites: [], corequisites: ['CS 3BL'], recommended: ['CS 1'] }],
-    ['CS 3BL', { code: 'CS 3BL', prerequisites: [], corequisites: ['CS 3B'], recommended: [] }],
+    ['CS 3B', { prerequisites: [], corequisites: ['CS 3BL'], recommended: ['CS 1'] }],
+    ['CS 3BL', { prerequisites: [], corequisites: ['CS 3B'], recommended: [] }],
     // Follows CS 003A, not CS 003B.
-    ['CS 8', { code: 'CS 8', prerequisites: ['CS 3A'], corequisites: [], recommended: [] }],
-    ['CS 33', { code: 'CS 33', prerequisites: ['CS 3B'], corequisites: [], recommended: [] }],
+    ['CS 8', { prerequisites: ['CS 3A'], corequisites: [], recommended: [] }],
+    ['CS 33', { prerequisites: ['CS 3B'], corequisites: [], recommended: [] }],
   ]);
 
   const termOf = (s: ReturnType<typeof buildSchedule>, code: string) =>
@@ -902,7 +909,7 @@ describe('prerequisites read from the college catalog', () => {
     // student has already done, so it is not in the plan. Ordering against a
     // course that is not being taken would stall the plan forever.
     const outside = new Map(pcc);
-    outside.set('CS 2', {
+    outside.set(canonicalCourseKey('CS 2'), {
       code: 'CS 2',
       prerequisites: ['MATH 8'],
       corequisites: [],
@@ -917,9 +924,9 @@ describe('prerequisites read from the college catalog', () => {
   it('never drops a course, even if the catalog states a cycle', () => {
     // A catalog should never say this, and if one does the scheduler must not
     // spin or quietly lose the courses.
-    const cyclic = new Map([
-      ['AAA 1', { code: 'AAA 1', prerequisites: ['AAA 2'], corequisites: [], recommended: [] }],
-      ['AAA 2', { code: 'AAA 2', prerequisites: ['AAA 1'], corequisites: [], recommended: [] }],
+    const cyclic = index([
+      ['AAA 1', { prerequisites: ['AAA 2'], corequisites: [], recommended: [] }],
+      ['AAA 2', { prerequisites: ['AAA 1'], corequisites: [], recommended: [] }],
     ]);
 
     const schedule = buildSchedule(
@@ -948,15 +955,10 @@ describe('prerequisites read from the college catalog', () => {
 
 describe('a prerequisite the plan does not contain', () => {
   const g = (...cs: { code: string; title: string; units: number }[]) => group(...cs);
-  const pcc = new Map([
-    ['CS 8', { code: 'CS 8', prerequisites: ['CS 3A'], corequisites: [], recommended: [] }],
-    ['CS 3A', { code: 'CS 3A', prerequisites: ['CS 2'], corequisites: [], recommended: [] }],
-    ['MATH 5B', {
-      code: 'MATH 5B',
-      prerequisites: ['MATH 5A', 'MATH 5AH'],
-      corequisites: [],
-      recommended: [],
-    }],
+  const pcc = index([
+    ['CS 8', { prerequisites: ['CS 3A'], corequisites: [], recommended: [] }],
+    ['CS 3A', { prerequisites: ['CS 2'], corequisites: [], recommended: [] }],
+    ['MATH 5B', { prerequisites: ['MATH 5A', 'MATH 5AH'], corequisites: [], recommended: [] }],
   ]);
 
   it('names the course a student would be turned away from', () => {
@@ -1003,6 +1005,27 @@ describe('a prerequisite the plan does not contain', () => {
     // Nothing is known there, and a warning invented from nothing is worse
     // than no warning.
     const schedule = buildSchedule([g(course('CS 008', 3))], base);
+    expect(schedule.missingPrereqs).toEqual([]);
+  });
+});
+
+describe('a catalog that spells a code without its space', () => {
+  it('still orders the agreement\'s course behind it', () => {
+    // Solano's own catalog writes PSYCC1000 where ASSIST prints PSYC C1000.
+    // Where the space falls cannot be recovered without knowing the subject,
+    // so every comparison drops spaces on both sides instead.
+    const solano = index([
+      ['PSYCC1000', { prerequisites: [], corequisites: [], recommended: [] }],
+      ['PSYC 4', { prerequisites: ['PSYCC1000'], corequisites: [], recommended: [] }],
+    ]);
+
+    const schedule = buildSchedule(
+      [group(course('PSYC 004', 3)), group(course('PSYC C1000', 3))],
+      { ...base, prereqs: solano },
+    );
+
+    const at = (code: string) => schedule.terms.findIndex((t) => t.courses.some((c) => c.code === code));
+    expect(at('PSYC C1000')).toBeLessThan(at('PSYC 004'));
     expect(schedule.missingPrereqs).toEqual([]);
   });
 });

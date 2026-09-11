@@ -1,5 +1,6 @@
 'use client';
 import type { CoursePrereqs, PrereqIndex } from '../../src/catalog/types';
+import { canonicalCourseKey } from '../../src/catalog/normalize';
 
 import { useEffect, useState } from 'react';
 import type { Agreement } from '../../src/parser/agreement';
@@ -240,7 +241,9 @@ export function usePrereqs(
       .then((data) => {
         if (!live) return;
         setState({
-          index: new Map(data.courses.map((c) => [c.code, c])),
+          // Keyed the way the planner looks things up, so PSYC C1000 in the
+          // agreement finds the PSYCC1000 a catalog wrote.
+          index: new Map(data.courses.map((c) => [canonicalCourseKey(c.code), c])),
           supported: data.supported,
         });
       })

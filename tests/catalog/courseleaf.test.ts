@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { parseCourseLeafCourse } from '../../src/catalog/courseleaf';
-import { catalogSpellings, normalizeCourseCode, padCourseCode } from '../../src/catalog/normalize';
+import {
+  canonicalCourseKey,
+  catalogSpellings,
+  normalizeCourseCode,
+  padCourseCode,
+} from '../../src/catalog/normalize';
 
 // The shapes below are the real ones, trimmed. Every variant here was seen in
 // Pasadena City College's live catalog while this was written: a single
@@ -149,5 +154,15 @@ describe('the spellings a catalog might answer to', () => {
 
   it('reads a hyphenated code as the same course as a spaced one', () => {
     expect(normalizeCourseCode('MATH-105')).toBe(normalizeCourseCode('MATH 105'));
+  });
+});
+
+describe('canonicalCourseKey', () => {
+  it('makes every spelling of one course compare equal', () => {
+    const same = ['PSYC C1000', 'PSYCC1000', 'psyc c1000', 'PSYC-C1000', 'PSYC  C1000'];
+    const keys = new Set(same.map(canonicalCourseKey));
+    expect(keys.size).toBe(1);
+    expect(canonicalCourseKey('MATH 005A')).toBe(canonicalCourseKey('MATH5A'));
+    expect(canonicalCourseKey('ACCT P110')).toBe(canonicalCourseKey('ACCTP110'));
   });
 });
