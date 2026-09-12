@@ -35,6 +35,13 @@ export type CatalogSource = {
   // eLumen, which is sent as a parameter to eLumen's one shared API.
   platform: 'courseleaf' | 'elumen';
   host: string;
+  // CourseLeaf only. The path of a subject's own page, with {subject} where
+  // the lower-case subject goes, read when the course endpoint answers a
+  // course with nothing. At Pasadena that endpoint skips every course under
+  // the new statewide common numbering, ENGL C1000 among them, while the
+  // subject page lists them. Set only where such a page was seen to exist;
+  // half the CourseLeaf colleges have none at any guessable path.
+  subjectPage?: string;
   // eLumen only. The catalog year the tenant publishes under, when it has to
   // be pinned because the tenant publishes more than one and its own default
   // lookup fails on the ambiguity. Read off the link the college's own website
@@ -45,10 +52,10 @@ export type CatalogSource = {
 };
 
 export const CATALOGS: CatalogSource[] = [
-  { college: 19, name: 'Victor Valley College', platform: 'courseleaf', host: 'catalog.vvc.edu' },
-  { college: 49, name: 'Pasadena City College', platform: 'courseleaf', host: 'curriculum.pasadena.edu' },
-  { college: 51, name: 'Foothill College', platform: 'courseleaf', host: 'catalog.foothill.edu' },
-  { college: 53, name: 'Mt. San Jacinto College', platform: 'courseleaf', host: 'catalog.msjc.edu' },
+  { college: 19, name: 'Victor Valley College', platform: 'courseleaf', host: 'catalog.vvc.edu', subjectPage: '/course-descriptions/{subject}/' },
+  { college: 49, name: 'Pasadena City College', platform: 'courseleaf', host: 'curriculum.pasadena.edu', subjectPage: '/course-descriptions/{subject}/' },
+  { college: 51, name: 'Foothill College', platform: 'courseleaf', host: 'catalog.foothill.edu', subjectPage: '/courses-az/{subject}/' },
+  { college: 53, name: 'Mt. San Jacinto College', platform: 'courseleaf', host: 'catalog.msjc.edu', subjectPage: '/courses/{subject}/' },
   { college: 74, name: 'Orange Coast College', platform: 'courseleaf', host: 'catalog.cccd.edu' },
   // Moorpark, Oxnard and Ventura are one district publishing one catalog. Its
   // courses carry the district's own M prefix and its prerequisites are stated
@@ -56,7 +63,12 @@ export const CATALOGS: CatalogSource[] = [
   { college: 87, name: 'Oxnard College', platform: 'courseleaf', host: 'catalog.vcccd.edu' },
   { college: 95, name: 'Ventura College', platform: 'courseleaf', host: 'catalog.vcccd.edu' },
   { college: 139, name: 'Moorpark College', platform: 'courseleaf', host: 'catalog.vcccd.edu' },
-  { college: 133, name: 'Monterey Peninsula College', platform: 'courseleaf', host: 'catalog.mpc.edu' },
+  // Monterey Peninsula, catalog.mpc.edu, is CourseLeaf and parsed cleanly
+  // when first checked, and now answers every request with an AWS WAF bot
+  // challenge (HTTP 202, x-amzn-waf-action: challenge). Whether that is
+  // permanent or was tripped by the checking is not known, and a challenge is
+  // not something to build around. Left out until `npm run catalog:verify`
+  // passes it again.
   { college: 136, name: 'San Jose City College', platform: 'courseleaf', host: 'catalog.sjcc.edu' },
 
   // eLumen. `host` is the tenant name, sent to eLumen's one shared API.

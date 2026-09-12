@@ -33,6 +33,7 @@ describe('parseElumenCourse', () => {
       prerequisites: ['BIO 1A', 'BIO 1AH'],
       corequisites: [],
       recommended: [],
+      formerly: [],
     });
   });
 

@@ -1,7 +1,13 @@
-import { courseLeafUrl, parseCourseLeafCourse } from './courseleaf';
+import {
+  courseLeafSubjectUrl,
+  courseLeafUrl,
+  parseCourseLeafCourse,
+  parseCourseLeafSubjectPage,
+} from './courseleaf';
 import { elumenCourseUrls, elumenSiteUrl, parseElumenCourse, parseElumenSite } from './elumen';
 import { catalogFor, type CatalogSource } from './registry';
-import { canonicalCourseKey, catalogSpellings } from './normalize';
+import { canonicalCourseKey, catalogSpellings, normalizeCourseCode } from './normalize';
+import { statewideCandidates } from './statewide';
 import type { CoursePrereqs } from './types';
 
 // Server-side catalog client. Like the ASSIST client beside it, this must
@@ -89,6 +95,31 @@ export async function prereqsFor(
 
   const found: CoursePrereqs[] = [];
 
+  // Subject pages fetched once each per request, however many of a subject's
+  // courses fall through to them.
+  const subjectPages = new Map<string, Promise<string | null>>();
+  const subjectPage = (code: string): Promise<string | null> => {
+    if (source.platform !== 'courseleaf' || !source.subjectPage) return Promise.resolve(null);
+    const url = courseLeafSubjectUrl(source.host, source.subjectPage, code);
+    if (!subjectPages.has(url)) subjectPages.set(url, text(url));
+    return subjectPages.get(url)!;
+  };
+
+  // Statewide courses fetched once each per request, however many old codes
+  // turn out to have become them.
+  const statewide = new Map<string, Promise<CoursePrereqs | null>>();
+  const formerly = async (code: string): Promise<CoursePrereqs | null> => {
+    const want = canonicalCourseKey(code);
+    for (const candidate of statewideCandidates(code)) {
+      if (!statewide.has(candidate)) statewide.set(candidate, fetchOne(source, candidate, site));
+      const course = await statewide.get(candidate)!;
+      if (course?.formerly.some((f) => canonicalCourseKey(f) === want)) {
+        return { ...course, code: normalizeCourseCode(code) };
+      }
+    }
+    return null;
+  };
+
   // A plain worker pool. Each worker takes the next index until they run out,
   // so one slow course cannot hold up the rest.
   let next = 0;
@@ -96,13 +127,24 @@ export async function prereqsFor(
     for (;;) {
       const i = next++;
       if (i >= wanted.length) return;
+      let course: CoursePrereqs | null = null;
       for (const spelling of catalogSpellings(wanted[i])) {
-        const course = await fetchOne(source, spelling, site);
-        if (course) {
-          found.push(course);
-          break;
-        }
+        course = await fetchOne(source, spelling, site);
+        if (course) break;
       }
+      // The course endpoint said nothing under any spelling. The subject page
+      // may still list it.
+      if (!course) {
+        const page = await subjectPage(wanted[i]);
+        if (page) course = parseCourseLeafSubjectPage(page, wanted[i]);
+      }
+      // Still nothing. The course may have been renumbered to a statewide
+      // code, with the catalog listing it only under the new one and saying
+      // "Formerly ECON 1B" there. Each statewide code in the subject is asked
+      // for and the one that names this course is taken, keyed to the code
+      // the plan asked about. See statewide.ts.
+      if (!course) course = await formerly(wanted[i]);
+      if (course) found.push(course);
     }
   };
 

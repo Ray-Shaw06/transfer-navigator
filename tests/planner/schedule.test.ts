@@ -16,8 +16,15 @@ import type { CoursePrereqs, PrereqIndex } from '../../src/catalog/types';
 
 // Keyed the way the app keys it: by canonical code, with no spaces, so the
 // fixture cannot pass on a spelling the real index would not have.
-const index = (entries: [string, Omit<CoursePrereqs, 'code'>][]): PrereqIndex =>
-  new Map(entries.map(([code, rest]) => [canonicalCourseKey(code), { code, ...rest }]));
+const index = (
+  entries: [string, Partial<Omit<CoursePrereqs, 'code'>>][],
+): PrereqIndex =>
+  new Map(
+    entries.map(([code, rest]) => [
+      canonicalCourseKey(code),
+      { code, prerequisites: [], corequisites: [], recommended: [], formerly: [], ...rest },
+    ]),
+  );
 
 const course = (code: string, units: number) => ({ code, title: code, units });
 const group = (...courses: { code: string; title: string; units: number }[]): AndGroup => ({
@@ -914,6 +921,7 @@ describe('prerequisites read from the college catalog', () => {
       prerequisites: ['MATH 8'],
       corequisites: [],
       recommended: [],
+      formerly: [],
     });
 
     const schedule = buildSchedule([g(course('CS 002', 3))], { ...base, prereqs: outside });

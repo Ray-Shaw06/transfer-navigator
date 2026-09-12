@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { parseCourseLeafCourse } from '../../src/catalog/courseleaf';
+import {
+  courseLeafSubjectUrl,
+  parseCourseLeafCourse,
+  parseCourseLeafSubjectPage,
+} from '../../src/catalog/courseleaf';
 import {
   canonicalCourseKey,
   catalogSpellings,
@@ -35,6 +39,7 @@ describe('parseCourseLeafCourse', () => {
       prerequisites: ['CS 2'],
       corequisites: ['CS 3AL'],
       recommended: [],
+      formerly: [],
     });
   });
 
@@ -164,5 +169,105 @@ describe('canonicalCourseKey', () => {
     expect(keys.size).toBe(1);
     expect(canonicalCourseKey('MATH 005A')).toBe(canonicalCourseKey('MATH5A'));
     expect(canonicalCourseKey('ACCT P110')).toBe(canonicalCourseKey('ACCTP110'));
+  });
+});
+
+describe('parseCourseLeafSubjectPage', () => {
+  // Pasadena's /course-descriptions/stat/ page, trimmed to two blocks. The
+  // course endpoint will not serve STAT C1000 at all; this page does.
+  const page = `
+<main>
+<div class="courseblock"><div class="cols noindent"><span class="text detail-code_html margin--tiny text--semibold text--big"><strong>STAT 018</strong></span>&#160;&#160;<span class="text col-9 detail-title"><strong>STATISTICS FOR BEHAVIORAL SCIENCES</strong></span></div>
+<div class="noindent"><div class="section"><div class="section__content"><span><strong>Prerequisite(s):</strong> <em>${link('MATH 131')}</em></span></div></div></div></div>
+<div class="courseblock"><div class="cols noindent"><span class="text detail-code_html margin--tiny text--semibold text--big"><strong>STAT&#160;C1000</strong></span>&#160;&#160;<span class="text col-9 detail-title"><strong>INTRODUCTION TO STATISTICS</strong></span></div>
+<div class="noindent"><div class="section"><div class="section__content"><span><strong>Prerequisite(s):</strong> <em>Placement as determined by assessment, or ${link('MATH 131')} or ${link('MATH 134')}</em></span></div></div></div></div>
+</main>`;
+
+  it('picks the one block for the code asked about', () => {
+    const parsed = parseCourseLeafSubjectPage(page, 'STAT C1000');
+    expect(parsed?.code).toBe('STAT C1000');
+    expect(parsed?.prerequisites).toEqual(['MATH 131', 'MATH 134']);
+  });
+
+  it('matches the code however the page or the caller spaced it', () => {
+    // The page prints STAT&#160;C1000 with a non-breaking space and the
+    // agreement may print MATH 005A where the page has MATH 5A.
+    expect(parseCourseLeafSubjectPage(page, 'STATC1000')?.code).toBe('STAT C1000');
+    expect(parseCourseLeafSubjectPage(page, 'STAT 018')?.prerequisites).toEqual(['MATH 131']);
+    expect(parseCourseLeafSubjectPage(page, 'STAT 18')?.prerequisites).toEqual(['MATH 131']);
+  });
+
+  it('returns nothing for a course the page does not list', () => {
+    expect(parseCourseLeafSubjectPage(page, 'STAT 999')).toBeNull();
+  });
+
+  it('builds the page address from the subject alone', () => {
+    expect(courseLeafSubjectUrl('curriculum.pasadena.edu', '/course-descriptions/{subject}/', 'STAT C1000')).toBe(
+      'https://curriculum.pasadena.edu/course-descriptions/stat/',
+    );
+    expect(courseLeafSubjectUrl('catalog.msjc.edu', '/courses/{subject}/', 'MATH-105')).toBe(
+      'https://catalog.msjc.edu/courses/math/',
+    );
+  });
+});
+
+describe('the spellings ASSIST forces on a catalog lookup', () => {
+  it('repairs a hyphen-and-space code to the one the catalog answers to', () => {
+    // ASSIST prints Mt. San Jacinto's courses as "BIOL- 150". The catalog
+    // answers to BIOL-150 and to nothing with a space after the hyphen.
+    expect(catalogSpellings('BIOL- 150')).toContain('BIOL-150');
+    expect(catalogSpellings('BIOL- 150')).toContain('BIOL 150');
+  });
+
+  it('falls back to the base course for an honours section', () => {
+    const spellings = catalogSpellings('BIOL A282H');
+    expect(spellings[0]).toBe('BIOL A282H');
+    expect(spellings).toContain('BIOL A282');
+    expect(catalogSpellings('PSYC C1000H')).toContain('PSYC C1000');
+  });
+
+  it('tries the three separators for every padding', () => {
+    const s = catalogSpellings('MATH 5A');
+    for (const want of ['MATH 5A', 'MATH 005A', 'MATH-5A', 'MATH-005A', 'MATH5A', 'MATH005A']) {
+      expect(s).toContain(want);
+    }
+  });
+});
+
+describe('a subject page that links each code to its outline', () => {
+  it('reads the code out of the link, as Foothill writes it', () => {
+    const page = `<div class="courseblock"><section><h2 class="cols noindent"><span class="text col-3 detail-code margin--tiny text--semibold text--huge">
+      <strong><a href="/course-outlines/ECON-C2001/">
+        ECON C2001
+      </a>&#160;•&#160;</strong></span></h2>
+      <table><tr><th><strong>Prerequisite:</strong></th><td>${link('MATH 105')}</td></tr></table></section></div>`;
+    const parsed = parseCourseLeafSubjectPage(page, 'ECON C2001');
+    expect(parsed?.code).toBe('ECON C2001');
+    expect(parsed?.prerequisites).toEqual(['MATH 105']);
+  });
+});
+
+describe('a course the agreement still names by its old number', () => {
+  const page = `
+<div class="courseblock"><div class="cols noindent"><span class="text detail-code margin--tiny text--semibold text--huge"><strong>ECON C2001</strong></span></div>
+<div class="noindent"><div class="section"><div class="section__content"><span><strong>Prerequisite(s):</strong> <em>${link('MATH 105')}</em></span></div></div></div>
+<div class="courseblockextra noindent">Formerly: ECON 1B An introductory course using microeconomic models.</div></div>
+<div class="courseblock"><div class="cols noindent"><span class="text detail-code margin--tiny text--semibold text--huge"><strong>ECON C2002</strong></span></div>
+<div class="courseblockextra noindent">An introductory course using models of the domestic economy. Formerly ECON 1A.</div></div>`;
+
+  it('is found under the new number and answered under the old one', () => {
+    // Foothill labels it "Formerly:" on its own line; Victor Valley writes it
+    // into the last sentence of the description. Keyed to the code asked
+    // about, since that is what the plan will look up.
+    const micro = parseCourseLeafSubjectPage(page, 'ECON 1B');
+    expect(micro?.code).toBe('ECON 1B');
+    expect(micro?.prerequisites).toEqual(['MATH 105']);
+
+    const macro = parseCourseLeafSubjectPage(page, 'ECON 1A');
+    expect(macro?.code).toBe('ECON 1A');
+  });
+
+  it('prefers the course actually listed under a code over one formerly called it', () => {
+    expect(parseCourseLeafSubjectPage(page, 'ECON C2001')?.code).toBe('ECON C2001');
   });
 });

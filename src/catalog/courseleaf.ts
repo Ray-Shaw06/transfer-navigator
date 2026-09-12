@@ -1,6 +1,6 @@
 import type { CoursePrereqs } from './types';
 import { normalizeCourseCode } from './normalize';
-import { codesFromText, stripHtml } from './text';
+import { codesFromText, formerlyCodes, stripHtml } from './text';
 
 // Reads prerequisites out of a CourseLeaf catalog.
 //
@@ -74,6 +74,7 @@ export function parseCourseLeafCourse(xml: string): CoursePrereqs | null {
     prerequisites: [],
     corequisites: [],
     recommended: [],
+    formerly: formerlyCodes(stripHtml(xml)).map(normalizeCourseCode),
   };
 
   for (const label of xml.matchAll(LABEL)) {
@@ -105,3 +106,72 @@ export function parseCourseLeafCourse(xml: string): CoursePrereqs | null {
 
 export const courseLeafUrl = (host: string, code: string): string =>
   `https://${host}/ribbit/index.cgi?page=getcourse.rjs&code=${encodeURIComponent(code)}`;
+
+// A subject's own page in the catalog, the fallback for a course the
+// getcourse endpoint will not serve.
+//
+// At Pasadena that endpoint answers every course except the ones numbered
+// under California's new common course numbering, ENGL C1000 and STAT C1000
+// and their kin, which are exactly the courses every transfer student takes.
+// The catalog's own search knows them and its subject pages list them in the
+// same courseblock markup, so the subject page is read and the one block
+// picked out. The path is per college, /course-descriptions/stat/ at Pasadena
+// and /courses/math/ at Mt. San Jacinto, and half the CourseLeaf colleges
+// have no such page at a guessable path, so it is set in the registry only
+// where it was seen to work.
+export const courseLeafSubjectUrl = (host: string, template: string, code: string): string => {
+  const subject = code.trim().split(/[\s-]/)[0].toLowerCase();
+  return `https://${host}${template.replace('{subject}', encodeURIComponent(subject))}`;
+};
+
+// The course's own block off a subject page, in the shape the course parser
+// already reads. Matched on the code the block itself prints, compared with
+// spaces and padding removed, since the page writes STAT&#160;C1000 and the
+// caller may have MATH 005A where the page has MATH 5A.
+const BLOCK = /<div class="courseblock">([\s\S]*?)(?=<div class="courseblock">|<\/main>|<footer|$)/g;
+// Pasadena's page names the class detail-code_html and Mt. San Jacinto's
+// detail-code; both print the code in the <strong> inside it. Foothill wraps
+// the code in a link to the course outline and follows it with a bullet:
+//
+//   <strong><a href="/course-outlines/ECON-C2001/">ECON C2001</a>&#160;•&#160;</strong>
+const BLOCK_CODE =
+  /detail-code(?:_html)?[^>]*>\s*<strong>\s*(?:<a[^>]*>)?\s*([^<•]+?)\s*(?:<\/a>)?(?:&#160;|&nbsp;|&#8226;|•|\s)*<\/strong>/;
+
+const bare = (code: string) =>
+  code
+    .replace(/&#160;|&nbsp;|[\u00a0\u2007\u202f]/g, ' ')
+    .toUpperCase()
+    .replace(/[\s-]+/g, '')
+    .replace(/(^|[^0-9])0+(\d)/g, '$1$2');
+
+const asCourse = (printed: string, block: string): CoursePrereqs | null => {
+  const clean = printed.replace(/&#160;|&nbsp;/g, ' ').trim();
+  return parseCourseLeafCourse(
+    `<?xml version="1.0"?><courseinfo><course code="${clean}"><![CDATA[<div class="courseblock">${block}</div>]]></course></courseinfo>`,
+  );
+};
+
+export function parseCourseLeafSubjectPage(html: string, code: string): CoursePrereqs | null {
+  const want = bare(code);
+  const blocks = [...html.matchAll(BLOCK)].map((m) => ({
+    body: m[1],
+    printed: BLOCK_CODE.exec(m[1])?.[1] ?? null,
+  }));
+
+  for (const { body, printed } of blocks) {
+    if (printed && bare(printed) === want) return asCourse(printed, body);
+  }
+
+  // Not listed under that code. It may be listed under a new one that says
+  // what it was formerly called. The answer is keyed to the code asked about,
+  // because that is the code the agreement names and the plan looks up.
+  for (const { body, printed } of blocks) {
+    if (!printed) continue;
+    const course = asCourse(printed, body);
+    if (course?.formerly.some((f) => bare(f) === want)) {
+      return { ...course, code: normalizeCourseCode(code) };
+    }
+  }
+
+  return null;
+}

@@ -1,6 +1,6 @@
 import type { CoursePrereqs } from './types';
 import { normalizeCourseCode } from './normalize';
-import { codesFromText, stripHtml } from './text';
+import { codesFromText, formerlyCodes, stripHtml } from './text';
 
 // Reads prerequisites out of an eLumen catalog.
 //
@@ -95,14 +95,15 @@ const KIND: Record<string, Kind> = {
 export function parseElumenCourse(html: string, code: string): CoursePrereqs | null {
   if (!html.trim()) return null;
 
+  const text = stripHtml(html);
+
   const found: CoursePrereqs = {
     code: normalizeCourseCode(code),
     prerequisites: [],
     corequisites: [],
     recommended: [],
+    formerly: formerlyCodes(text).map(normalizeCourseCode),
   };
-
-  const text = stripHtml(html);
   const labels = [...text.matchAll(LABEL)];
 
   labels.forEach((label, i) => {

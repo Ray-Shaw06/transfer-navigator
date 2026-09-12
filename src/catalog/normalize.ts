@@ -27,26 +27,47 @@ export function normalizeCourseCode(code: string): string {
 
 // The spellings a catalog might answer to, best first.
 //
-// A CourseLeaf catalog answers only to its own spelling and nothing else:
-// asking it for CS 3A returns an empty document where CS 003A returns the
-// course. ASSIST happens to pad the same way, so the code as given is tried
-// first, and a three-digit padded form after it for any caller that does not.
+// A CourseLeaf catalog answers only to its own spelling and nothing else,
+// and colleges disagree about all of it: Pasadena writes MATH 005A, Foothill
+// MATH 12, Mt. San Jacinto MATH-105 with a hyphen. ASSIST prints whichever
+// its college uses, and for Mt. San Jacinto prints "BIOL- 150", hyphen AND
+// space, which no catalog answers to. So the code is taken apart into subject
+// and number first, and every joining of the two is tried: as given, padded to
+// three digits, unpadded, with a space, with a hyphen, with nothing.
+//
+// An honours section comes last, as its base course. BIOL A282H is a section
+// of BIOL A282 with the same prerequisites, and most catalogs do not list the
+// H as a course of its own.
 export function catalogSpellings(code: string): string[] {
   const given = code.replace(/[\u00a0\u2007\u202f]/g, ' ').trim().replace(/\s+/g, ' ');
 
-  const out = [given];
+  const out: string[] = [];
   const add = (candidate: string) => {
     if (candidate && !out.includes(candidate)) out.push(candidate);
   };
 
-  // Padded and unpadded both, because colleges disagree: Pasadena writes
-  // MATH 005A and Foothill writes MATH 12, and ASSIST prints whichever its
-  // college uses.
-  add(padCourseCode(given));
-  add(given.replace(/(^|[^0-9])0+(\d)/g, '$1$2'));
-  // Mt. San Jacinto separates subject from number with a hyphen, MATH-105.
-  add(given.replace(' ', '-'));
-  add(padCourseCode(given).replace(' ', '-'));
+  add(given);
+
+  // Subject, then the number with whatever letters ride on it. The separator
+  // between them, if any, is discarded and re-chosen below.
+  const parts = /^([A-Za-z&]+(?:[ -][A-Za-z&]+)*?)[\s-]*([A-Za-z]?\d+[A-Za-z]*)$/.exec(given);
+  if (!parts) return out;
+  const [, subject, number] = parts;
+  const unpadded = number.replace(/^([A-Za-z]?)0+(\d)/, '$1$2');
+  const padded = number.replace(/^([A-Za-z]?)(\d{1,2})(?=[A-Za-z]*$)/, (_, letter, digits) =>
+    `${letter}${String(digits).padStart(3, '0')}`,
+  );
+
+  for (const n of [number, padded, unpadded]) {
+    add(`${subject} ${n}`);
+    add(`${subject}-${n}`);
+    add(`${subject}${n}`);
+  }
+
+  // The base course of an honours section.
+  if (/\d[A-Za-z]*H$/i.test(number)) {
+    for (const spelling of catalogSpellings(`${subject} ${number.replace(/H$/i, '')}`)) add(spelling);
+  }
 
   return out;
 }

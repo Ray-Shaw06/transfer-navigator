@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { CATALOGS, type CatalogSource } from '../../src/catalog/registry';
-import { courseLeafUrl, parseCourseLeafCourse } from '../../src/catalog/courseleaf';
+import {
+  courseLeafSubjectUrl,
+  courseLeafUrl,
+  parseCourseLeafCourse,
+  parseCourseLeafSubjectPage,
+} from '../../src/catalog/courseleaf';
 import {
   elumenCourseUrls,
   elumenSiteUrl,
@@ -143,6 +148,20 @@ describe.skipIf(!enabled)('every college in the registry', () => {
         withRequisites.length,
         `${entry.host} answered ${answered} courses and no requisites parsed from any of them`,
       ).toBeGreaterThan(0);
+    });
+  }
+});
+
+// The course a CourseLeaf endpoint most often refuses is the one every
+// transfer student takes, so the subject-page fallback is checked on it
+// wherever a page is registered.
+describe.skipIf(!enabled)('the subject-page fallback', () => {
+  for (const entry of CATALOGS.filter((c) => c.platform === 'courseleaf' && c.subjectPage)) {
+    it(`${entry.name} serves ENGL C1000 from its subject page`, { timeout: 60000 }, async () => {
+      const page = await get(courseLeafSubjectUrl(entry.host, entry.subjectPage!, 'ENGL C1000'));
+      expect(page.length, `${entry.host} subject page is empty`).toBeGreaterThan(0);
+      const parsed = parseCourseLeafSubjectPage(page, 'ENGL C1000');
+      expect(parsed, `${entry.host} subject page does not list ENGL C1000`).not.toBeNull();
     });
   }
 });

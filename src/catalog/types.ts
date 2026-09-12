@@ -26,6 +26,11 @@ export type CoursePrereqs = {
   // gate, and scheduling around it would push work later for no reason. Kept
   // so the interface can show a student what their college suggests.
   recommended: string[];
+  // What the catalog says this course used to be called. California is
+  // renumbering courses statewide, ECON 1B became ECON C2001, and the
+  // agreements on ASSIST lag the catalogs by a year, so the old code is what
+  // the plan asks for and the new course is where the answer is.
+  formerly: string[];
 };
 
 // Everything known about one college's courses, keyed by normalised code.

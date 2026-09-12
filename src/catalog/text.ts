@@ -78,3 +78,16 @@ export function codesFromText(text: string): string[] {
     .filter((m) => !NOT_A_COURSE.test(m[1]))
     .map((m) => `${m[1].toUpperCase()} ${m[2]}`);
 }
+
+// "Formerly ECON 1B", however a catalog writes it: Foothill labels it on its
+// own line, Victor Valley writes it into the last sentence of the description,
+// Antelope Valley follows it with a C-ID in brackets, Diablo Valley writes
+// "Formerly ECON-221 (26-27)", Mission and San Jose City "formerly known as
+// ECN 001B", Modesto "Formerly listed as ECON 102", Marin "formerly ECON 102,
+// AA/AS Area B". Only the code right after the phrase is taken.
+const FORMERLY =
+  /\b[Ff]ormerly(?::|\s+known\s+as|\s+listed\s+as|\s+called|\s+numbered)?\s*([A-Z][A-Za-z&]{1,9}[ -]?[A-Z]?\d{1,4}[A-Z]{0,2})\b/g;
+
+export function formerlyCodes(text: string): string[] {
+  return [...text.matchAll(FORMERLY)].map((m) => m[1].toUpperCase().replace('-', ' '));
+}
