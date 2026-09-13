@@ -106,6 +106,11 @@ export const CATALOGS: CatalogSource[] = [
   { college: 94, name: 'Solano Community College', platform: 'elumen', host: 'solano.elumenapp.com' },
   { college: 102, name: 'College of the Siskiyous', platform: 'elumen', host: 'siskiyous.elumenapp.com', site: 'cos26-27catalog' },
   { college: 125, name: 'Porterville College', platform: 'elumen', host: 'porterville.elumenapp.com' },
+  { college: 40, name: 'Lake Tahoe Community College', platform: 'elumen', host: 'ltcc.elumenapp.com' },
+  { college: 41, name: 'Cabrillo College', platform: 'elumen', host: 'cabrillo.elumenapp.com' },
+  { college: 43, name: 'Glendale Community College', platform: 'elumen', host: 'glendale.elumenapp.com' },
+  { college: 84, name: 'Bakersfield College', platform: 'elumen', host: 'bakersfield.elumenapp.com' },
+  { college: 113, name: 'De Anza College', platform: 'elumen', host: 'deanza.elumenapp.com' },
 ];
 
 export const catalogFor = (college: number): CatalogSource | null =>

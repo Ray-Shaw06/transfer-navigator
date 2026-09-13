@@ -83,6 +83,9 @@ it('reports whether the live catalog check ran', () => {
 // colleges commonly use. Broad on purpose: an eLumen college answers an
 // unknown slug with an empty body, which costs nothing.
 const COMMON = [
+  // The statewide codes first: every college has them and most of them state
+  // a prerequisite.
+  'STAT C1000', 'PSYC C1000', 'ENGL C1001', 'MATH C2210', 'ECON C2001',
   'MATH 1A', 'MATH 1B', 'MATH 2', 'MATH 3A', 'MATH 5A', 'MATH 8', 'MATH 16', 'MATH 20',
   'MATH 001A', 'MATH 005A', 'MATH 100',
   'MATH 110', 'MATH 120', 'MATH 150', 'MATH 171', 'MATH 172', 'MATH 180', 'MATH 191', 'MATH 192',
@@ -94,6 +97,8 @@ const COMMON = [
   'MATH 121', 'MATH 122', 'MATH 123', 'CHEM 131', 'CHEM 132', 'MATH 1400', 'MFG 1240',
   'CHEM 1000', 'BIO 101', 'BIO 111', 'PSYC 004', 'MATH 020', 'CHEM 001', 'MATH P101',
   'CHEM P101A', 'ACCT P120',
+  // Lake Tahoe writes MAT, Cabrillo CHEM 3.
+  'MAT 154A', 'MAT 103', 'MAT 152', 'CHEM 3', 'CHEM 1A', 'PHYS 4A',
 ];
 
 // One course from one registry entry, through the reader for its platform.
@@ -115,7 +120,7 @@ const readOne = async (
 
 describe.skipIf(!enabled)('every college in the registry', () => {
   for (const entry of CATALOGS) {
-    it(`${entry.name} answers and its prerequisites parse`, { timeout: 240000 }, async () => {
+    it(`${entry.name} answers and its prerequisites parse`, { timeout: 420000 }, async () => {
       let site: string | null = null;
       const codes: string[] = [];
 
@@ -148,7 +153,7 @@ describe.skipIf(!enabled)('every college in the registry', () => {
 
       let answered = 0;
       const withRequisites: string[] = [];
-      for (const code of codes.slice(0, 60)) {
+      for (const code of codes.slice(0, 80)) {
         const parsed = await readOne(entry, site, code);
         if (!parsed) continue;
         answered++;
