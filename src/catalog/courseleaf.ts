@@ -151,7 +151,9 @@ const BLOCK = /<div class="courseblock">([\s\S]*?)(?=<div class="courseblock">|<
 // offered and the caller matches whichever it asked for.
 const DETAIL_CODE =
   /detail-code(?:_html)?[^>]*>\s*<strong>\s*(?:<a[^>]*>)?\s*([^<•]+?)\s*(?:<\/a>)?(?:&#160;|&nbsp;|&#8226;|•|\s)*<\/strong>/;
-const TITLE = /courseblocktitle[^>]*>\s*<strong>([\s\S]*?)<\/strong>/;
+// The title element whole, since Santa Barbara City writes it with no <strong>
+// at all: <p class="courseblocktitle">MATH 074 Pre-algebra Refresher (1 Unit)</p>
+const TITLE = /courseblocktitle[^>]*>([\s\S]*?)<\/(?:p|div|h[1-6])>/;
 const LEADING_CODE = /^([A-Z][A-Za-z&]{1,9}[ -]?[A-Z]?\d{1,4}[A-Z]{0,2})(?:\s([A-Z]))?(?=[\s.:]|$)/;
 
 function blockCodes(block: string): string[] {

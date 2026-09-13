@@ -87,6 +87,10 @@ export const CATALOGS: CatalogSource[] = [
   { college: 93, name: 'Sierra College', platform: 'courseleaf', host: 'catalog.sierracollege.edu', subjectPage: '/courses/{subject}/', subjectPageOnly: true },
   { college: 131, name: 'San Bernardino Valley College', platform: 'courseleaf', host: 'catalog.valleycollege.edu', subjectPage: '/courses/{subject}/', subjectPageOnly: true },
   { college: 134, name: 'Fullerton College', platform: 'courseleaf', host: 'catalog.nocccd.edu', subjectPage: '/fullerton-college/course-descriptions/{subject}/', subjectPageOnly: true },
+  { college: 2, name: 'Evergreen Valley College', platform: 'courseleaf', host: 'catalog.evc.edu', subjectPage: '/course-descriptions-information/course-descriptions/{subject}/', subjectPageOnly: true },
+  { college: 62, name: 'Mount San Antonio College', platform: 'courseleaf', host: 'catalog.mtsac.edu', subjectPage: '/programs/coursesaz/{subject}/', subjectPageOnly: true },
+  { college: 92, name: 'Santa Barbara City College', platform: 'courseleaf', host: 'catalog.sbcc.edu', subjectPage: '/course-descriptions/{subject}/', subjectPageOnly: true },
+  { college: 104, name: 'Cerritos College', platform: 'courseleaf', host: 'cerritos-public.courseleaf.com', subjectPage: '/degrees-certificates-courses/course-descriptions/{subject}/', subjectPageOnly: true },
 
   // eLumen. `host` is the tenant name, sent to eLumen's one shared API.
   { college: 10, name: 'Columbia College', platform: 'elumen', host: 'gocolumbia.elumenapp.com', site: '2026-2027-Catalog' },

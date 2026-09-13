@@ -21,8 +21,13 @@ describe('the catalog registry', () => {
       expect(entry.college).toBeGreaterThan(0);
       // A CourseLeaf host is the college's own .edu; an eLumen host is the
       // tenant name on eLumen's domain.
+      // A CourseLeaf host is the college's own .edu, or a *-public.courseleaf.com
+      // where CourseLeaf hosts it for them; an eLumen host is the tenant name
+      // on eLumen's domain.
       expect(entry.host).toMatch(
-        entry.platform === 'elumen' ? /^[a-z0-9-]+\.elumenapp\.com$/ : /^[a-z0-9.-]+\.edu$/,
+        entry.platform === 'elumen'
+          ? /^[a-z0-9-]+\.elumenapp\.com$/
+          : /^([a-z0-9.-]+\.edu|[a-z0-9-]+-public\.courseleaf\.com)$/,
       );
       expect(entry.name.length).toBeGreaterThan(0);
     }

@@ -304,3 +304,11 @@ describe('the older subject-page template', () => {
     expect(parseCourseLeafSubjectPage(page, 'MATH 100')?.prerequisites).toEqual(['MATH 55']);
   });
 });
+
+describe('a title with no strong element', () => {
+  it('still yields the code, as Santa Barbara City writes it', () => {
+    const page = `<div class="courseblock"><p class="courseblocktitle noindent" font-weight="bold">MATH 137 College Algebra (4 Units)</p>
+      <p class="courseblockextra noindent">Prerequisite: MATH 107 or placement</p></div>`;
+    expect(parseCourseLeafSubjectPage(page, 'MATH 137')?.prerequisites).toEqual(['MATH 107']);
+  });
+});
