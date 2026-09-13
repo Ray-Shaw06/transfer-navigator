@@ -48,3 +48,17 @@ describe('a pinned eLumen site', () => {
     }
   });
 });
+
+describe('a district catalog with a college prefix', () => {
+  it('lets Cypress and Fullerton share a host with their own subject pages', () => {
+    const nocccd = CATALOGS.filter((c) => c.host === 'catalog.nocccd.edu');
+    expect(nocccd.map((c) => c.college).sort((a, b) => a - b)).toEqual([71, 134]);
+    expect(new Set(nocccd.map((c) => c.subjectPage)).size).toBe(2);
+  });
+
+  it('never marks a college subject-page-only without a subject page', () => {
+    for (const entry of CATALOGS) {
+      if (entry.subjectPageOnly) expect(entry.subjectPage).toBeTruthy();
+    }
+  });
+});

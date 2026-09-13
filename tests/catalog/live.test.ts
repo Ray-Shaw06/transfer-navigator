@@ -5,6 +5,7 @@ import {
   courseLeafUrl,
   parseCourseLeafCourse,
   parseCourseLeafSubjectPage,
+  subjectPageCodes,
 } from '../../src/catalog/courseleaf';
 import {
   elumenCourseUrls,
@@ -122,6 +123,21 @@ describe.skipIf(!enabled)('every college in the registry', () => {
         site = entry.site ?? parseElumenSite(await get(elumenSiteUrl(entry.host)));
         expect(site, `${entry.host} did not resolve a catalog site`).not.toBeNull();
         codes.push(...COMMON);
+      } else if (entry.subjectPageOnly) {
+        // No course endpoint to speak of. The subject page is the source, so
+        // its own codes are the ones to try, read back through the parser.
+        const page = await get(courseLeafSubjectUrl(entry.host, entry.subjectPage!, 'MATH 1'));
+        expect(page.length, `${entry.host} mathematics subject page is empty`).toBeGreaterThan(0);
+        let withRequisites = 0;
+        const listed = subjectPageCodes(page);
+        expect(listed.length, `${entry.host} subject page lists no courses the reader can see`).toBeGreaterThan(0);
+        for (const code of listed) {
+          const parsed = parseCourseLeafSubjectPage(page, code);
+          if (parsed && (parsed.prerequisites.length > 0 || parsed.corequisites.length > 0)) withRequisites++;
+          if (withRequisites >= 2) break;
+        }
+        expect(withRequisites, `${entry.host} subject page has no requisites the parser can read`).toBeGreaterThan(0);
+        return;
       } else {
         for (const subject of ['CHEM', 'MATH', 'BIOL', 'PHYS', 'ENGL']) {
           codes.push(...(await search(entry.host, subject)));
@@ -156,7 +172,7 @@ describe.skipIf(!enabled)('every college in the registry', () => {
 // transfer student takes, so the subject-page fallback is checked on it
 // wherever a page is registered.
 describe.skipIf(!enabled)('the subject-page fallback', () => {
-  for (const entry of CATALOGS.filter((c) => c.platform === 'courseleaf' && c.subjectPage)) {
+  for (const entry of CATALOGS.filter((c) => c.platform === 'courseleaf' && c.subjectPage && !c.subjectPageOnly)) {
     it(`${entry.name} serves ENGL C1000 from its subject page`, { timeout: 60000 }, async () => {
       const page = await get(courseLeafSubjectUrl(entry.host, entry.subjectPage!, 'ENGL C1000'));
       expect(page.length, `${entry.host} subject page is empty`).toBeGreaterThan(0);

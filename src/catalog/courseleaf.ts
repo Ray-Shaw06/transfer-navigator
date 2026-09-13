@@ -129,13 +129,47 @@ export const courseLeafSubjectUrl = (host: string, template: string, code: strin
 // spaces and padding removed, since the page writes STAT&#160;C1000 and the
 // caller may have MATH 005A where the page has MATH 5A.
 const BLOCK = /<div class="courseblock">([\s\S]*?)(?=<div class="courseblock">|<\/main>|<footer|$)/g;
-// Pasadena's page names the class detail-code_html and Mt. San Jacinto's
-// detail-code; both print the code in the <strong> inside it. Foothill wraps
-// the code in a link to the course outline and follows it with a bullet:
+// Where a block prints its own code. Two templates are in use.
 //
+// The newer one puts the code in a span classed detail-code (Mt. San Jacinto)
+// or detail-code_html (Pasadena), and Foothill wraps it in a link to the
+// course outline followed by a bullet:
+//
+//   <span class="detail-code"><strong>STAT&#160;C1000</strong></span>
 //   <strong><a href="/course-outlines/ECON-C2001/">ECON C2001</a>&#160;•&#160;</strong>
-const BLOCK_CODE =
+//
+// The older one starts the title with the code and runs the name on after
+// it, sometimes with the units in a span in the middle:
+//
+//   <p class="courseblocktitle"><strong>MATH 0010. Problem Solving</strong></p>
+//   <strong>MATH-C2210 <span class="credits">5 Units</span> Calculus I</strong>
+//   <strong>MATH 009 C Skills for Math <span class="hours">2 Units</span></strong>
+//
+// The last is the North Orange County district, whose codes end in a letter
+// for the college, C for Cypress and F for Fullerton. That letter cannot be
+// told from a title that happens to begin with "A", so both readings are
+// offered and the caller matches whichever it asked for.
+const DETAIL_CODE =
   /detail-code(?:_html)?[^>]*>\s*<strong>\s*(?:<a[^>]*>)?\s*([^<•]+?)\s*(?:<\/a>)?(?:&#160;|&nbsp;|&#8226;|•|\s)*<\/strong>/;
+const TITLE = /courseblocktitle[^>]*>\s*<strong>([\s\S]*?)<\/strong>/;
+const LEADING_CODE = /^([A-Z][A-Za-z&]{1,9}[ -]?[A-Z]?\d{1,4}[A-Z]{0,2})(?:\s([A-Z]))?(?=[\s.:]|$)/;
+
+function blockCodes(block: string): string[] {
+  const detail = DETAIL_CODE.exec(block)?.[1];
+  if (detail) return [detail.replace(/&#160;|&nbsp;/g, ' ').trim()];
+
+  const title = TITLE.exec(block)?.[1];
+  if (!title) return [];
+  const text = title
+    .replace(/<span[^>]*>[\s\S]*?<\/span>/g, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&#160;|&nbsp;/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const lead = LEADING_CODE.exec(text);
+  if (!lead) return [];
+  return lead[2] ? [`${lead[1]} ${lead[2]}`, lead[1]] : [lead[1]];
+}
 
 const bare = (code: string) =>
   code
@@ -151,23 +185,27 @@ const asCourse = (printed: string, block: string): CoursePrereqs | null => {
   );
 };
 
+// Every code a subject page lists, first spelling of each. For checking a
+// page answers at all, and for finding real codes to check the parser with.
+export function subjectPageCodes(html: string): string[] {
+  return [...html.matchAll(BLOCK)].flatMap((m) => blockCodes(m[1]).slice(0, 1));
+}
+
 export function parseCourseLeafSubjectPage(html: string, code: string): CoursePrereqs | null {
   const want = bare(code);
-  const blocks = [...html.matchAll(BLOCK)].map((m) => ({
-    body: m[1],
-    printed: BLOCK_CODE.exec(m[1])?.[1] ?? null,
-  }));
+  const blocks = [...html.matchAll(BLOCK)].map((m) => ({ body: m[1], codes: blockCodes(m[1]) }));
 
-  for (const { body, printed } of blocks) {
-    if (printed && bare(printed) === want) return asCourse(printed, body);
+  for (const { body, codes } of blocks) {
+    const printed = codes.find((c) => bare(c) === want);
+    if (printed) return asCourse(printed, body);
   }
 
   // Not listed under that code. It may be listed under a new one that says
   // what it was formerly called. The answer is keyed to the code asked about,
   // because that is the code the agreement names and the plan looks up.
-  for (const { body, printed } of blocks) {
-    if (!printed) continue;
-    const course = asCourse(printed, body);
+  for (const { body, codes } of blocks) {
+    if (codes.length === 0) continue;
+    const course = asCourse(codes[0], body);
     if (course?.formerly.some((f) => bare(f) === want)) {
       return { ...course, code: normalizeCourseCode(code) };
     }

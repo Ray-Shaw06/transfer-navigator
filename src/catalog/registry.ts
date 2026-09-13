@@ -42,6 +42,11 @@ export type CatalogSource = {
   // subject page lists them. Set only where such a page was seen to exist;
   // half the CourseLeaf colleges have none at any guessable path.
   subjectPage?: string;
+  // CourseLeaf only. True where the course endpoint answers an empty document
+  // for every course, so it is not asked and the subject page is read first.
+  // Several colleges run CourseLeaf that way; their subject pages carry the
+  // requisites the endpoint does not.
+  subjectPageOnly?: true;
   // eLumen only. The catalog year the tenant publishes under, when it has to
   // be pinned because the tenant publishes more than one and its own default
   // lookup fails on the ambiguity. Read off the link the college's own website
@@ -70,6 +75,18 @@ export const CATALOGS: CatalogSource[] = [
   // not something to build around. Left out until `npm run catalog:verify`
   // passes it again.
   { college: 136, name: 'San Jose City College', platform: 'courseleaf', host: 'catalog.sjcc.edu' },
+
+  // CourseLeaf colleges whose course endpoint answers nothing for any course.
+  // Their subject pages carry the requisites, in an older template that puts
+  // the code at the start of the title. Cypress and Fullerton are one district
+  // catalog with a college prefix on every path.
+  { college: 6, name: 'College of the Sequoias', platform: 'courseleaf', host: 'catalog.cos.edu', subjectPage: '/course-descriptions/{subject}/', subjectPageOnly: true },
+  { college: 30, name: 'College of the Desert', platform: 'courseleaf', host: 'catalog.collegeofthedesert.edu', subjectPage: '/courses/{subject}/', subjectPageOnly: true },
+  { college: 71, name: 'Cypress College', platform: 'courseleaf', host: 'catalog.nocccd.edu', subjectPage: '/cypress-college/course-descriptions/{subject}/', subjectPageOnly: true },
+  { college: 73, name: 'Napa Valley College', platform: 'courseleaf', host: 'catalog.napavalley.edu', subjectPage: '/courses/{subject}/', subjectPageOnly: true },
+  { college: 93, name: 'Sierra College', platform: 'courseleaf', host: 'catalog.sierracollege.edu', subjectPage: '/courses/{subject}/', subjectPageOnly: true },
+  { college: 131, name: 'San Bernardino Valley College', platform: 'courseleaf', host: 'catalog.valleycollege.edu', subjectPage: '/courses/{subject}/', subjectPageOnly: true },
+  { college: 134, name: 'Fullerton College', platform: 'courseleaf', host: 'catalog.nocccd.edu', subjectPage: '/fullerton-college/course-descriptions/{subject}/', subjectPageOnly: true },
 
   // eLumen. `host` is the tenant name, sent to eLumen's one shared API.
   { college: 10, name: 'Columbia College', platform: 'elumen', host: 'gocolumbia.elumenapp.com', site: '2026-2027-Catalog' },

@@ -128,9 +128,11 @@ export async function prereqsFor(
       const i = next++;
       if (i >= wanted.length) return;
       let course: CoursePrereqs | null = null;
-      for (const spelling of catalogSpellings(wanted[i])) {
-        course = await fetchOne(source, spelling, site);
-        if (course) break;
+      if (!(source.platform === 'courseleaf' && source.subjectPageOnly)) {
+        for (const spelling of catalogSpellings(wanted[i])) {
+          course = await fetchOne(source, spelling, site);
+          if (course) break;
+        }
       }
       // The course endpoint said nothing under any spelling. The subject page
       // may still list it.

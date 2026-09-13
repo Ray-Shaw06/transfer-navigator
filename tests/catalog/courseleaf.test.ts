@@ -271,3 +271,36 @@ describe('a course the agreement still names by its old number', () => {
     expect(parseCourseLeafSubjectPage(page, 'ECON C2001')?.code).toBe('ECON C2001');
   });
 });
+
+describe('the older subject-page template', () => {
+  // The code starts the title and the name runs on after it, sometimes with
+  // the units in a span in the middle. Sierra, Napa Valley and Cypress, as
+  // written.
+  const block = (title: string, requisite: string) =>
+    `<div class="courseblock"><p class="courseblocktitle noindent"><strong>${title}</strong></p>
+     <p class="courseblockextra noindent"><em><strong>Prerequisite(s): </strong></em>${requisite}</p></div>`;
+
+  it('reads a code followed by a full stop and the title', () => {
+    const page = block('MATH 0010. Problem Solving', 'MATH 0009 or placement');
+    expect(parseCourseLeafSubjectPage(page, 'MATH 10')?.prerequisites).toEqual(['MATH 9']);
+  });
+
+  it('reads a code with the units in a span before the title', () => {
+    const page = block('MATH-C2210 <span class="credits">5 Units</span> Calculus I', link('MATH 120'));
+    expect(parseCourseLeafSubjectPage(page, 'MATH C2210')?.prerequisites).toEqual(['MATH 120']);
+  });
+
+  it('reads a North Orange County code with its college letter, or without', () => {
+    // MATH 151 F is Fullerton's; the letter cannot be told from a title that
+    // begins with "A", so the block answers to both spellings.
+    const page = block('MATH 151 F Calculus I <span class="hours">4 Units</span>', link('MATH 141 F'));
+    expect(parseCourseLeafSubjectPage(page, 'MATH 151 F')?.prerequisites).toEqual(['MATH 141 F']);
+    expect(parseCourseLeafSubjectPage(page, 'MATH 151F')?.prerequisites).toEqual(['MATH 141 F']);
+    expect(parseCourseLeafSubjectPage(page, 'MATH 151')?.prerequisites).toEqual(['MATH 141 F']);
+  });
+
+  it('does not take the first word of a title as a college letter', () => {
+    const page = block('MATH 100 A Survey of Mathematics', 'MATH 55');
+    expect(parseCourseLeafSubjectPage(page, 'MATH 100')?.prerequisites).toEqual(['MATH 55']);
+  });
+});
