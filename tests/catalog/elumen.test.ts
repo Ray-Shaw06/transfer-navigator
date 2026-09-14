@@ -163,3 +163,10 @@ describe('a revised course', () => {
     ]);
   });
 });
+
+describe('the course\'s own honours section', () => {
+  it('is not a prerequisite of the course', () => {
+    const parsed = parseElumenCourse(mission('Prerequisite: BIO 001A or BIO 001BH'), 'BIO 001B');
+    expect(parsed?.prerequisites).toEqual(['BIO 1A']);
+  });
+});

@@ -1,5 +1,5 @@
 import type { CoursePrereqs } from './types';
-import { normalizeCourseCode } from './normalize';
+import { normalizeCourseCode, sameCourse } from './normalize';
 import { codesFromText, formerlyCodes, stripHtml } from './text';
 
 // Reads prerequisites out of an eLumen catalog.
@@ -117,9 +117,10 @@ export function parseElumenCourse(html: string, code: string): CoursePrereqs | n
 
     for (const raw of codesFromText(text.slice(from, to))) {
       const course = normalizeCourseCode(raw);
-      // A course is not its own prerequisite, and a catalog that says so
-      // would deadlock the scheduler rather than order it.
-      if (course && course !== found.code && !found[kind].includes(course)) {
+      // A course is not its own prerequisite, nor is its honours section,
+      // and a catalog that says so would deadlock the scheduler rather than
+      // order it.
+      if (course && !sameCourse(course, found.code) && !found[kind].includes(course)) {
         found[kind].push(course);
       }
     }

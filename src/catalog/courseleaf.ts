@@ -1,5 +1,5 @@
 import type { CoursePrereqs } from './types';
-import { normalizeCourseCode } from './normalize';
+import { normalizeCourseCode, sameCourse } from './normalize';
 import { codesFromText, formerlyCodes, stripHtml } from './text';
 
 // Reads prerequisites out of a CourseLeaf catalog.
@@ -44,7 +44,11 @@ import { codesFromText, formerlyCodes, stripHtml } from './text';
 // skills", and reading that as a label would invent a requirement out of prose.
 const LABEL =
   /(?:<strong>\s*|>\s*)(Prerequisite|Corequisite|Recommended Preparation|Recommended Prep)(?:\(s\))?[A-Za-z ]{0,12}?\s*:\s*(?:<\/strong>)?/gi;
-const END_OF_LINE = /<\/p>|<\/tr>|<\/li>|<\/table>|<strong[\s>]/;
+// The requisite's own block ends it too. Pasadena's description follows the
+// requisite in the next block and says "No credit given if taken after
+// MATH 005BH", and without the </div> that link was read as a prerequisite
+// of MATH 005B: the course's own honours section.
+const END_OF_LINE = /<\/p>|<\/tr>|<\/li>|<\/table>|<\/div>|<strong[\s>]/;
 const LINKED_CODE = /showCourse\(this,\s*'([^']+)'\)/g;
 
 // Not every college links the courses it names. San Jose City College writes
@@ -93,9 +97,10 @@ export function parseCourseLeafCourse(xml: string): CoursePrereqs | null {
 
     for (const raw of named) {
       const course = normalizeCourseCode(raw);
-      // A course is not its own prerequisite, and a catalog that says so
-      // would deadlock the scheduler rather than order it.
-      if (course && course !== found.code && !found[kind].includes(course)) {
+      // A course is not its own prerequisite, nor is its honours section,
+      // and a catalog that says so would deadlock the scheduler rather than
+      // order it.
+      if (course && !sameCourse(course, found.code) && !found[kind].includes(course)) {
         found[kind].push(course);
       }
     }

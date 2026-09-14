@@ -9,6 +9,7 @@ import {
   catalogSpellings,
   normalizeCourseCode,
   padCourseCode,
+  sameCourse,
 } from '../../src/catalog/normalize';
 
 // The shapes below are the real ones, trimmed. Every variant here was seen in
@@ -310,5 +311,45 @@ describe('a title with no strong element', () => {
     const page = `<div class="courseblock"><p class="courseblocktitle noindent" font-weight="bold">MATH 137 College Algebra (4 Units)</p>
       <p class="courseblockextra noindent">Prerequisite: MATH 107 or placement</p></div>`;
     expect(parseCourseLeafSubjectPage(page, 'MATH 137')?.prerequisites).toEqual(['MATH 107']);
+  });
+});
+
+describe('the course\'s own honours section', () => {
+  it('is not read as a prerequisite when the catalog names it in the next block', () => {
+    // Pasadena's MATH 005B, as served: the requisite line is one block, and
+    // the description that follows says "No credit given if taken after
+    // MATH 005BH". Reading past the block took that as a prerequisite.
+    const xml = course(
+      'MATH 005B',
+      section('Prerequisite(s)', `${link('MATH 005A')} or ${link('MATH 005AH')}`) +
+        `<div class="noindent"><div class="courseblockextra noindent">Differentiation and integration. No credit given if taken after ${link('MATH 005BH')}.</div></div>`,
+    );
+
+    expect(parseCourseLeafCourse(xml)?.prerequisites).toEqual(['MATH 5A', 'MATH 5AH']);
+  });
+
+  it('is dropped even when a catalog lists it on the requisite line itself', () => {
+    const xml = course(
+      'MATH 005B',
+      section('Prerequisite(s)', `${link('MATH 005A')} or ${link('MATH 005BH')}`),
+    );
+    expect(parseCourseLeafCourse(xml)?.prerequisites).toEqual(['MATH 5A']);
+
+    // And the other way about: the base course is not a prerequisite for its
+    // own honours section.
+    const honours = course('MATH 005BH', section('Prerequisite(s)', `${link('MATH 005B')} or ${link('MATH 005A')}`));
+    expect(parseCourseLeafCourse(honours)?.prerequisites).toEqual(['MATH 5A']);
+  });
+});
+
+describe('sameCourse', () => {
+  it('counts an honours section as its base course', () => {
+    expect(sameCourse('MATH 005B', 'MATH 5BH')).toBe(true);
+    expect(sameCourse('MATH 005BH', 'MATH 5B')).toBe(true);
+    expect(sameCourse('MATH 5B', 'MATH 5A')).toBe(false);
+    // A trailing H that is part of a sequence letter pair, not honours, still
+    // compares as itself.
+    expect(sameCourse('CHEM 1AH', 'CHEM 1A')).toBe(true);
+    expect(sameCourse('CHEM 1A', 'CHEM 1B')).toBe(false);
   });
 });

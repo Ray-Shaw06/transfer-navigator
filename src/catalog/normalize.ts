@@ -98,3 +98,12 @@ export function padCourseCode(code: string): string {
 export function canonicalCourseKey(code: string): string {
   return normalizeCourseCode(code).replace(/[\s-]+/g, '');
 }
+
+// Whether two codes name one course, counting an honours section as the same
+// course as its base. MATH 005BH is a section of MATH 005B: the same material
+// with more of it, the same prerequisites, and no more a prerequisite for
+// MATH 005B than MATH 005B is for itself.
+export function sameCourse(a: string, b: string): boolean {
+  const strip = (code: string) => canonicalCourseKey(code).replace(/H$/, '');
+  return strip(a) === strip(b);
+}
