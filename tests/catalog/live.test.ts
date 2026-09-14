@@ -109,11 +109,12 @@ const readOne = async (
 ): Promise<CoursePrereqs | null> => {
   if (entry.platform === 'elumen') {
     if (!site) return null;
-    for (const url of elumenCourseUrls(entry.host, site, code)) {
-      const parsed = parseElumenCourse(await get(url), code);
-      if (parsed) return parsed;
-    }
-    return null;
+    // The plain slug only. The client also tries versioned slugs for a
+    // revised course, but this check needs one course that answers, not every
+    // course, and four requests per miss over eighty codes is what made the
+    // Siskiyous check run out of time.
+    const [url] = elumenCourseUrls(entry.host, site, code);
+    return parseElumenCourse(await get(url), code);
   }
   return parseCourseLeafCourse(await get(courseLeafUrl(entry.host, code)));
 };
