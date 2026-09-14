@@ -1,4 +1,6 @@
 'use client';
+import type { CoursePrereqs, PrereqIndex } from '../../src/catalog/types';
+import { canonicalCourseKey } from '../../src/catalog/normalize';
 
 import { useEffect, useState } from 'react';
 import type { Agreement } from '../../src/parser/agreement';
@@ -205,4 +207,53 @@ export function useGeneralEducation(
   }, [college, year, listType]);
 
   return ge;
+}
+
+// What the college's own catalog says has to come before what, for exactly
+// the courses a plan schedules.
+//
+// Asked for only once the plan is known, because the plan is what decides
+// which courses are worth asking about. A college whose catalog this cannot
+// read answers `supported: false` and the schedule falls back to reading order
+// out of course numbers, so there is nothing here for a caller to handle.
+export function usePrereqs(
+  college: number | null,
+  codes: string[],
+): { index: PrereqIndex; supported: boolean } {
+  const [state, setState] = useState<{ index: PrereqIndex; supported: boolean }>({
+    index: new Map(),
+    supported: false,
+  });
+
+  // Sorted and joined so the effect does not re-run when the same courses come
+  // back in a different order, which they do on every keystroke in the chooser.
+  const key = [...new Set(codes)].sort().join(',');
+
+  useEffect(() => {
+    if (college === null || key === '') {
+      setState({ index: new Map(), supported: false });
+      return;
+    }
+    let live = true;
+    getJson<{ supported: boolean; courses: CoursePrereqs[] }>(
+      `/api/catalog?college=${college}&codes=${encodeURIComponent(key)}`,
+    )
+      .then((data) => {
+        if (!live) return;
+        setState({
+          // Keyed the way the planner looks things up, so PSYC C1000 in the
+          // agreement finds the PSYCC1000 a catalog wrote.
+          index: new Map(data.courses.map((c) => [canonicalCourseKey(c.code), c])),
+          supported: data.supported,
+        });
+      })
+      .catch(() => {
+        // The plan is ordered by course numbers instead, and says so.
+      });
+    return () => {
+      live = false;
+    };
+  }, [college, key]);
+
+  return state;
 }

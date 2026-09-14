@@ -19,11 +19,16 @@ type Tone = 'plan' | 'ready' | 'blocked' | 'late';
 // them: two Area 5 slots and one Area 6 slot are three courses across two
 // areas, and calling that "three areas" overstates what is left by an area.
 function describeLeftover(items: ScheduleItem[]) {
-  const courses = items.filter((i) => i.kind === 'area').length;
-  const areas = new Set(items.flatMap((i) => (i.kind === 'area' ? [i.areaId] : [])));
+  const ge = items.filter((i) => i.kind === 'area');
+  const areas = new Set(ge.map((i) => i.areaId));
   const units = items.reduce((sum, i) => sum + i.units, 0);
-  return { courses, areas: areas.size, units };
+  return { courses: ge.length, areas: areas.size, units };
 }
+
+const unitsOf = (items: ScheduleItem[]) => items.reduce((sum, i) => sum + i.units, 0);
+
+const courseList = (items: ScheduleItem[]) =>
+  items.flatMap((i) => (i.kind === 'course' ? [i.course.code] : [])).join(', ');
 
 function verdictFor(
   plan: Plan,
@@ -50,6 +55,16 @@ function verdictFor(
     };
   }
 
+  // Requirements the student said they already hold, which the tool could not
+  // check. Named wherever it would otherwise read as something the agreement
+  // confirmed, because the difference is the whole basis for trusting the
+  // rest of the page.
+  const claimed = plan.statuses.filter((s) => s.clearedByCredit);
+  const onYourWord =
+    claimed.length > 0
+      ? ` ${claimed.length} of ${claimed.length === 1 ? 'them is' : 'them are'} on your word rather than read from the agreement, so confirm ${claimed.length === 1 ? 'it' : 'those'} with a counselor.`
+      : '';
+
   if (remaining.length === 0) {
     const line =
       blocked.length > 0
@@ -60,30 +75,63 @@ function verdictFor(
       line,
       sub:
         blocked.length > 0
-          ? `${blocked.length} ${blocked.length === 1 ? 'requirement has' : 'requirements have'} nothing articulated at your college, so ${blocked.length === 1 ? 'it is' : 'they are'} taken after you transfer. Nothing else on this agreement is left.`
-          : `Every requirement on this agreement is satisfied by courses you have entered. Major preparation is only part of transferring, so check the rest with a counselor.`,
+          ? `${blocked.length} ${blocked.length === 1 ? 'requirement has' : 'requirements have'} nothing articulated at your college, so ${blocked.length === 1 ? 'it is' : 'they are'} taken after you transfer. Nothing else on this agreement is left.${onYourWord}`
+          : `Every requirement on this agreement is covered by what you have entered. Major preparation is only part of transferring, so check the rest with a counselor.${onYourWord}`,
     };
   }
 
   const ready = schedule.readyAfter ? termLabel(schedule.readyAfter) : null;
 
-  // A target that cannot be met, even doing only what admission turns on.
-  // This is the answer nobody wants and the one that has to be said plainly:
-  // no reordering fixes it, so the three levers are the whole of the advice.
+  // A target that cannot be met even doing only what the campus itself gates
+  // admission on. This is the answer nobody wants and the one that has to be
+  // said plainly: no reordering fixes it, so the three levers are the whole
+  // of the advice.
+  //
+  // It is a much narrower test than it used to be. It once turned on every
+  // row of the agreement, so a single recommended course the campus never
+  // marked as required could produce this sentence for a student who could
+  // in fact transfer on time. What it asks now is only the minimum.
   if (target && schedule.transferByTarget === false) {
+    // Named as the term a student could start in, not the term the last
+    // course falls in. "Not ready until Fall 2028" against a Fall 2028 target
+    // reads as a contradiction; the earliest term they could actually start
+    // is the answer to the question they asked.
+    const earliest = schedule.earliestTransfer ? termLabel(schedule.earliestTransfer) : ready;
     return {
       tone: 'late' as Tone,
       line: `You cannot be ready to transfer by ${termLabel(target)}.`,
-      sub: `Even leaving out everything that is not required to transfer, you would not be ready until ${schedule.readyToTransfer ? termLabel(schedule.readyToTransfer) : ready}. Raising your unit load, adding summer terms, or moving the target are the three ways out.`,
+      sub: `This is the minimum, not the whole agreement: counting only what admission turns on and what this agreement marks as required for admission, the earliest you could start is ${earliest}. Raising your unit load, adding summer terms, or moving the target are the three ways out.`,
     };
   }
 
-  // On time to transfer, but not with the pattern finished. The headline is
-  // the answer to the question actually asked, and the cost of getting there
-  // goes underneath it rather than being left for the student to notice.
+  // On time to transfer, with something left over. The headline is the answer
+  // to the question actually asked, and what it costs goes underneath rather
+  // than being left for the student to notice.
+  //
+  // Two different things can land after the target and they are not the same
+  // news, so they are said separately: general education that only
+  // certification needs, and major preparation this agreement lists without
+  // marking it required for admission. The second is what a campus screens
+  // on, so it is named with its courses rather than reduced to a unit count.
   if (target && schedule.meetsTarget === false) {
-    const left = describeLeftover(schedule.afterTarget);
+    const late = schedule.majorAfterTarget;
+    const geLate = schedule.afterTarget.filter((i) => i.priority === 'certification');
+    const left = describeLeftover(geLate);
     const name = pattern ?? 'the general education pattern';
+
+    const geSentence =
+      left.courses > 0
+        ? ` ${left.courses} ${left.courses === 1 ? 'course' : 'courses'} of ${name}, ${left.units} units across ${left.areas} ${left.areas === 1 ? 'area' : 'areas'}, also falls after. Certification is all or nothing, so leaving those undone means finishing your campus's own general education requirements after you get there instead.`
+        : '';
+
+    if (late.length > 0) {
+      return {
+        tone: 'plan' as Tone,
+        line: `You can be ready to transfer by ${termLabel(target)}.`,
+        sub: `Everything this agreement marks as required for admission fits in the terms before ${termLabel(target)}. What does not fit is ${unitsOf(late)} units this agreement lists without that mark${courseList(late) ? `: ${courseList(late)}` : ''}. That is preparation a campus reads your application on, so take it if you can, but it is not what admission is refused for.${geSentence}`,
+      };
+    }
+
     return {
       tone: 'plan' as Tone,
       line: `You can transfer by ${termLabel(target)}, without finishing ${name}.`,
@@ -96,11 +144,11 @@ function verdictFor(
     line: ready
       ? `${remaining.length} ${remaining.length === 1 ? 'requirement' : 'requirements'} left, finishing ${ready}.`
       : `${remaining.length} ${remaining.length === 1 ? 'requirement' : 'requirements'} left.`,
-    sub: `${satisfied.length} of ${countable.length} already satisfied by what you have entered.${
+    sub: `${satisfied.length} of ${countable.length} already covered by what you have entered.${
       blocked.length > 0
         ? ` ${blocked.length} more ${blocked.length === 1 ? 'has' : 'have'} nothing articulated here and ${blocked.length === 1 ? 'is' : 'are'} taken after you transfer.`
         : ''
-    }`,
+    }${onYourWord}`,
   };
 }
 

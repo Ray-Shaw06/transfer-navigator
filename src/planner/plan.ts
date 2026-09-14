@@ -1,6 +1,6 @@
 import type { Agreement, ArticulationRow } from '../parser/agreement';
 import type { AndGroup } from '../parser/groups';
-import type { SectionRule } from '../parser/sections';
+import { marksAnyAdmission, type SectionRule } from '../parser/sections';
 import type { Course } from '../parser/types';
 
 export type RowStatus = {
@@ -40,12 +40,36 @@ export type RowStatus = {
   // the campus's own reason instead of one generic sentence. Undefined for
   // every other state, and for an agreement read from a PDF.
   notArticulatedReason?: string;
+  // The student said they already hold this, by credit this tool cannot see:
+  // an AP score, a course at another college, a course ASSIST does not list.
+  // The row is 'satisfied' either way so every count downstream works, and
+  // this says which of the two kinds of satisfied it is, because the tool
+  // verified one of them and only took the student's word for the other.
+  clearedByCredit?: boolean;
   remainingUnits: number;
 };
+
+// Which of the two things a piece of outstanding major preparation is.
+//
+//   admission  the agreement marks its section REQUIRED FOR ADMISSION, or the
+//              agreement marks nothing at all and every section is therefore
+//              read as a minimum
+//   major      preparation the agreement lists without that mark. Real work,
+//              and a campus screens on it, but not the line an application is
+//              refused at
+export type RequirementPriority = 'admission' | 'major';
+
+// A remaining requirement, kept as the option group it came from and carrying
+// which of the two it is, so the scheduler can tell a minimum apart from the
+// rest instead of treating the whole agreement as one undifferentiated wall.
+export type RemainingGroup = AndGroup & { priority: RequirementPriority };
 
 export type SectionStatus = {
   label: string;
   rule: SectionRule;
+  // The campus's own mark, carried through so the requirement list can say
+  // which sections are minimums. Undefined when the heading said nothing.
+  admission?: boolean;
   // Counted in members, not rows. For every rule except 'choose_route' a
   // member is one row, so these are row counts; for 'choose_route' a member
   // is a whole route and these count routes.
@@ -66,7 +90,7 @@ export type Plan = {
   // satisfy one requirement, so a scheduler that keeps them together packs
   // terms that mean something; one that flattens them cannot tell a
   // three-course requirement from three separate ones.
-  remainingGroups: AndGroup[];
+  remainingGroups: RemainingGroup[];
   notArticulated: Course[];
   sections: SectionStatus[];
   // Page 1 advisory prose, carried through from Agreement.notes untouched.
@@ -424,14 +448,43 @@ function resolveSections(
       met = satisfiedCount >= needed;
     }
 
-    return { label: section.label, rule: section.rule, satisfiedCount, needed, satisfiedUnits, met };
+    return {
+      label: section.label,
+      rule: section.rule,
+      admission: section.admission,
+      satisfiedCount,
+      needed,
+      satisfiedUnits,
+      met,
+    };
   });
 
   return { sections, demoted };
 }
 
-export function buildPlan(agreement: Agreement, completed: string[]): Plan {
+// How a row is named in the `cleared` set: its receiving courses, joined. Row
+// indices would be shorter and are the wrong key, because they are only stable
+// until ASSIST republishes the agreement, at which point a saved link would
+// silently clear the wrong requirement. Receiving codes survive that.
+export const rowKey = (receiving: Course[]): string =>
+  receiving.map((c) => c.code.trim().toUpperCase()).join('+');
+
+export function buildPlan(
+  agreement: Agreement,
+  completed: string[],
+  // Requirements the student says they already hold by credit this tool has
+  // no way to check: an AP score, a course from another college, a course
+  // ASSIST does not list for this pairing. Keyed by rowKey.
+  //
+  // Deliberately a claim rather than a calculation. Modelling every campus's
+  // AP chart would be a large amount of data to keep right, and getting it
+  // wrong would tell a student a requirement is covered when it is not. A
+  // student who has the credit already knows they have it; what they lacked
+  // was any way to say so, so the plan kept scheduling work they had done.
+  cleared: Iterable<string> = [],
+): Plan {
   const done = new Set(completed.map((c) => c.toUpperCase()));
+  const held = new Set(cleared);
 
   // A row in `excluded` keeps whatever status `fixed` already gave it
   // (baseStatus is not re-run for it, and it claims nothing from `consumed`
@@ -451,6 +504,22 @@ export function buildPlan(agreement: Agreement, completed: string[]): Plan {
   const isReference = (row: ArticulationRow): boolean =>
     row.section !== undefined && agreement.sections[row.section]?.rule.kind === 'reference';
 
+  // A cleared row claims nothing from `consumed`. It was not satisfied by any
+  // sending course, so taking one out of circulation would leave a later row
+  // that genuinely needed it reading as unsatisfied.
+  const clearedStatus = (row: ArticulationRow): RowStatus => ({
+    receiving: row.receiving,
+    receivingKind: row.receivingKind,
+    orGroup: row.orGroup,
+    section: row.section,
+    state: 'satisfied',
+    clearedByCredit: true,
+    satisfiedBy: [],
+    cheapestOption: [],
+    allOptions: row.sending.kind === 'options' ? row.sending.options : [],
+    remainingUnits: 0,
+  });
+
   const referenceStatus = (row: ArticulationRow): RowStatus => ({
     receiving: row.receiving,
     receivingKind: row.receivingKind,
@@ -468,6 +537,9 @@ export function buildPlan(agreement: Agreement, completed: string[]): Plan {
     return agreement.rows.map((row, i) => {
       if (excluded.has(i)) return fixed[i];
       if (isReference(row)) return referenceStatus(row);
+      // Ahead of baseStatus, so a student's own claim wins over the walk and
+      // the sending courses it would otherwise have spent stay available.
+      if (held.has(rowKey(row.receiving))) return clearedStatus(row);
       return baseStatus(row, done, consumed);
     });
   };
@@ -493,10 +565,23 @@ export function buildPlan(agreement: Agreement, completed: string[]): Plan {
   // than a course still has real sending courses behind it, so it schedules
   // normally; it is only its receiving label that cannot be treated as a
   // course.
-  const remainingGroups: AndGroup[] = statuses
+  // An agreement that marks no section at all draws no distinction, so every
+  // section is read as a minimum. Only once a campus has marked one does an
+  // unmarked section mean "listed, not required to apply". Decided once for
+  // the whole agreement rather than per row, so a single unmarked section on
+  // an otherwise unmarked agreement cannot quietly demote everything.
+  const marked = marksAnyAdmission(agreement.sections);
+  const priorityOf = (status: RowStatus): RequirementPriority => {
+    if (!marked) return 'admission';
+    const section = status.section === undefined ? undefined : agreement.sections[status.section];
+    return section?.admission ? 'admission' : 'major';
+  };
+
+  const remainingGroups: RemainingGroup[] = statuses
     .filter((s) => s.state === 'remaining')
     .map((s) => ({
       kind: 'and' as const,
+      priority: priorityOf(s),
       courses: s.cheapestOption.filter((c) => !done.has(c.code.toUpperCase())),
     }))
     .filter((g) => g.courses.length > 0);

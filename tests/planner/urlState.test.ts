@@ -5,6 +5,7 @@ const settings = {
   start: { kind: 'Fall' as const, year: 2026 },
   unitsPerTerm: 15,
   includeSummer: true,
+  includeWinter: true,
   target: { kind: 'Spring' as const, year: 2028 },
 };
 
@@ -18,6 +19,7 @@ describe('plan URL state', () => {
       year: 76,
       major: KEY,
       completed: new Set(['CS 003B', 'MATH 005A']),
+      cleared: new Set(['MATH 2A', 'I&C SCI 31+I&C SCI 32+I&C SCI 33']),
       settings,
       pattern: 'IGETC',
     });
@@ -28,6 +30,14 @@ describe('plan URL state', () => {
     expect(back.year).toBe(76);
     expect(back.major).toBe(KEY);
     expect([...back.completed].sort()).toEqual(['CS 003B', 'MATH 005A']);
+    // A row key joins its receiving codes with '+', which is the one
+    // character a query string will happily turn into a space. If this ever
+    // goes green as ['I&C SCI 31 I&C SCI 32 I&C SCI 33'], the link silently
+    // clears nothing.
+    expect([...back.cleared].sort()).toEqual([
+      'I&C SCI 31+I&C SCI 32+I&C SCI 33',
+      'MATH 2A',
+    ]);
     expect(back.settings).toEqual(settings);
     expect(back.pattern).toBe('IGETC');
   });
@@ -41,6 +51,7 @@ describe('plan URL state', () => {
       year: 76,
       major: KEY,
       completed: new Set(),
+      cleared: new Set(),
       settings,
       pattern: null,
     });
@@ -60,6 +71,7 @@ describe('plan URL state', () => {
       year: null,
       major: null,
       completed: new Set(),
+      cleared: new Set(),
       settings,
       pattern: null,
     });
@@ -73,11 +85,20 @@ describe('plan URL state', () => {
   });
 
   it('ignores nonsense in every field rather than throwing', () => {
-    const back = readPlanUrl('?college=abc&campus=-4&year=0&start=Winter-2026&load=x&target=Fall-1900');
+    // 'Quarter' is not a term kind. Winter is, since colleges run a winter
+    // intersession, so it cannot stand in for a rejected one here.
+    const back = readPlanUrl('?college=abc&campus=-4&year=0&start=Quarter-2026&load=x&target=Fall-1900');
     expect(back.college).toBeNull();
     expect(back.campus).toBeNull();
     expect(back.year).toBeNull();
     expect(back.settings).toBeNull();
+  });
+
+  it('accepts a winter term in a link', () => {
+    expect(readPlanUrl('?start=Winter-2027').settings?.start).toEqual({
+      kind: 'Winter',
+      year: 2027,
+    });
   });
 
   it('uppercases completed courses so a hand-typed link still matches', () => {

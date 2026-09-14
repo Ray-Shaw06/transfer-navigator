@@ -561,6 +561,35 @@ input::placeholder { color: var(--ink-3); }
   margin-top: 0.5rem;
 }
 
+/* A minimum reads as the load-bearing line in the section, not as a warning:
+   it is the ordinary, good case. Weight and a rule, no colour panel, so the
+   advisory box above stays the only thing that shouts. */
+.section-rule[data-minimum='true'] {
+  color: var(--ink);
+  font-weight: 550;
+  border-left: 2px solid var(--ink-3);
+  padding-left: 0.5rem;
+  margin-top: 0.375rem;
+}
+
+/* The registration-desk warning. Loud enough to be read before the route it
+   sits above, because it is the one thing there that stops a student cold. */
+.route-block[data-warn='true'] {
+  border: 1px solid var(--caution);
+  background: var(--caution-soft);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem 0.875rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--ink);
+}
+
+.route-block[data-warn='true'] b { display: block; margin-bottom: 0.375rem; }
+.route-block[data-warn='true'] ul { margin: 0 0 0.5rem; padding-left: 1.1rem; }
+.route-block[data-warn='true'] li { margin-bottom: 0.125rem; }
+.route-block[data-warn='true'] li b { display: inline; margin: 0; font-variant-numeric: tabular-nums; }
+.route-block[data-warn='true'] span { color: var(--ink-2); }
+
 .tally { font-size: 0.8125rem; color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .tally[data-met='true'] { color: var(--ink-3); }
 
@@ -628,6 +657,23 @@ input::placeholder { color: var(--ink-3); }
 .row-detail { font-size: 0.875rem; color: var(--ink-2); }
 
 .row-reason { display: block; margin-top: 0.1875rem; font-size: 0.8125rem; color: var(--ink-3); }
+
+/* Quiet until wanted. This is a claim the tool cannot check, so it must be
+   available on every row it applies to without competing with the agreement's
+   own reading of that row. */
+.row-have {
+  display: flex;
+  align-items: center;
+  gap: 0.4375rem;
+  margin-top: 0.4375rem;
+  font-size: 0.8125rem;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+
+.row-have:hover { color: var(--ink-2); }
+.row-have input { width: 0.875rem; height: 0.875rem; accent-color: var(--signal); cursor: pointer; }
+.row-have:has(input:checked) { color: var(--ink-2); }
 
 .options { margin: 0.5rem 0 0; padding: 0; list-style: none; display: grid; gap: 0.25rem; font-size: 0.8125rem; color: var(--ink-2); }
 

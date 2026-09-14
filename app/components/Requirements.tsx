@@ -1,4 +1,4 @@
-import type { Plan, RowStatus } from '../../src/planner/plan';
+import { rowKey, type Plan, type RowStatus } from '../../src/planner/plan';
 import {
   betterByDoubleCount,
   optionAreas,
@@ -119,11 +119,17 @@ function Row({
   sectionLabel,
   doubleCount,
   pattern,
+  cleared,
+  onToggle,
 }: {
   status: RowStatus;
   sectionLabel?: string;
   doubleCount: DoubleCountIndex;
   pattern: string;
+  // Whether the student has said they already hold this requirement, and how
+  // to say it. Absent for a row where the claim would mean nothing.
+  cleared?: boolean;
+  onToggle?: () => void;
 }) {
   // A costlier option that also clears a general education area buys back a
   // course elsewhere. Pointed at rather than chosen: the planner picks on
@@ -142,10 +148,28 @@ function Row({
           <ReceivingLabel status={status} />
         </div>
 
-        {status.state === 'satisfied' && (
+        {status.state === 'satisfied' && !status.clearedByCredit && (
           <p className="row-detail">
             Satisfied by {joined(status.satisfiedBy, 'and')}.
           </p>
+        )}
+
+        {/* Said in the student's own terms and marked as unverified, because
+            it is. Everything else on this page was read out of the agreement;
+            this one line is the one thing the tool took on trust, and it
+            should not be able to pass for the same kind of fact. */}
+        {status.clearedByCredit && (
+          <p className="row-detail">
+            You said you already have this. Taken on your word, not read from the agreement, so
+            confirm it with a counselor before you rely on it.
+          </p>
+        )}
+
+        {onToggle && (
+          <label className="row-have">
+            <input type="checkbox" checked={cleared ?? false} onChange={onToggle} />
+            I already have this from AP, another college, or a course not listed here
+          </label>
         )}
 
         {status.state === 'remaining' && (
@@ -300,6 +324,38 @@ function RuleLine({ section, count }: { section: Plan['sections'][number]; count
   return <p className="section-rule">All {count} are required.</p>;
 }
 
+// Whether this section is one of the campus's stated minimums, said only when
+// the agreement itself draws the distinction. An agreement that marks nothing
+// gets no line here: inventing one would be this tool deciding on a student's
+// behalf which preparation an admissions reader cares about, which is exactly
+// what it must not do.
+function AdmissionLine({
+  section,
+  marksAny,
+}: {
+  section: Plan['sections'][number];
+  marksAny: boolean;
+}) {
+  if (!marksAny || section.rule.kind === 'reference') return null;
+
+  if (section.admission) {
+    return (
+      <p className="section-rule" data-minimum="true">
+        Required for admission, in the campus&rsquo;s own words. This is what your timeline is
+        judged on.
+      </p>
+    );
+  }
+
+  return (
+    <p className="section-rule">
+      Listed without the &ldquo;required for admission&rdquo; mark the sections above carry. Real
+      preparation, and a campus reads your application on it, but leaving it until after you
+      transfer does not make you late.
+    </p>
+  );
+}
+
 function Tally({ section }: { section: Plan['sections'][number] }) {
   // Nothing to finish, so nothing to count towards.
   if (section.rule.kind === 'reference') return null;
@@ -317,18 +373,50 @@ function Tally({ section }: { section: Plan['sections'][number] }) {
   );
 }
 
+// Which rows a student can usefully claim they already hold. A remaining
+// requirement, obviously. A not_articulated one too: the college has nothing
+// for it, but an AP score or a course from another college still might, and
+// that is exactly the case with no other way to be said. Everything else is
+// already covered by something the tool can see, so a claim there would be
+// noise on a row that costs nothing either way.
+const claimable = (status: RowStatus): boolean =>
+  status.clearedByCredit === true ||
+  status.state === 'remaining' ||
+  status.state === 'not_articulated';
+
 export function Requirements({
   plan,
   doubleCount,
   pattern,
+  cleared,
+  onCleared,
 }: {
   plan: Plan;
   doubleCount: DoubleCountIndex;
   pattern: string;
+  cleared: Set<string>;
+  onCleared: (next: Set<string>) => void;
 }) {
+  const toggle = (status: RowStatus) => () => {
+    const key = rowKey(status.receiving);
+    const next = new Set(cleared);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    onCleared(next);
+  };
+
+  const claim = (status: RowStatus) =>
+    claimable(status)
+      ? { cleared: cleared.has(rowKey(status.receiving)), onToggle: toggle(status) }
+      : {};
   // Group the flat statuses back under the section each came from. A status
   // without a recognised section falls back to an unheaded list so nothing
   // silently vanishes.
+  // Read once for the whole agreement, the same way buildPlan reads it, so
+  // the list and the plan cannot disagree about whether this agreement states
+  // its minimums at all.
+  const marksAny = plan.sections.some((s) => s.admission === true);
+
   const bySection = new Map<number, RowStatus[]>();
   const ungrouped: RowStatus[] = [];
   for (const status of plan.statuses) {
@@ -344,7 +432,7 @@ export function Requirements({
       {ungrouped.length > 0 && (
         <ul className="rows">
           {ungrouped.map((s, i) => (
-            <Row key={i} status={s} doubleCount={doubleCount} pattern={pattern} />
+            <Row key={i} status={s} doubleCount={doubleCount} pattern={pattern} {...claim(s)} />
           ))}
         </ul>
       )}
@@ -358,6 +446,7 @@ export function Requirements({
               <h4>{section.label || 'Requirements'}</h4>
               <Tally section={section} />
               <RuleLine section={section} count={members.length} />
+              <AdmissionLine section={section} marksAny={marksAny} />
             </div>
             <ul className="rows">
               {members.map((s, i) => (
@@ -367,6 +456,7 @@ export function Requirements({
                   sectionLabel={section.label || undefined}
                   doubleCount={doubleCount}
                   pattern={pattern}
+                  {...claim(s)}
                 />
               ))}
             </ul>

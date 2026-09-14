@@ -13,6 +13,12 @@ export type PlanUrlState = {
   year: number | null;
   major: string | null;
   completed: Set<string>;
+  // Requirements the student says they already hold by credit this tool
+  // cannot check. Keyed by rowKey, which is the row's receiving codes joined
+  // with '+', so a plus has to survive the round trip: it is percent-encoded
+  // by URLSearchParams on the way out and decoded on the way back, and the
+  // separator between keys is a comma for that reason.
+  cleared: Set<string>;
   settings: PlanSettings | null;
   // Null means the catalog year decides, which is the usual case. Only an
   // explicit choice rides in the link.
@@ -24,7 +30,7 @@ const encodeTerm = (ref: TermRef) => `${ref.kind}-${ref.year}`;
 function decodeTerm(value: string | null): TermRef | null {
   if (!value) return null;
   const [kind, year] = value.split('-');
-  if (!['Fall', 'Spring', 'Summer'].includes(kind)) return null;
+  if (!['Fall', 'Winter', 'Spring', 'Summer'].includes(kind)) return null;
   const parsed = Number(year);
   if (!Number.isInteger(parsed) || parsed < 2000 || parsed > 2100) return null;
   return { kind: kind as TermKind, year: parsed };
@@ -58,12 +64,19 @@ export function readPlanUrl(search: string): PlanUrlState {
         .map((code) => code.trim().toUpperCase())
         .filter(Boolean),
     ),
+    cleared: new Set(
+      (params.get('have') ?? '')
+        .split(',')
+        .map((key) => key.trim().toUpperCase())
+        .filter(Boolean),
+    ),
     pattern: (['CALGETC', 'IGETC', 'CSUGE'] as const).find((k) => k === params.get('pattern')) ?? null,
     settings: start
       ? {
           start,
-          unitsPerTerm: load ?? 12,
+          unitsPerTerm: load ?? 15,
           includeSummer: params.get('summer') === '1',
+          includeWinter: params.get('winter') === '1',
           target: decodeTerm(params.get('target')),
         }
       : null,
@@ -76,6 +89,7 @@ export function writePlanUrl(state: {
   year: number | null;
   major: string | null;
   completed: Set<string>;
+  cleared: Set<string>;
   settings: PlanSettings;
   pattern: PatternKey | null;
 }): string {
@@ -85,6 +99,7 @@ export function writePlanUrl(state: {
   if (state.year !== null) params.set('year', String(state.year));
   if (state.major) params.set('major', state.major);
   if (state.completed.size > 0) params.set('done', [...state.completed].sort().join(','));
+  if (state.cleared.size > 0) params.set('have', [...state.cleared].sort().join(','));
   if (state.pattern) params.set('pattern', state.pattern);
 
   // Settings only ride along once there is a plan to apply them to, so a bare
@@ -93,6 +108,7 @@ export function writePlanUrl(state: {
     params.set('start', encodeTerm(state.settings.start));
     params.set('load', String(state.settings.unitsPerTerm));
     if (state.settings.includeSummer) params.set('summer', '1');
+    if (state.settings.includeWinter) params.set('winter', '1');
     if (state.settings.target) params.set('target', encodeTerm(state.settings.target));
   }
 

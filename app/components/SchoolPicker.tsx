@@ -11,6 +11,7 @@ export type PlanSettings = {
   start: TermRef;
   unitsPerTerm: number;
   includeSummer: boolean;
+  includeWinter: boolean;
   target: TermRef | null;
 };
 
@@ -141,15 +142,24 @@ export function SchoolPicker(props: Props) {
   );
 }
 
-// Terms a student can start from or aim at. Twelve forward from the current
-// one is four years, which covers any realistic community college route
-// including a part-time one.
+// Terms a student can start from or aim at: every term the calendar has, Fall,
+// Winter, Spring and Summer, in the order they fall.
+//
+// All four regardless of the summer and winter checkboxes, which are a
+// different question. Those say whether to spread work across the short
+// sessions; this says which term a student is standing in, or aiming at, and a
+// student who is starting in a summer session is starting in a summer session
+// whether or not they plan to use later ones. Filtering this list by those
+// boxes would also make the dropdown rearrange itself under the cursor.
+//
+// Twenty forward is five years, which covers any realistic community college
+// route including a part-time one.
 function termChoices(from: TermRef, count: number): TermRef[] {
   const out: TermRef[] = [];
   let ref = from;
   for (let i = 0; i < count; i++) {
     out.push(ref);
-    ref = nextTerm(ref, false);
+    ref = nextTerm(ref, true, true);
   }
   return out;
 }
@@ -169,8 +179,10 @@ export function PlanControls({
   earliest: TermRef;
   onChange: (next: PlanSettings) => void;
 }) {
-  const starts = termChoices(earliest, 12);
-  const targets = termChoices(settings.start, 13).slice(1);
+  const starts = termChoices(earliest, 20);
+  // From the term after the one being started in: a student cannot transfer in
+  // the same term they are still taking courses at their college.
+  const targets = termChoices(settings.start, 21).slice(1);
 
   return (
     <div className="grid grid-tight">
@@ -198,7 +210,8 @@ export function PlanControls({
         >
           {[6, 9, 12, 15, 18].map((n) => (
             <option key={n} value={n}>
-              {n} units{n === 12 ? ' (full time)' : n === 6 ? ' (part time)' : ''}
+              {n} units
+              {n === 6 ? ' (part time)' : n === 12 ? ' (full time)' : n === 15 ? ' (two-year pace)' : ''}
             </option>
           ))}
         </select>
@@ -222,6 +235,10 @@ export function PlanControls({
         </select>
       </div>
 
+      {/* Both are opt-in and both are short. A college that does not run a
+          winter intersession is common enough that assuming one would put a
+          term in the plan a student cannot enrol in, which is the one kind of
+          error this tool tries hardest not to make. */}
       <label className="check">
         <input
           type="checkbox"
@@ -229,6 +246,15 @@ export function PlanControls({
           onChange={(e) => onChange({ ...settings, includeSummer: e.target.checked })}
         />
         Use summer terms
+      </label>
+
+      <label className="check">
+        <input
+          type="checkbox"
+          checked={settings.includeWinter}
+          onChange={(e) => onChange({ ...settings, includeWinter: e.target.checked })}
+        />
+        Use winter intersession
       </label>
     </div>
   );

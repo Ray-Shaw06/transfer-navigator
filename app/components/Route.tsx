@@ -2,6 +2,7 @@ import { Fragment } from 'react';
 import type { Schedule, ScheduleItem, TermRef } from '../../src/planner/schedule';
 import { termIndex, termLabel } from '../../src/planner/schedule';
 import { areasCleared, type DoubleCountIndex } from '../../src/planner/doubleCount';
+import { padCourseCode } from '../../src/catalog/normalize';
 import type { Course } from '../../src/parser/types';
 
 // The plan drawn as a route: a rail, a station per term, a terminus. The
@@ -9,14 +10,16 @@ import type { Course } from '../../src/parser/types';
 // structure rather than by decoration.
 export function RouteView({
   schedule,
-  unitsPerTerm,
   doubleCount,
   pattern,
   target,
+  catalog,
 }: {
   schedule: Schedule;
-  unitsPerTerm: number;
   doubleCount: DoubleCountIndex;
+  // Whether the order came from the college's own catalog or from reading
+  // course numbers.
+  catalog: boolean;
   pattern: string;
   // The term the student is aiming at, so the route can draw the line they
   // are actually planning against rather than only its own end.
@@ -25,12 +28,15 @@ export function RouteView({
   if (schedule.terms.length === 0) return null;
 
   const onTime = schedule.meetsTarget;
-  // The term the divider goes after: the last one at or before the target.
+  // The term the divider goes after: the last one before the target. Before,
+  // not at: the target is the term the student starts at the university, so
+  // it is not a term they can take a course at their college in.
+  //
   // Only drawn when work genuinely falls past it, and only when that work is
   // work the student can leave until after they transfer.
   const split =
     target !== null && schedule.transferByTarget === true && schedule.meetsTarget === false
-      ? schedule.terms.filter((t) => termIndex(t.ref) <= termIndex(target)).length
+      ? schedule.terms.filter((t) => termIndex(t.ref) < termIndex(target)).length
       : -1;
   const doubled = schedule.terms
     .flatMap((t) => t.courses)
@@ -41,6 +47,53 @@ export function RouteView({
 
   return (
     <>
+      {schedule.missingPrereqs.length > 0 && (
+        <div className="route-block" data-warn="true">
+          {/* The one thing on this page a student cannot find out from the
+              agreement, and the one that stops them at the registration page.
+              Named as courses, with what opens each, so it can be acted on. */}
+          <b>
+            {schedule.missingPrereqs.length === 1
+              ? 'One course here needs something first that this plan does not include.'
+              : `${schedule.missingPrereqs.length} courses here need something first that this plan does not include.`}
+          </b>
+          <ul>
+            {schedule.missingPrereqs.map((m) => (
+              <li key={m.course}>
+                <b>{m.course}</b> needs {m.needs.map(padCourseCode).join(' or ')}
+              </li>
+            ))}
+          </ul>
+          <span>
+            Your college requires these; the agreement does not list them, so they are not in the
+            plan above. If you have already taken one, tick it under &ldquo;Where you are&rdquo; or
+            mark the requirement as already held. If you have not, it is real work to add and worth
+            taking to a counselor.
+          </span>
+        </div>
+      )}
+
+      {schedule.terms.some((t) => t.sequenced.length > 0) && (
+        <p className="route-note">
+          {/* Which of the two ordered this plan changes how far a student
+              should trust it, so it is said rather than left to be assumed. */}
+          {catalog ? (
+            <>
+              Some of these are ordered because one comes before another, read from your
+              college&rsquo;s own catalog. The agreement carries no prerequisites; the catalog
+              does, and it is what put these terms in this order.
+            </>
+          ) : (
+            <>
+              Some of these are ordered because one comes before another. This site cannot read
+              your college&rsquo;s catalog, so that is a reading of how the courses are numbered
+              and of which of them the agreement groups together, not a list of real
+              prerequisites. Check what you are taking together against your college&rsquo;s
+              catalog before you register.
+            </>
+          )}
+        </p>
+      )}
       {(doubled > 0 || areaSlots > 0) && (
         <p className="route-note">
           {doubled > 0 && (
@@ -69,17 +122,24 @@ export function RouteView({
             <div className="route-split" key="split" style={{ '--i': i } as React.CSSProperties}>
               <b>You transfer here, {termLabel(target)}</b>
               <span>
-                Everything above is on this agreement or is what admission itself turns on. The{' '}
-                {schedule.overflowUnits} units below finish {pattern} certification, which neither
-                system asks for before you transfer. Leaving them undone means doing your campus's
-                own general education requirements after you arrive instead.
+                Everything above is what admission turns on. The {schedule.overflowUnits} units
+                below are {pattern} certification and major preparation this agreement lists
+                without marking it required for admission. Neither is asked for before you
+                transfer. Leaving the {pattern} part undone means doing your campus's own general
+                education requirements after you arrive instead.
               </span>
             </div>
           ) : null;
-        // A term over the normal load is worth flagging: it is usually the
+        // A term over its own ceiling is worth flagging: it is usually the
         // result of one course that is simply larger than the budget, and a
         // student should see that rather than discover it at registration.
-        const over = term.units > unitsPerTerm;
+        // Against the term's ceiling, not the student's chosen load, or every
+        // ordinary winter and summer term would read as under-filled and an
+        // overfull one would not read as over at all.
+        const over = term.units > term.budget;
+        // A short session is not a semester and should not be mistaken for
+        // one on a route that lists them side by side.
+        const short = term.ref.kind === 'Winter' || term.ref.kind === 'Summer';
 
         const body = (
           <div
@@ -100,6 +160,7 @@ export function RouteView({
                     yet. Counting only the named ones reads as an empty term. */}
                 {term.units} units · {term.items.length}{' '}
                 {term.items.length === 1 ? 'course' : 'courses'}
+                {short ? ' · short session' : ''}
                 {over ? ' · over a normal load' : ''}
               </div>
               <div className="term-courses">
@@ -140,9 +201,8 @@ export function RouteView({
               </div>
               {term.sequenced.length > 0 && (
                 <p className="term-note">
-                  {term.sequenced.join(', ')} looks like part of a numbered sequence, so the rest of
-                  it sits in later terms. That is read from how the courses are numbered, not from
-                  the agreement, which lists no prerequisites at all.
+                  <b>{term.sequenced.join(', ')}</b> looks like part of a chain, so the rest of it
+                  sits in later terms.
                 </p>
               )}
             </div>

@@ -30,7 +30,40 @@ export type SectionRule =
   // them charges a student twice for the same courses. Only the API sets
   // this; a printed agreement has no such section.
   | { kind: 'reference' };
-export type Section = { label: string; rule: SectionRule };
+export type Section = {
+  label: string;
+  rule: SectionRule;
+  // Whether the campus itself marked this section as gating admission.
+  //
+  // ASSIST agreements say so in the heading, in those words: UCI's Computer
+  // Science agreement has "MAJOR PREPARATION COURSES REQUIRED FOR TRANSFER —
+  // REQUIRED FOR ADMISSION" and, separately, "ADDITIONAL APPROVED COURSES FOR
+  // THE MAJOR" with no such mark. The first is a minimum. The second is
+  // preparation a campus is glad to see and screens on, but it is not what
+  // the application is refused for, and treating the two the same is what
+  // made this tool tell a student on a perfectly ordinary two-year plan that
+  // they could not transfer at all.
+  //
+  // Undefined means the heading said nothing either way. That is not the same
+  // as false, and the planner reads it as "this agreement draws no
+  // distinction, so assume all of it is a minimum". See admissionSections.
+  admission?: boolean;
+};
+
+// The phrase, anywhere in the heading. Both halves of an ASSIST label are the
+// campus's own words and either half can carry it, so this is not anchored.
+const REQUIRED_FOR_ADMISSION = /required for admission/i;
+
+export const marksAdmission = (label: string): boolean =>
+  REQUIRED_FOR_ADMISSION.test(label);
+
+// Whether the agreement marks admission requirements at all. An agreement
+// that marks none of its sections is not an agreement where nothing is
+// required; it is one that never said, so every section counts as a minimum.
+// Only once a campus has marked at least one section does an unmarked section
+// mean "not a minimum".
+export const marksAnyAdmission = (sections: Section[]): boolean =>
+  sections.some((s) => s.admission === true);
 
 // Headers carry a leading section number. "Select A or B" is the same rule as
 // "Complete at least 1", so both collapse to choose with least 1 rather than
@@ -43,7 +76,7 @@ export function parseSectionHeader(text: string): Section | null {
   const trimmed = text.trim();
 
   if (/^REQUIRED FOR ADMISSION$/i.test(trimmed)) {
-    return { label: trimmed, rule: { kind: 'all' } };
+    return { label: trimmed, rule: { kind: 'all' }, admission: true };
   }
 
   const numbered = NUMBERED.exec(trimmed);
@@ -51,10 +84,13 @@ export function parseSectionHeader(text: string): Section | null {
 
   const label = numbered[2].trim();
 
-  const atLeast = AT_LEAST.exec(label);
-  if (atLeast) return { label, rule: { kind: 'choose', least: Number(atLeast[1]) } };
+  const admission = marksAdmission(trimmed);
 
-  if (SELECT_BETWEEN.test(label)) return { label, rule: { kind: 'choose', least: 1 } };
+  const atLeast = AT_LEAST.exec(label);
+  if (atLeast)
+    return { label, rule: { kind: 'choose', least: Number(atLeast[1]) }, admission };
+
+  if (SELECT_BETWEEN.test(label)) return { label, rule: { kind: 'choose', least: 1 }, admission };
 
   return null;
 }

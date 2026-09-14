@@ -1,6 +1,6 @@
 import { UnrecognisedAgreementError, type Agreement, type ArticulationRow } from '../parser/agreement';
 import type { AndGroup, Requirement } from '../parser/groups';
-import type { Section, SectionRule } from '../parser/sections';
+import { marksAdmission, type Section, type SectionRule } from '../parser/sections';
 import type { Course } from '../parser/types';
 import type {
   AssistArticulation,
@@ -320,7 +320,12 @@ export function toAgreement(result: AssistResult): Agreement {
     const rule: SectionRule =
       stated.kind === 'all' && isArticulationDetails(heading) ? { kind: 'reference' } : stated;
     const sectionIndex = sections.length;
-    sections.push({ label: groupLabel(asset, heading), rule });
+    const label = groupLabel(asset, heading);
+    // Read off the campus's own heading, never inferred from the rule. A
+    // section is a minimum because the agreement says the words, or it is not
+    // marked at all; nothing here decides on a student's behalf which
+    // preparation an admissions reader cares about.
+    sections.push({ label, rule, admission: marksAdmission(label) });
 
     let emitted = 0;
     contentSections.forEach((section, routeIndex) => {
