@@ -1,6 +1,5 @@
-import { Fragment } from 'react';
 import type { Schedule, ScheduleItem, TermRef } from '../../src/planner/schedule';
-import { termIndex, termLabel } from '../../src/planner/schedule';
+import { termLabel } from '../../src/planner/schedule';
 import { areasCleared, type DoubleCountIndex } from '../../src/planner/doubleCount';
 import { padCourseCode } from '../../src/catalog/normalize';
 import type { Course } from '../../src/parser/types';
@@ -28,16 +27,13 @@ export function RouteView({
   if (schedule.terms.length === 0) return null;
 
   const onTime = schedule.meetsTarget;
-  // The term the divider goes after: the last one before the target. Before,
-  // not at: the target is the term the student starts at the university, so
-  // it is not a term they can take a course at their college in.
-  //
-  // Only drawn when work genuinely falls past it, and only when that work is
-  // work the student can leave until after they transfer.
-  const split =
-    target !== null && schedule.transferByTarget === true && schedule.meetsTarget === false
-      ? schedule.terms.filter((t) => termIndex(t.ref) < termIndex(target)).length
-      : -1;
+  // What did not fit before the target. The terms drawn stop at the one
+  // before the target, because that is the last one the student is at their
+  // college for; this is what would have needed a term after it, named
+  // rather than drawn.
+  const leftOut = target !== null ? schedule.afterTarget : [];
+  const leftOutCourses = leftOut.filter((i) => i.kind === 'course');
+  const leftOutAreas = leftOut.filter((i) => i.kind === 'area');
   const doubled = schedule.terms
     .flatMap((t) => t.courses)
     .filter((c) => areasCleared(doubleCount, c.code).length > 0).length;
@@ -114,22 +110,6 @@ export function RouteView({
       <div className="route">
       {schedule.terms.map((term, i) => {
         const [season, year] = term.label.split(' ');
-        // Everything from here down is the rest of the pattern, not the
-        // route to transferring. Said at the boundary, where a student
-        // reading downwards actually reaches it.
-        const divider =
-          i === split && target !== null ? (
-            <div className="route-split" key="split" style={{ '--i': i } as React.CSSProperties}>
-              <b>You transfer here, {termLabel(target)}</b>
-              <span>
-                Everything above is what admission turns on. The {schedule.overflowUnits} units
-                below are {pattern} certification and major preparation this agreement lists
-                without marking it required for admission. Neither is asked for before you
-                transfer. Leaving the {pattern} part undone means doing your campus's own general
-                education requirements after you arrive instead.
-              </span>
-            </div>
-          ) : null;
         // A term over its own ceiling is worth flagging: it is usually the
         // result of one course that is simply larger than the budget, and a
         // student should see that rather than discover it at registration.
@@ -146,7 +126,6 @@ export function RouteView({
             className="term"
             key={term.label}
             data-over={over}
-            data-after={split >= 0 && i >= split}
             style={{ '--i': i } as React.CSSProperties}
           >
             <div className="term-when">
@@ -209,30 +188,88 @@ export function RouteView({
           </div>
         );
 
-        return divider ? (
-          <Fragment key={term.label}>
-            {divider}
-            {body}
-          </Fragment>
-        ) : (
-          body
-        );
+        return body;
       })}
 
-      <div className="terminus" style={{ '--i': schedule.terms.length } as React.CSSProperties}>
+      {/* The line the plan stops at, and what did not make it across. Drawn
+          after the last term rather than as terms of its own: a Fall 2028
+          transfer means everything is done by the end of Spring 2028, and a
+          term drawn for Fall 2028 would be a term the student is not at their
+          college for. Named as courses and slots so it can be acted on: taken
+          earlier at a higher load, in a summer, or after arriving. */}
+      {target !== null && leftOut.length > 0 && (
+        <div
+          className="route-split"
+          data-late={schedule.transferByTarget === false}
+          style={{ '--i': schedule.terms.length } as React.CSSProperties}
+        >
+          <b>You transfer here, {termLabel(target)}</b>
+          <span>
+            {schedule.transferByTarget === false ? (
+              <>
+                Not everything admission turns on fits before then. The {schedule.overflowUnits}{' '}
+                units below would need terms after {termLabel(target)}, which is why the plan cannot
+                meet it as set.
+              </>
+            ) : (
+              <>
+                Everything above is what admission turns on. The {schedule.overflowUnits} units
+                below did not fit before {termLabel(target)} and are not asked for before you
+                transfer: {pattern} certification, and major preparation this agreement lists
+                without marking it required for admission. Leaving the {pattern} part undone
+                means doing your campus's own general education requirements after you arrive
+                instead.
+              </>
+            )}
+          </span>
+          <div className="term-courses">
+            {leftOutCourses.map((item) =>
+              item.kind === 'course' ? (
+                <span className="course-chip" key={item.course.code}>
+                  <span className="code">{item.course.code}</span>
+                  <span>{item.course.title}</span>
+                  <u>{item.units}u</u>
+                </span>
+              ) : null,
+            )}
+            {leftOutAreas.map((item, k) =>
+              item.kind === 'area' ? (
+                <span className="area-chip" key={`left-${item.areaId}-${k}`}>
+                  <span className="area-mark">{item.areaId}</span>
+                  <span>{item.label}</span>
+                  <u>{item.units}u</u>
+                </span>
+              ) : null,
+            )}
+          </div>
+        </div>
+      )}
+
+      <div
+        className="terminus"
+        style={{ '--i': schedule.terms.length + (leftOut.length > 0 ? 1 : 0) } as React.CSSProperties}
+      >
         <div className="term-when">
           <div className="term-season">Done</div>
         </div>
         <div className="terminus-body">
-          {areaSlots > 0 ? `Major preparation and ${pattern} finished` : 'Major preparation finished'}
+          {target !== null && leftOut.length > 0
+            ? schedule.transferByTarget === false
+              ? 'Not everything required fits'
+              : 'Ready to transfer'
+            : areaSlots > 0
+              ? `Major preparation and ${pattern} finished`
+              : 'Major preparation finished'}
           <small>
             {/* Three different endings, because the target makes them
                 different. Only the last of them is bad news: a route that
                 runs past the target on certification alone still gets the
                 student there on time, and saying it is late would be the
                 wrong answer to the question they asked. */}
-            {split >= 0 && target !== null
-              ? `${pattern} certification, finished after you transfer in ${termLabel(target)}.`
+            {target !== null && leftOut.length > 0
+              ? schedule.transferByTarget === false
+                ? `Not by ${termLabel(target)}. The work named above still needs a term.`
+                : `Ready to transfer in ${termLabel(target)}, with ${schedule.overflowUnits} units named above left for after.`
               : onTime === false
                 ? 'Later than the term you were aiming for.'
                 : areaSlots > 0

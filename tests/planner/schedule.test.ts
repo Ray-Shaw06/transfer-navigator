@@ -212,12 +212,18 @@ describe('buildSchedule', () => {
     );
 
     // Spring 2027 is the term the student starts at the university, so it is
-    // not a term they can take a course at their college in. Both it and the
-    // Fall behind it are past the line.
-    expect(schedule.terms).toHaveLength(3);
+    // not a term they can take a course at their college in, and neither is
+    // any term after it. Only Fall 2026 is drawn; the other thirty units are
+    // reported as left out rather than scheduled into terms the student will
+    // not be at their college for.
+    expect(schedule.terms.map((t) => t.label)).toEqual(['Fall 2026']);
     expect(schedule.meetsTarget).toBe(false);
     expect(schedule.overflowUnits).toBe(30);
-    expect(termLabel(schedule.readyAfter!)).toBe('Fall 2027');
+    expect(schedule.afterTarget.map((i) => (i.kind === 'course' ? i.course.code : ''))).toEqual([
+      'BBB 2',
+      'CCC 3',
+    ]);
+    expect(termLabel(schedule.readyAfter!)).toBe('Fall 2026');
   });
 
   it('confirms a plan that does fit', () => {
@@ -371,8 +377,10 @@ describe('a target that cannot hold everything', () => {
     area('2', 3, 'admission'),
   ];
 
-  const late = (s: ReturnType<typeof buildSchedule>) =>
-    s.terms.filter((t) => termIndex(t.ref) >= termIndex(FALL_28)).flatMap((t) => t.items);
+  // Nothing is drawn at or past the target any more, so what fell past it is
+  // exactly what afterTarget holds. Kept as a helper so the tests read as
+  // they did.
+  const late = (s: ReturnType<typeof buildSchedule>) => s.afterTarget;
 
   it('puts everything admission turns on inside the target and the rest after', () => {
     const schedule = buildSchedule(majorPrep, tight, pattern);
@@ -391,8 +399,13 @@ describe('a target that cannot hold everything', () => {
     // in pattern order the courses admission turns on land after Fall 2028.
     // This is the whole feature in one comparison: naming a target changes
     // what gets a place, not just what gets a warning.
+    // No target, so nothing is cut: the terms run on and the courses admission
+    // turns on can be seen landing at or after Fall 2028.
     const unaimed = buildSchedule(majorPrep, { ...tight, target: null }, pattern);
-    expect(late(unaimed).some((i) => i.priority !== 'certification')).toBe(true);
+    const pastTarget = unaimed.terms
+      .filter((t) => termIndex(t.ref) >= termIndex(FALL_28))
+      .flatMap((t) => t.items);
+    expect(pastTarget.some((i) => i.priority !== 'certification')).toBe(true);
 
     const aimed = buildSchedule(majorPrep, tight, pattern);
     expect(aimed.reordered).toBe(true);
@@ -401,10 +414,13 @@ describe('a target that cannot hold everything', () => {
 
   it('reports what fell past the target rather than only that something did', () => {
     const schedule = buildSchedule(majorPrep, tight, pattern);
-    expect(schedule.afterTarget).toEqual(late(schedule));
+    expect(schedule.afterTarget.length).toBeGreaterThan(0);
     expect(schedule.overflowUnits).toBe(
       schedule.afterTarget.reduce((sum, i) => sum + i.units, 0),
     );
+    // And none of it is drawn as a term: the last term shown is the one
+    // before the target.
+    expect(schedule.terms.every((t) => termIndex(t.ref) < termIndex(FALL_28))).toBe(true);
   });
 
   it('says so plainly when even the minimum does not fit', () => {
@@ -446,12 +462,13 @@ describe('a target that cannot hold everything', () => {
     expect(late(schedule).some((i) => i.kind === 'course')).toBe(false);
   });
 
-  it('takes no more terms overall than it would have without reordering', () => {
-    // Moving work about must not add work. The finish date is allowed to stay
-    // where it was; it is not allowed to get worse.
+  it('adds no work by reordering', () => {
+    // Moving work about must not add work. With a target the terms shown
+    // stop before it, so the comparison is units shown plus units left out
+    // against the untargeted plan's total.
     const reordered = buildSchedule(majorPrep, tight, pattern);
     const plain = buildSchedule(majorPrep, { ...tight, target: null }, pattern);
-    expect(reordered.totalUnits).toBe(plain.totalUnits);
+    expect(reordered.totalUnits + reordered.overflowUnits).toBe(plain.totalUnits);
     expect(reordered.terms.length).toBeLessThanOrEqual(plain.terms.length);
   });
 });
@@ -471,8 +488,12 @@ describe('when the target can be moved rather than met', () => {
     );
 
     // Three units a term: major, major, admission, then the two that can wait.
+    // The minimum lands in Fall 2027. The pattern would run to Fall 2028, the
+    // target term itself, which is not drawn: the last term shown is Spring
+    // 2028 and the rest is reported as left out.
     expect(termLabel(schedule.readyToTransfer!)).toBe('Fall 2027');
-    expect(termLabel(schedule.readyAfter!)).toBe('Fall 2028');
+    expect(termLabel(schedule.readyAfter!)).toBe('Spring 2028');
+    expect(schedule.afterTarget.map((i) => i.units)).toEqual([3]);
   });
 
   it('leaves it null when there is nothing that has to be done first', () => {

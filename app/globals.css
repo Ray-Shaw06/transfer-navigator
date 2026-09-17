@@ -448,15 +448,13 @@ input::placeholder { color: var(--ink-3); }
   max-width: 62ch;
 }
 
-/* Below the line the rail stops being the route. It is still drawn, because
-   this is still work with a term attached to it, but it is no longer the
-   thing being planned, so it drops to a plain rule and the term loses the
-   emphasis the ones above it carry. */
-.term[data-after='true']::before { background: var(--line-strong); opacity: 0.55; }
-.term[data-after='true'] .term-body::before { background: var(--line-strong); }
-.term[data-after='true'] .term-season,
-.term[data-after='true'] .term-year,
-.term[data-after='true'] .term-load { color: var(--ink-3); }
+/* What did not fit before the target sits under the line as chips, not as
+   terms: it has no term, which is the point. The chips are dimmed to say
+   so. When the minimum itself is in there the line turns to caution, since
+   that is the plan failing rather than the pattern waiting. */
+.route-split .term-courses { margin-top: 0.375rem; opacity: 0.8; }
+.route-split[data-late='true']::before { background: var(--caution); }
+.route-split[data-late='true'] b { color: var(--caution); }
 
 
 .term-when { text-align: right; padding-top: 0.125rem; }

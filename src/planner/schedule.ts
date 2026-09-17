@@ -95,11 +95,15 @@ export type MissingPrereq = {
 };
 
 export type Schedule = {
+  // The terms a student will actually be at their college for. With a target
+  // named, this stops at the term before it: a Fall 2028 transfer means
+  // everything is done by the end of Spring 2028, and nothing is scheduled
+  // into the terms after that. What did not fit is in afterTarget instead.
   terms: ScheduledTerm[];
+  // Units across the terms shown.
   totalUnits: number;
-  // The last term with work in it: the term after which a student would have
-  // finished the major preparation on this agreement. Null when nothing is
-  // left to schedule.
+  // The last term shown with work in it. With a target named this is at most
+  // the term before it. Null when nothing is left to schedule.
   readyAfter: TermRef | null;
   // Whether everything fits on or before the term the student is aiming at.
   // Null when they have not named one.
@@ -136,8 +140,10 @@ export type Schedule = {
   // when the college's catalog could not be read, since nothing is known then
   // and a warning invented from nothing is worse than none.
   missingPrereqs: MissingPrereq[];
-  // What is scheduled after the target, in the order it falls. Empty when
-  // there is no target or when everything fits.
+  // What did not fit before the target, in the order it would have been
+  // taken. Not drawn as terms, since those would be terms the student is not
+  // at their college for; named instead. Empty when there is no target or
+  // when everything fits.
   afterTarget: ScheduleItem[];
   // The part of afterTarget that is major preparation the agreement does not
   // mark as required for admission. Not a reason to call a plan late, and not
@@ -789,20 +795,35 @@ export function buildSchedule(
     }
   }
 
+  // The whole packing, past the target and all, is kept for one purpose:
+  // saying when the work would actually finish. What is SHOWN stops at the
+  // term before the target. A student transferring in Fall 2028 has to have
+  // everything done by the end of Spring 2028, so a plan that goes on
+  // scheduling into Fall 2028 and Spring 2029 is a plan for terms they will
+  // not be at their college for. Whatever did not fit before the target is
+  // reported as left out, by name, rather than drawn as terms.
+  const packed = terms;
+  const shown =
+    target === null ? packed : packed.filter((t) => termIndex(t.ref) < termIndex(target));
+
   // Every course the plan schedules whose college requires something first
   // that is neither scheduled here nor already held.
   //
   // Only alternatives ALL missing count. A catalog stating "MATH 005A or
   // MATH 005AH" is satisfied by either, so reporting it while the student
   // holds one of them would be a warning about nothing.
+  //
+  // Over the terms shown, not the whole packing: a course that did not fit
+  // before the target is not in the plan above, and a warning about it would
+  // point at nothing on the page.
   const scheduled = new Set(
-    terms.flatMap((t) => t.courses.map((c) => canonicalCourseKey(c.code))),
+    shown.flatMap((t) => t.courses.map((c) => canonicalCourseKey(c.code))),
   );
   const covered = (code: string) => scheduled.has(code) || held.has(code);
 
   const missingPrereqs: MissingPrereq[] = !prereqs
     ? []
-    : terms
+    : shown
         .flatMap((t) => t.courses)
         .flatMap((course) => {
           const stated = prereqs.get(canonicalCourseKey(course.code))?.prerequisites ?? [];
@@ -810,14 +831,16 @@ export function buildSchedule(
           return [{ course: course.code, needs: stated }];
         });
 
-  const readyAfter = terms.length > 0 ? terms[terms.length - 1].ref : null;
-  const afterTarget = lateItems(terms);
+  const readyAfter = shown.length > 0 ? shown[shown.length - 1].ref : null;
+  const afterTarget = lateItems(packed);
   const overflow = total(afterTarget);
-  const lastGating = terms.filter((t) => t.items.some(gating)).pop();
+  // From the whole packing: when the minimum would finish if the plan simply
+  // ran on, which is the honest answer to a target that cannot be met.
+  const lastGating = packed.filter((t) => t.items.some(gating)).pop();
 
   return {
-    terms,
-    totalUnits: terms.reduce((sum, t) => sum + t.units, 0),
+    terms: shown,
+    totalUnits: shown.reduce((sum, t) => sum + t.units, 0),
     readyAfter,
     readyToTransfer: lastGating?.ref ?? null,
     earliestTransfer: lastGating ? nextTerm(lastGating.ref, includeSummer, includeWinter) : null,
