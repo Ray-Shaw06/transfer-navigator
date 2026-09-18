@@ -42,6 +42,25 @@ describe('plan URL state', () => {
     expect(back.pattern).toBe('IGETC');
   });
 
+  it('carries a chosen short-term load, and only a chosen one', () => {
+    // An unset summer or winter load is the planner's own default, and a link
+    // must not pin a number the student never picked.
+    const chosen = writePlanUrl({
+      college: 49, campus: 120, year: 76, major: KEY, completed: new Set(), cleared: new Set(),
+      settings: { ...settings, summerUnits: 9, winterUnits: 4 }, pattern: null,
+    });
+    expect(chosen).toContain('summerLoad=9');
+    expect(chosen).toContain('winterLoad=4');
+    expect(readPlanUrl(chosen).settings).toMatchObject({ summerUnits: 9, winterUnits: 4 });
+
+    const unset = writePlanUrl({
+      college: 49, campus: 120, year: 76, major: KEY, completed: new Set(), cleared: new Set(),
+      settings, pattern: null,
+    });
+    expect(unset).not.toContain('summerLoad');
+    expect(readPlanUrl(unset).settings?.summerUnits).toBeUndefined();
+  });
+
   it('leaves the pattern out unless it was chosen explicitly', () => {
     // Null means the catalog year decides, which is the usual case, and a
     // link should not pin a choice the student never made.

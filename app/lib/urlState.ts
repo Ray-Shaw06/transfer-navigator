@@ -77,6 +77,8 @@ export function readPlanUrl(search: string): PlanUrlState {
           unitsPerTerm: load ?? 15,
           includeSummer: params.get('summer') === '1',
           includeWinter: params.get('winter') === '1',
+          summerUnits: decodeInt(params.get('summerLoad')) ?? undefined,
+          winterUnits: decodeInt(params.get('winterLoad')) ?? undefined,
           target: decodeTerm(params.get('target')),
         }
       : null,
@@ -109,6 +111,10 @@ export function writePlanUrl(state: {
     params.set('load', String(state.settings.unitsPerTerm));
     if (state.settings.includeSummer) params.set('summer', '1');
     if (state.settings.includeWinter) params.set('winter', '1');
+    // Only once chosen. An unset short-term load is the planner's default,
+    // and a link should not pin a number the student never picked.
+    if (state.settings.summerUnits !== undefined) params.set('summerLoad', String(state.settings.summerUnits));
+    if (state.settings.winterUnits !== undefined) params.set('winterLoad', String(state.settings.winterUnits));
     if (state.settings.target) params.set('target', encodeTerm(state.settings.target));
   }
 

@@ -2,6 +2,7 @@
 
 import type { TermKind, TermRef } from '../../src/planner/schedule';
 import { nextTerm, termLabel } from '../../src/planner/schedule';
+import { clampUnits, LEAST_UNITS, type UnitLimits } from '../../src/planner/limits';
 
 export type Option = { id: number; name: string; system?: string };
 export type YearOption = { id: number; label: string };
@@ -12,6 +13,11 @@ export type PlanSettings = {
   unitsPerTerm: number;
   includeSummer: boolean;
   includeWinter: boolean;
+  // Units in a summer session and a winter intersession, once the student
+  // has chosen them. Unset means the planner's own default for a short term,
+  // which is what a student gets until they touch the slider.
+  summerUnits?: number;
+  winterUnits?: number;
   target: TermRef | null;
 };
 
@@ -170,16 +176,75 @@ const decode = (value: string): TermRef => {
   return { kind: kind as TermKind, year: Number(year) };
 };
 
+// A slider held to a college's ceiling, with the ceiling's provenance said
+// beside it. The provenance matters: a ceiling read off the college's own
+// catalog is a rule, a typical one is a guess the student should check.
+function LoadSlider({
+  id,
+  label,
+  value,
+  ceiling,
+  verified,
+  hint,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  value: number;
+  ceiling: number;
+  verified: boolean;
+  hint?: string;
+  onChange: (units: number) => void;
+}) {
+  return (
+    <div className="field">
+      <label htmlFor={id}>
+        {label} <b className="load-value">{value} units</b>
+      </label>
+      <input
+        id={id}
+        type="range"
+        min={LEAST_UNITS}
+        max={ceiling}
+        step={1}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+      />
+      <p className="field-note">
+        {hint ? `${hint} ` : ''}
+        {verified
+          ? `Your college allows up to ${ceiling} without a petition.`
+          : `Up to ${ceiling} is typical; your college's own ceiling is in its catalog.`}
+      </p>
+    </div>
+  );
+}
+
 export function PlanControls({
   settings,
   earliest,
+  limits,
   onChange,
 }: {
   settings: PlanSettings;
   earliest: TermRef;
+  // The college's unit ceilings, or typical ones with `verified` empty.
+  limits: UnitLimits;
   onChange: (next: PlanSettings) => void;
 }) {
   const starts = termChoices(earliest, 20);
+  // Held to the ceiling, since a stored load can outlive a change of college.
+  const load = clampUnits(settings.unitsPerTerm, limits.semester);
+  // The planner's own defaults for a short term, shown on the slider until
+  // the student moves it: half a load in summer, one course in winter.
+  const summer = clampUnits(settings.summerUnits ?? Math.round(load / 2), limits.summer);
+  const winter = clampUnits(settings.winterUnits ?? 5, limits.winter);
+  const pace =
+    load < limits.fullTime
+      ? 'Part time.'
+      : load < 15
+        ? `Full time at your college starts at ${limits.fullTime}.`
+        : 'The pace that finishes in two years.';
   // From the term after the one being started in: a student cannot transfer in
   // the same term they are still taking courses at their college.
   const targets = termChoices(settings.start, 21).slice(1);
@@ -201,21 +266,15 @@ export function PlanControls({
         </select>
       </div>
 
-      <div className="field">
-        <label htmlFor="load">Units per term</label>
-        <select
-          id="load"
-          value={settings.unitsPerTerm}
-          onChange={(e) => onChange({ ...settings, unitsPerTerm: Number(e.target.value) })}
-        >
-          {[6, 9, 12, 15, 18].map((n) => (
-            <option key={n} value={n}>
-              {n} units
-              {n === 6 ? ' (part time)' : n === 12 ? ' (full time)' : n === 15 ? ' (two-year pace)' : ''}
-            </option>
-          ))}
-        </select>
-      </div>
+      <LoadSlider
+        id="load"
+        label="Units per semester"
+        value={load}
+        ceiling={limits.semester}
+        verified={limits.verified.includes('semester')}
+        hint={pace}
+        onChange={(units) => onChange({ ...settings, unitsPerTerm: units })}
+      />
 
       <div className="field">
         <label htmlFor="target">Transfer by</label>
@@ -256,6 +315,32 @@ export function PlanControls({
         />
         Use winter intersession
       </label>
+
+      {/* The short sessions get their own sliders only once they are in use.
+          Each has its own ceiling, and the ceilings are what make the two
+          sessions different from each other and from a semester. */}
+      {settings.includeSummer && (
+        <LoadSlider
+          id="summer-load"
+          label="Units in a summer session"
+          value={summer}
+          ceiling={limits.summer}
+          verified={limits.verified.includes('summer')}
+          onChange={(units) => onChange({ ...settings, summerUnits: units })}
+        />
+      )}
+
+      {settings.includeWinter && (
+        <LoadSlider
+          id="winter-load"
+          label="Units in a winter intersession"
+          value={winter}
+          ceiling={limits.winter}
+          verified={limits.verified.includes('winter')}
+          hint="Usually one course."
+          onChange={(units) => onChange({ ...settings, winterUnits: units })}
+        />
+      )}
     </div>
   );
 }

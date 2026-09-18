@@ -5,6 +5,7 @@ import { parseAgreement, UnrecognisedAgreementError } from '../src/parser/docume
 import type { Agreement } from '../src/parser/agreement';
 import { buildPlan } from '../src/planner/plan';
 import { buildSchedule, currentTerm, earliestTerm } from '../src/planner/schedule';
+import { clampUnits, limitsFor } from '../src/planner/limits';
 import { geStatus } from '../src/planner/ge';
 import { buildDoubleCountIndex, geScheduleItems } from '../src/planner/doubleCount';
 import {
@@ -200,6 +201,10 @@ export default function Home() {
   // Asked for after the plan, because the plan decides which courses are worth
   // asking the catalog about. Until it answers, and for a college whose
   // catalog cannot be read at all, the schedule orders by course numbers.
+  // The college's unit ceilings, read off its catalog where they were, and
+  // typical otherwise. What the load sliders are held to.
+  const limits = useMemo(() => limitsFor(college), [college]);
+
   const planCodes = useMemo(
     () => (plan ? plan.remainingGroups.flatMap((g) => g.courses.map((c) => c.code)) : []),
     [plan],
@@ -213,9 +218,20 @@ export default function Home() {
             plan.remainingGroups,
             {
               start: settings.start,
-              unitsPerTerm: settings.unitsPerTerm,
+              // Held to the college's ceilings, since a stored load can
+              // outlive a change of college. Unset short-term loads leave the
+              // planner's own defaults in place.
+              unitsPerTerm: clampUnits(settings.unitsPerTerm, limits.semester),
               includeSummer: settings.includeSummer,
               includeWinter: settings.includeWinter,
+              summerUnits:
+                settings.summerUnits === undefined
+                  ? undefined
+                  : clampUnits(settings.summerUnits, limits.summer),
+              winterUnits:
+                settings.winterUnits === undefined
+                  ? undefined
+                  : clampUnits(settings.winterUnits, limits.winter),
               target: settings.target,
               prereqs: prereqs.index.size > 0 ? prereqs.index : undefined,
               // So a prerequisite the student already holds is not reported
@@ -227,7 +243,7 @@ export default function Home() {
             geView ? geScheduleItems(geView) : [],
           )
         : null,
-    [plan, settings, geView, prereqs, completed, cleared],
+    [plan, settings, geView, prereqs, completed, cleared, limits],
   );
 
   // Mirror the plan into the address bar. replaceState rather than pushState:
@@ -356,7 +372,12 @@ export default function Home() {
               <h2>How you want to go</h2>
               <ShareLink />
             </div>
-            <PlanControls settings={settings} earliest={earliest} onChange={setSettings} />
+            <PlanControls
+              settings={settings}
+              earliest={earliest}
+              limits={limits}
+              onChange={setSettings}
+            />
           </section>
 
           <Verdict
