@@ -91,3 +91,24 @@ const FORMERLY =
 export function formerlyCodes(text: string): string[] {
   return [...text.matchAll(FORMERLY)].map((m) => m[1].toUpperCase().replace('-', ' '));
 }
+
+// Whether a requisite line says placement can stand in for the courses it
+// names. Colleges phrase it many ways and all of them contain one of these.
+const PLACEMENT = /\b(placement|assessment|multiple measures|equivalent skills|appropriate score)\b/i;
+
+export const offersPlacement = (text: string): boolean => PLACEMENT.test(text);
+
+// Units, where a catalog states them on the course, in either order: "3 unit",
+// "4.0 Units", "5 Units", or Sierra's "Units: 4". The first such figure on the
+// page is the course's own.
+const UNITS_AFTER = /\b(\d{1,2}(?:\.\d)?)\s*[Uu]nits?\b/;
+const UNITS_BEFORE = /\b[Uu]nits?:\s*(\d{1,2}(?:\.\d)?)\b/;
+
+export function unitsFromText(text: string): number | undefined {
+  const after = UNITS_AFTER.exec(text);
+  const before = UNITS_BEFORE.exec(text);
+  const first = [after, before]
+    .filter((m): m is RegExpExecArray => m !== null)
+    .sort((a, b) => a.index - b.index)[0];
+  return first ? Number(first[1]) : undefined;
+}

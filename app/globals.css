@@ -607,6 +607,32 @@ input::placeholder { color: var(--ink-3); }
 .route-block[data-warn='true'] li b { display: inline; margin: 0; font-variant-numeric: tabular-nums; }
 .route-block[data-warn='true'] span { color: var(--ink-2); }
 
+/* Courses added for a prerequisite. Not a warning: they are the plan being
+   right about what the college asks. A quiet rule and a badge on the chip. */
+.route-block[data-added='true'] {
+  border: 1px solid var(--line-strong);
+  border-left: 3px solid var(--signal);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem 0.875rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--ink);
+}
+.route-block[data-added='true'] b { display: block; margin-bottom: 0.375rem; }
+.route-block[data-added='true'] ul { margin: 0 0 0.5rem; padding-left: 1.1rem; }
+.route-block[data-added='true'] li b { display: inline; margin: 0; font-variant-numeric: tabular-nums; }
+.route-block[data-added='true'] span { color: var(--ink-2); }
+
+.course-chip[data-added='true'] { border-style: dashed; }
+.added-badge {
+  font-size: 0.6875rem;
+  font-weight: 550;
+  color: var(--signal-ink);
+  white-space: nowrap;
+}
+
+.figure small { display: block; font-size: 0.75rem; color: var(--ink-3); font-weight: 400; }
+
 .tally { font-size: 0.8125rem; color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .tally[data-met='true'] { color: var(--ink-3); }
 

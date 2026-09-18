@@ -31,6 +31,16 @@ export type CoursePrereqs = {
   // agreements on ASSIST lag the catalogs by a year, so the old code is what
   // the plan asks for and the new course is where the answer is.
   formerly: string[];
+  // The course's own units and title, where the catalog page carried them.
+  // Read so that a prerequisite the agreement never mentions can be put into
+  // the plan as a real course, with a real unit count, rather than a warning.
+  units?: number;
+  title?: string;
+  // Whether the prerequisite line offers placement as another way in:
+  // "MATH 008 or MATH 009, or placement based on the assessment process". A
+  // student who placed into calculus does not owe MATH 008, so such a
+  // prerequisite is reported rather than added to the plan.
+  placementAlternative: boolean;
 };
 
 // Everything known about one college's courses, keyed by normalised code.

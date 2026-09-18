@@ -185,7 +185,14 @@ export function Verdict({
             quarter units, so a bare number here would be ambiguous by
             construction. */}
         <span className="figure">
-          <b>{plan.remainingUnits}</b> semester units to take
+          <b>{plan.remainingUnits + schedule.addedUnits}</b> semester units to take
+          {schedule.addedUnits > 0 && (
+            <small>
+              {' '}
+              {plan.remainingUnits} on the agreement, {schedule.addedUnits} of prerequisites it does
+              not mention
+            </small>
+          )}
         </span>
         <span className="figure">
           <b>{schedule.terms.length}</b> {schedule.terms.length === 1 ? 'term' : 'terms'} of work

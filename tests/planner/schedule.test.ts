@@ -22,7 +22,15 @@ const index = (
   new Map(
     entries.map(([code, rest]) => [
       canonicalCourseKey(code),
-      { code, prerequisites: [], corequisites: [], recommended: [], formerly: [], ...rest },
+      {
+        code,
+        prerequisites: [],
+        corequisites: [],
+        recommended: [],
+        formerly: [],
+        placementAlternative: false,
+        ...rest,
+      },
     ]),
   );
 
@@ -913,9 +921,11 @@ describe('prerequisites read from the college catalog', () => {
     // numbers chains them. The catalog says CS 003B has no prerequisite: it is
     // the Java course where CS 003A is the C++ one. With the catalog in hand
     // they may share a term, and the plan is a term shorter for it.
+    // CS 002 is held, or the plan would add it ahead of CS 003A and the point
+    // here, that 3A and 3B may share a term, would be lost in the noise.
     const withCatalog = buildSchedule(
       [g(course('CS 003A', 3)), g(course('CS 003B', 3))],
-      { ...base, prereqs: pcc },
+      { ...base, prereqs: pcc, held: ['CS 002'] },
     );
     const guessing = buildSchedule([g(course('CS 003A', 3)), g(course('CS 003B', 3))], base);
 
@@ -943,6 +953,7 @@ describe('prerequisites read from the college catalog', () => {
       corequisites: [],
       recommended: [],
       formerly: [],
+      placementAlternative: false,
     });
 
     const schedule = buildSchedule([g(course('CS 002', 3))], { ...base, prereqs: outside });
@@ -974,7 +985,7 @@ describe('prerequisites read from the college catalog', () => {
     // the term unused when something unrelated fits.
     const schedule = buildSchedule(
       [g(course('CS 008', 3)), g(course('CS 003A', 3)), g(course('BIO 001', 4))],
-      { ...base, prereqs: pcc },
+      { ...base, prereqs: pcc, held: ['CS 002'] },
     );
 
     expect(schedule.terms[0].courses.map((c) => c.code).sort()).toEqual(['BIO 001', 'CS 003A']);
@@ -990,13 +1001,16 @@ describe('a prerequisite the plan does not contain', () => {
     ['MATH 5B', { prerequisites: ['MATH 5A', 'MATH 5AH'], corequisites: [], recommended: [] }],
   ]);
 
-  it('names the course a student would be turned away from', () => {
+  it('reports the course a student would be turned away for, when it cannot name it', () => {
     // The real case. ASSIST says Pasadena's CS 008 satisfies UCI's I&C SCI 46,
-    // and says nothing about CS 003A, which Pasadena requires first. The plan
-    // schedules CS 008 alone and the student is refused at registration.
+    // and says nothing about CS 003A, which Pasadena requires first. With no
+    // agreement or pattern to name CS 003A from, it is reported.
     const schedule = buildSchedule([g(course('CS 008', 3))], { ...base, prereqs: pcc });
 
-    expect(schedule.missingPrereqs).toEqual([{ course: 'CS 008', needs: ['CS 3A'] }]);
+    // Nothing here can name CS 003A as a course, so it cannot be added; it is
+    // reported as a requirement to check.
+    expect(schedule.addedPrerequisites).toEqual([]);
+    expect(schedule.missingPrereqs).toEqual([{ course: 'CS 008', needs: ['CS 3A'], reason: 'unlisted' }]);
   });
 
   it('says nothing when the prerequisite is in the plan', () => {
@@ -1056,5 +1070,159 @@ describe('a catalog that spells a code without its space', () => {
     const at = (code: string) => schedule.terms.findIndex((t) => t.courses.some((c) => c.code === code));
     expect(at('PSYC C1000')).toBeLessThan(at('PSYC 004'));
     expect(schedule.missingPrereqs).toEqual([]);
+  });
+});
+
+describe('prerequisites the agreement never named', () => {
+  const g = (...cs: { code: string; title: string; units: number }[]) => group(...cs);
+  const at = (s: ReturnType<typeof buildSchedule>, code: string) =>
+    s.terms.findIndex((t) => t.courses.some((c) => c.code === code));
+
+  // Pasadena's mathematics chain, as its catalog states it. 005B requires
+  // 005A outright; 005A requires MATH 008 or 009 OR placement.
+  const pcc = index([
+    ['MATH 5B', { prerequisites: ['MATH 5A', 'MATH 5AH'] }],
+    ['MATH 5A', { prerequisites: ['MATH 8', 'MATH 9'], placementAlternative: true }],
+    ['MATH 5AH', { prerequisites: ['MATH 8', 'MATH 9'], placementAlternative: true }],
+    ['MATH 8', {}],
+  ]);
+
+  // What the agreement and the general education pattern can name. MATH 005A
+  // is Cal-GETC Area 2; MATH 008 is intermediate algebra and on neither.
+  const named: Record<string, { code: string; title: string; units: number }> = {
+    MATH5A: { code: 'MATH 005A', title: 'SINGLE VARIABLE CALCULUS I', units: 5 },
+    MATH5AH: { code: 'MATH 005AH', title: 'HONORS CALCULUS I', units: 5 },
+  };
+  const courseInfo = (code: string) => named[canonicalCourseKey(code)] ?? null;
+
+  it('puts MATH 005A into the plan, in a term before MATH 005B', () => {
+    // The whole reason. A plan that schedules 005B alone sends a student to
+    // registration without the course 005B needs; here that student is the
+    // one who asked for this.
+    const schedule = buildSchedule([g(course('MATH 005B', 5))], { ...base, prereqs: pcc, courseInfo });
+
+    expect(schedule.addedPrerequisites.map((a) => [a.course.code, a.neededFor])).toEqual([
+      ['MATH 005A', 'MATH 005B'],
+    ]);
+    expect(at(schedule, 'MATH 005A')).toBeLessThan(at(schedule, 'MATH 005B'));
+    expect(schedule.addedUnits).toBe(5);
+    expect(schedule.addedPrerequisites[0].course.title).toBe('SINGLE VARIABLE CALCULUS I');
+  });
+
+  it('prefers the ordinary section over the honours one', () => {
+    const schedule = buildSchedule([g(course('MATH 005B', 5))], { ...base, prereqs: pcc, courseInfo });
+    expect(schedule.addedPrerequisites[0].course.code).toBe('MATH 005A');
+  });
+
+  it('reports rather than adds a prerequisite placement can stand in for', () => {
+    // MATH 005A's own prerequisite. A student who placed into calculus owes
+    // no MATH 008, and adding it would put a course most transfer students
+    // never take into every plan. So it is named, with the reason.
+    const schedule = buildSchedule([g(course('MATH 005B', 5))], { ...base, prereqs: pcc, courseInfo });
+
+    expect(schedule.addedPrerequisites.map((a) => a.course.code)).not.toContain('MATH 8');
+    expect(schedule.missingPrereqs).toEqual([
+      { course: 'MATH 005A', needs: ['MATH 8', 'MATH 9'], reason: 'placement' },
+    ]);
+  });
+
+  it('keeps a pre-transfer course out even when the catalog does not mention placement', () => {
+    // Pasadena's CS 002 states "MATH 008 or MATH 009" and nothing about
+    // placement. MATH 008 is on no agreement and no transfer pattern, so it
+    // cannot be named, and a course that cannot be named is reported rather
+    // than scheduled. That is what keeps intermediate algebra out of a
+    // calculus plan.
+    const cs = index([['CS 2', { prerequisites: ['MATH 8', 'MATH 9'] }], ['MATH 8', {}]]);
+    const schedule = buildSchedule([g(course('CS 002', 4))], { ...base, prereqs: cs, courseInfo });
+
+    expect(schedule.addedPrerequisites).toEqual([]);
+    expect(schedule.missingPrereqs).toEqual([
+      { course: 'CS 002', needs: ['MATH 8', 'MATH 9'], reason: 'unlisted' },
+    ]);
+  });
+
+  it('treats a course as placement-level wherever the college has said it is', () => {
+    // MATH 009, precalculus, is on the Cal-GETC pattern and so can be named.
+    // Pasadena says "MATH 008 or MATH 009, or placement" for MATH 005A and
+    // just "MATH 008 or MATH 009" for CS 002. The college has already said
+    // what kind of course MATH 009 is; a student on a calculus track has
+    // placed past it, and it must not be added ahead of CS 002 on the
+    // strength of one line that left the clause out.
+    const withPrecalc = index([
+      ['MATH 5B', { prerequisites: ['MATH 5A'] }],
+      ['MATH 5A', { prerequisites: ['MATH 8', 'MATH 9'], placementAlternative: true }],
+      ['CS 2', { prerequisites: ['MATH 8', 'MATH 9'] }],
+      ['MATH 9', {}],
+    ]);
+    const info = (code: string) =>
+      ({
+        MATH5A: { code: 'MATH 005A', title: 'CALCULUS I', units: 5 },
+        MATH9: { code: 'MATH 009', title: 'PRECALCULUS', units: 5 },
+      })[canonicalCourseKey(code)] ?? null;
+
+    const schedule = buildSchedule([g(course('MATH 005B', 5)), g(course('CS 002', 4))], {
+      ...base,
+      prereqs: withPrecalc,
+      courseInfo: info,
+    });
+
+    expect(schedule.addedPrerequisites.map((a) => a.course.code)).toEqual(['MATH 005A']);
+    expect(schedule.missingPrereqs.map((m) => [m.course, m.reason]).sort()).toEqual([
+      ['CS 002', 'placement'],
+      ['MATH 005A', 'placement'],
+    ]);
+  });
+
+  it('adds nothing the student already holds', () => {
+    const schedule = buildSchedule([g(course('MATH 005B', 5))], {
+      ...base,
+      prereqs: pcc,
+      courseInfo,
+      held: ['MATH 005AH'],
+    });
+    expect(schedule.addedPrerequisites).toEqual([]);
+    expect(schedule.missingPrereqs).toEqual([]);
+  });
+
+  it('follows a chain, and carries the priority of the course that needs it', () => {
+    const chain = index([
+      ['CS 8', { prerequisites: ['CS 3A'] }],
+      ['CS 3A', { prerequisites: ['CS 2'] }],
+      ['CS 2', {}],
+    ]);
+    const agreement: Record<string, { code: string; title: string; units: number }> = {
+      CS3A: { code: 'CS 003A', title: 'FUNDAMENTALS II', units: 3 },
+      CS2: { code: 'CS 002', title: 'FUNDAMENTALS I', units: 4 },
+    };
+    const info = (code: string) => agreement[canonicalCourseKey(code)] ?? null;
+
+    const schedule = buildSchedule(
+      [{ kind: 'and', priority: 'admission', courses: [course('CS 008', 3)] }],
+      { ...base, prereqs: chain, courseInfo: info },
+    );
+    expect(schedule.addedPrerequisites.map((a) => [a.course.code, a.neededFor])).toEqual([
+      ['CS 003A', 'CS 008'],
+      ['CS 002', 'CS 003A'],
+    ]);
+    expect(at(schedule, 'CS 002')).toBeLessThan(at(schedule, 'CS 003A'));
+    expect(at(schedule, 'CS 003A')).toBeLessThan(at(schedule, 'CS 008'));
+    // Added for an admission-required course, so it gates the target too.
+    const aimed = buildSchedule(
+      [{ kind: 'and', priority: 'admission', courses: [course('CS 008', 3)] }],
+      { ...base, prereqs: chain, courseInfo: info, target: { kind: 'Fall', year: 2027 } },
+    );
+    // Three terms of chain against two before Fall 2027: cannot be met.
+    expect(aimed.transferByTarget).toBe(false);
+  });
+
+  it('never runs away on a catalog that states a cycle', () => {
+    const cyclic = index([
+      ['AAA 1', { prerequisites: ['AAA 2'] }],
+      ['AAA 2', { prerequisites: ['AAA 1'] }],
+    ]);
+    const info = (code: string) => ({ code, title: code, units: 3 });
+    const schedule = buildSchedule([g(course('AAA 1', 3))], { ...base, prereqs: cyclic, courseInfo: info });
+    expect(schedule.addedPrerequisites.length).toBeLessThanOrEqual(12);
+    expect(schedule.terms.flatMap((t) => t.courses.map((c) => c.code))).toContain('AAA 1');
   });
 });

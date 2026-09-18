@@ -92,6 +92,14 @@ export type MissingPrereq = {
   // What its catalog says has to come first, as the catalog writes it. More
   // than one means alternatives: any of them opens the course.
   needs: string[];
+  // Why it was reported rather than added to the plan.
+  //
+  //   placement  the catalog says placement can stand in for it, and a
+  //              student who placed past it does not owe it
+  //   unlisted   none of what it names is on the agreement or the general
+  //              education pattern, so it is a pre-transfer course or one
+  //              this cannot name, and either way to check rather than take
+  reason: 'placement' | 'unlisted';
 };
 
 export type Schedule = {
@@ -136,9 +144,18 @@ export type Schedule = {
   // flat sentence "you cannot be ready to transfer", for a student who could.
   // Null when there is no target.
   transferByTarget: boolean | null;
-  // Courses whose prerequisites are missing from the plan entirely. Empty
-  // when the college's catalog could not be read, since nothing is known then
-  // and a warning invented from nothing is worse than none.
+  // Prerequisites the college requires that the agreement never named, put
+  // into the plan as real courses in earlier terms. Empty when the catalog
+  // could not be read.
+  addedPrerequisites: AddedPrerequisite[];
+  // Units across the added prerequisites, so the total a student is shown
+  // can say how much of it the agreement did not mention.
+  addedUnits: number;
+  // Courses whose prerequisites could not be added and are still missing:
+  // ones the catalog says placement can stand in for, and ones this could
+  // not name as a course. Empty when the college's catalog could not be read,
+  // since nothing is known then and a warning invented from nothing is worse
+  // than none.
   missingPrereqs: MissingPrereq[];
   // What did not fit before the target, in the order it would have been
   // taken. Not drawn as terms, since those would be terms the student is not
@@ -305,9 +322,27 @@ export type ScheduleOptions = {
   // read, and the schedule then falls back to reading order out of course
   // numbers, which is what it did everywhere before catalogs were read at all.
   prereqs?: PrereqIndex;
-  // Courses the student has already finished or claimed. Only read to keep a
-  // prerequisite they already hold from being reported as missing.
+  // Courses the student has already finished or claimed. Read to keep a
+  // prerequisite they already hold out of the plan and out of the warnings.
   held?: Iterable<string>;
+  // How to turn a code the catalog named into a course with a title and a
+  // unit count: the agreement's own option lists and the college's general
+  // education list know most of them. A prerequisite this cannot name is
+  // reported rather than added, since a course of unknown size cannot be
+  // scheduled honestly.
+  courseInfo?: (code: string) => Course | null;
+};
+
+// A course the plan added because the college requires it before something
+// on the agreement. Pasadena's MATH 005B requires MATH 005A, and the UCI
+// agreement names only 005B; a plan that schedules 005B alone sends a student
+// to registration without the course they need first.
+export type AddedPrerequisite = {
+  // Named from the agreement's own option lists or the general education
+  // pattern, so it carries a real title and unit count.
+  course: Course;
+  // The course on the plan it was added for.
+  neededFor: string;
 };
 
 export function buildSchedule(
@@ -363,6 +398,109 @@ export function buildSchedule(
     return unitsPerTerm;
   };
 
+  // Put the prerequisites the college requires into the plan, ahead of the
+  // packing, as real courses.
+  //
+  // The agreement names the course at the college that satisfies a
+  // university requirement. It does not name the courses the college makes a
+  // student take first: MATH 005A before 005B, CS 002 before CS 003A. A plan
+  // that schedules only what the agreement names sends a student to
+  // registration without them. So every stated prerequisite that is neither
+  // in the plan nor already held is added, with the priority of the course
+  // that needs it, and its own prerequisites are added in turn.
+  //
+  // Two kinds are reported instead of added. Where the catalog says placement
+  // can stand in, "MATH 008 or MATH 009, or placement based on assessment", a
+  // student who placed past it owes nothing, and adding it would put a course
+  // most transfer students never take into every plan. And where none of the
+  // alternatives is on the agreement or the general education pattern.
+  //
+  // That second line is what keeps intermediate algebra out of a calculus
+  // plan. Pasadena's CS 002 states "MATH 008 or MATH 009" with no mention of
+  // placement, and MATH 008 is in no agreement and no transfer pattern: it is
+  // a pre-transfer course, and a student headed for calculus has placed past
+  // it. The agreement and the pattern between them name every course a
+  // transfer plan can honestly contain; a prerequisite outside both is a
+  // pre-transfer course or an unknown one, and either way is something to
+  // check rather than something to schedule.
+  //
+  // Alternatives are flattened by the catalog readers, so "A or B" adds the
+  // first that can be named, preferring a non-honours section. A student who
+  // would rather take B ticks it as done or claims it, and A drops out.
+  const addedPrerequisites: AddedPrerequisite[] = [];
+  const missingPrereqs: MissingPrereq[] = [];
+  const expanded: PlannedGroup[] = [...groups];
+
+  if (prereqs) {
+    const heldKeys = new Set([...(options.held ?? [])].map(canonicalCourseKey));
+
+    // Courses the college itself treats as placement-level: named as a
+    // prerequisite somewhere in the catalog with placement offered as the
+    // other way in. Pasadena says MATH 009 or placement for MATH 005A, and
+    // then just "MATH 008 or MATH 009" for CS 002. The second line does not
+    // repeat the placement clause, but the college has already said what
+    // kind of course MATH 009 is, and a student on a calculus track has
+    // placed past it. So a prerequisite made only of placement-level courses
+    // is reported, whichever line it came from.
+    const placeable = new Set<string>();
+    for (const entry of prereqs.values()) {
+      if (!entry.placementAlternative) continue;
+      for (const need of entry.prerequisites) placeable.add(canonicalCourseKey(need));
+    }
+    const inPlan = new Set(
+      expanded.flatMap((g) => g.courses.map((c) => canonicalCourseKey(c.code))),
+    );
+    const reported = new Set<string>();
+
+    // Breadth first over the plan as it grows, bounded so a catalog cycle or
+    // a very deep chain cannot run away. Twelve added courses is more than any
+    // real chain seen and less than would ever be right.
+    const pending: { code: string; priority: Priority }[] = expanded.flatMap((g) =>
+      g.courses.map((c) => ({ code: c.code, priority: g.priority ?? 'admission' })),
+    );
+    while (pending.length > 0 && addedPrerequisites.length < 12) {
+      const { code, priority } = pending.shift()!;
+      const entry = prereqs.get(canonicalCourseKey(code));
+      if (!entry || entry.prerequisites.length === 0) continue;
+
+      const stated = entry.prerequisites;
+      const satisfied = stated.some((need) => {
+        const key = canonicalCourseKey(need);
+        return inPlan.has(key) || heldKeys.has(key);
+      });
+      if (satisfied) continue;
+
+      if (entry.placementAlternative || stated.every((need) => placeable.has(canonicalCourseKey(need)))) {
+        if (!reported.has(code)) {
+          reported.add(code);
+          missingPrereqs.push({ course: code, needs: stated, reason: 'placement' });
+        }
+        continue;
+      }
+
+      // The first alternative the agreement or the pattern can name,
+      // non-honours first.
+      const ordered = [...stated].sort((a, b) => Number(/H$/i.test(a)) - Number(/H$/i.test(b)));
+      let course: Course | null = null;
+      for (const need of ordered) {
+        course = options.courseInfo?.(need) ?? null;
+        if (course) break;
+      }
+      if (!course) {
+        if (!reported.has(code)) {
+          reported.add(code);
+          missingPrereqs.push({ course: code, needs: stated, reason: 'unlisted' });
+        }
+        continue;
+      }
+
+      expanded.push({ kind: 'and', priority, courses: [course] });
+      inPlan.add(canonicalCourseKey(course.code));
+      addedPrerequisites.push({ course, neededFor: code });
+      pending.push({ code: course.code, priority });
+    }
+  }
+
   // A course and the lab belonging to it are one thing to schedule. They
   // share a sequence key, so they go into a block and are placed together or
   // not at all: a term with the lecture and not its lab is not a term anybody
@@ -372,7 +510,7 @@ export function buildSchedule(
   // Blocks rather than adjacency because the two are not always neighbours:
   // one real requirement lists CS 003B, CS 033, CS 003BL in that order, and a
   // run of adjacent courses would not catch it.
-  const queue = groups.flatMap((group, groupIndex) => {
+  const queue = expanded.flatMap((group, groupIndex) => {
     // A group with no stated priority is a minimum. Hand-built groups in
     // tests and any caller predating the distinction keep the old behaviour,
     // where every requirement gated the target.
@@ -806,31 +944,6 @@ export function buildSchedule(
   const shown =
     target === null ? packed : packed.filter((t) => termIndex(t.ref) < termIndex(target));
 
-  // Every course the plan schedules whose college requires something first
-  // that is neither scheduled here nor already held.
-  //
-  // Only alternatives ALL missing count. A catalog stating "MATH 005A or
-  // MATH 005AH" is satisfied by either, so reporting it while the student
-  // holds one of them would be a warning about nothing.
-  //
-  // Over the terms shown, not the whole packing: a course that did not fit
-  // before the target is not in the plan above, and a warning about it would
-  // point at nothing on the page.
-  const scheduled = new Set(
-    shown.flatMap((t) => t.courses.map((c) => canonicalCourseKey(c.code))),
-  );
-  const covered = (code: string) => scheduled.has(code) || held.has(code);
-
-  const missingPrereqs: MissingPrereq[] = !prereqs
-    ? []
-    : shown
-        .flatMap((t) => t.courses)
-        .flatMap((course) => {
-          const stated = prereqs.get(canonicalCourseKey(course.code))?.prerequisites ?? [];
-          if (stated.length === 0 || stated.some((need) => covered(canonicalCourseKey(need)))) return [];
-          return [{ course: course.code, needs: stated }];
-        });
-
   const readyAfter = shown.length > 0 ? shown[shown.length - 1].ref : null;
   const afterTarget = lateItems(packed);
   const overflow = total(afterTarget);
@@ -846,6 +959,8 @@ export function buildSchedule(
     earliestTransfer: lastGating ? nextTerm(lastGating.ref, includeSummer, includeWinter) : null,
     meetsTarget: target ? overflow === 0 : null,
     overflowUnits: overflow,
+    addedPrerequisites,
+    addedUnits: addedPrerequisites.reduce((sum, a) => sum + a.course.units, 0),
     missingPrereqs,
     transferByTarget: target ? afterTarget.every((i) => !gating(i)) : null,
     afterTarget,

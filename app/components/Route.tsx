@@ -32,6 +32,8 @@ export function RouteView({
   // college for; this is what would have needed a term after it, named
   // rather than drawn.
   const leftOut = target !== null ? schedule.afterTarget : [];
+  // Which courses on the route were added for a prerequisite, and for what.
+  const addedFor = new Map(schedule.addedPrerequisites.map((a) => [a.course.code, a.neededFor]));
   const leftOutCourses = leftOut.filter((i) => i.kind === 'course');
   const leftOutAreas = leftOut.filter((i) => i.kind === 'area');
   const doubled = schedule.terms
@@ -43,28 +45,70 @@ export function RouteView({
 
   return (
     <>
-      {schedule.missingPrereqs.length > 0 && (
-        <div className="route-block" data-warn="true">
+      {schedule.addedPrerequisites.length > 0 && (
+        <div className="route-block" data-added="true">
           {/* The one thing on this page a student cannot find out from the
-              agreement, and the one that stops them at the registration page.
-              Named as courses, with what opens each, so it can be acted on. */}
+              agreement. The agreement names the course that satisfies a
+              university requirement; the college names what has to come
+              first. Those are in the plan now, in earlier terms, and this says
+              which they are and why, so a student who already has one can
+              tick it and watch it drop out. */}
           <b>
-            {schedule.missingPrereqs.length === 1
-              ? 'One course here needs something first that this plan does not include.'
-              : `${schedule.missingPrereqs.length} courses here need something first that this plan does not include.`}
+            {schedule.addedPrerequisites.length === 1
+              ? 'One course added that the agreement does not list.'
+              : `${schedule.addedPrerequisites.length} courses added that the agreement does not list.`}
           </b>
           <ul>
-            {schedule.missingPrereqs.map((m) => (
-              <li key={m.course}>
-                <b>{m.course}</b> needs {m.needs.map(padCourseCode).join(' or ')}
+            {schedule.addedPrerequisites.map((a) => (
+              <li key={a.course.code}>
+                <b>{padCourseCode(a.course.code)}</b> before {padCourseCode(a.neededFor)}
               </li>
             ))}
           </ul>
           <span>
-            Your college requires these; the agreement does not list them, so they are not in the
-            plan above. If you have already taken one, tick it under &ldquo;Where you are&rdquo; or
-            mark the requirement as already held. If you have not, it is real work to add and worth
-            taking to a counselor.
+            Your college requires each of these before the course after it, and the agreement does
+            not mention them, so they are placed in the terms above where they have to be. If you
+            have already taken one, tick it under &ldquo;Where you are&rdquo; and it comes out.
+            Where the catalog offers a choice, the first is added; take the other by ticking it.
+          </span>
+        </div>
+      )}
+
+      {schedule.missingPrereqs.length > 0 && (
+        <div className="route-block" data-warn="true">
+          {/* Requirements that could not be put into the plan: ones placement
+              can stand in for, which most transfer students have placed past,
+              and ones this could not name as a course. Named, with the reason,
+              so the student knows what to check rather than what to take. */}
+          <b>
+            {schedule.missingPrereqs.length === 1
+              ? 'One course here has a requirement to check.'
+              : `${schedule.missingPrereqs.length} courses here have a requirement to check.`}
+          </b>
+          <ul>
+            {schedule.missingPrereqs.map((m) => (
+              <li key={m.course}>
+                <b>{padCourseCode(m.course)}</b> needs {m.needs.map(padCourseCode).join(' or ')}
+                {m.reason === 'placement' ? ', or placement' : ''}
+              </li>
+            ))}
+          </ul>
+          <span>
+            {schedule.missingPrereqs.some((m) => m.reason === 'placement') && (
+              <>
+                Where placement is an option, your college lets an assessment stand in for the
+                course, which is how most transfer students clear it. Not added to the plan for that
+                reason; if you have not placed past it, it is real work.{' '}
+              </>
+            )}
+            {schedule.missingPrereqs.some((m) => m.reason === 'unlisted') && (
+              <>
+                The others name courses that are on neither this agreement nor the general
+                education pattern, which usually means a pre-transfer course a student places past.
+                Not added for that reason; if you have not placed past it, it is real work, and
+                worth a counselor.
+              </>
+            )}
           </span>
         </div>
       )}
@@ -161,10 +205,18 @@ export function RouteView({
                   // route, so it is marked where the student reads the plan
                   // rather than only counted in the panel below.
                   const areas = areasCleared(doubleCount, c.code);
+                  const added = addedFor.get(c.code);
                   return (
-                    <span className="course-chip" key={c.code} data-double={areas.length > 0}>
+                    <span
+                      className="course-chip"
+                      key={c.code}
+                      data-double={areas.length > 0}
+                      data-added={added !== undefined}
+                      title={added ? `Added: your college requires it before ${padCourseCode(added)}` : undefined}
+                    >
                       <span className="code">{c.code}</span>
                       <span>{c.title}</span>
+                      {added && <b className="added-badge">before {padCourseCode(added)}</b>}
                       {areas.length > 0 && (
                         <b
                           className="double-badge"

@@ -41,6 +41,9 @@ describe('parseCourseLeafCourse', () => {
       corequisites: ['CS 3AL'],
       recommended: [],
       formerly: [],
+      units: undefined,
+      title: undefined,
+      placementAlternative: false,
     });
   });
 
@@ -351,5 +354,31 @@ describe('sameCourse', () => {
     // compares as itself.
     expect(sameCourse('CHEM 1AH', 'CHEM 1A')).toBe(true);
     expect(sameCourse('CHEM 1A', 'CHEM 1B')).toBe(false);
+  });
+});
+
+describe('what a prerequisite needs to become a course in the plan', () => {
+  it('reads the units and title off the newer template', () => {
+    const xml = course(
+      'MATH 005A',
+      `<div class="noindent"><span class="text detail-title margin--tiny"><strong>SINGLE VARIABLE CALCULUS I</strong></span></div>
+       <div class="noindent"><span class="text detail-hours_html"><strong>5 unit</strong></span></div>` +
+        section('Prerequisite(s)', `${link('MATH 008')} or ${link('MATH 009')}, or placement based on the Math assessment process`),
+    );
+    const parsed = parseCourseLeafCourse(xml);
+    expect(parsed?.units).toBe(5);
+    expect(parsed?.title).toBe('SINGLE VARIABLE CALCULUS I');
+    // Placement can stand in for MATH 008, so a student who placed into
+    // calculus does not owe it. Said, so the planner reports rather than adds.
+    expect(parsed?.placementAlternative).toBe(true);
+  });
+
+  it('reads them off the older template too, and knows a hard prerequisite from a soft one', () => {
+    const page = `<div class="courseblock"><p class="courseblocktitle"><strong>MATH 0016A. Calculus I</strong></p>
+      <p class="courseblockdesc"><i>Units: 4</i><br/>Prerequisite: Completion of MATH 0012 with grade of "C" or better</p></div>`;
+    const parsed = parseCourseLeafSubjectPage(page, 'MATH 16A');
+    expect(parsed?.units).toBe(4);
+    expect(parsed?.title).toBe('Calculus I');
+    expect(parsed?.placementAlternative).toBe(false);
   });
 });

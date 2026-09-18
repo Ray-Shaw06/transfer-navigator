@@ -1,6 +1,6 @@
 import type { CoursePrereqs } from './types';
 import { normalizeCourseCode, sameCourse } from './normalize';
-import { codesFromText, formerlyCodes, stripHtml } from './text';
+import { codesFromText, formerlyCodes, offersPlacement, stripHtml, unitsFromText } from './text';
 
 // Reads prerequisites out of an eLumen catalog.
 //
@@ -89,6 +89,20 @@ const KIND: Record<string, Kind> = {
   advisory: 'recommended',
 };
 
+// The course's title. Templates put it in an <h2> with the code, "CIS 007 -
+// Python Programming", or before the code in a span, "Calculus and Analytic
+// Geometry MATH 150:". Whichever, the code and its separator are cut away.
+function elumenTitle(html: string, code: string): string | undefined {
+  const heading = /<h2[^>]*>([\s\S]*?)<\/h2>/.exec(html)?.[1];
+  const raw = heading ? stripHtml(heading) : stripHtml(html).slice(0, 120);
+  const escaped = code.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s*');
+  const name = raw
+    .replace(new RegExp(`^${escaped}\\s*[-:.]?\\s*`, 'i'), '')
+    .replace(new RegExp(`\\s*${escaped}\\s*:?.*$`, 'i'), '')
+    .trim();
+  return name || undefined;
+}
+
 // `code` is the course that was asked for, because eLumen's templates put the
 // code in different places on the page and the caller already knows it. An
 // empty body is a course the catalog does not have.
@@ -103,6 +117,9 @@ export function parseElumenCourse(html: string, code: string): CoursePrereqs | n
     corequisites: [],
     recommended: [],
     formerly: formerlyCodes(text).map(normalizeCourseCode),
+    units: unitsFromText(text),
+    title: elumenTitle(html, code),
+    placementAlternative: false,
   };
   const labels = [...text.matchAll(LABEL)];
 
@@ -114,6 +131,9 @@ export function parseElumenCourse(html: string, code: string): CoursePrereqs | n
     // Y to the prerequisite. codesFromText then stops at the sentence end.
     const from = label.index + label[0].length;
     const to = labels[i + 1]?.index ?? text.length;
+    if (kind === 'prerequisites' && offersPlacement(text.slice(from, to))) {
+      found.placementAlternative = true;
+    }
 
     for (const raw of codesFromText(text.slice(from, to))) {
       const course = normalizeCourseCode(raw);

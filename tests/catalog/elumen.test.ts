@@ -34,6 +34,9 @@ describe('parseElumenCourse', () => {
       corequisites: [],
       recommended: [],
       formerly: [],
+      units: 5,
+      title: 'General Biology: Organisms',
+      placementAlternative: false,
     });
   });
 
@@ -168,5 +171,23 @@ describe('the course\'s own honours section', () => {
   it('is not a prerequisite of the course', () => {
     const parsed = parseElumenCourse(mission('Prerequisite: BIO 001A or BIO 001BH'), 'BIO 001B');
     expect(parsed?.prerequisites).toEqual(['BIO 1A']);
+  });
+});
+
+describe('what a prerequisite needs to become a course in the plan', () => {
+  it('reads the title from the heading and the units from the page', () => {
+    const parsed = parseElumenCourse(mission('Prerequisite: BIO 001A'), 'BIO 001B');
+    expect(parsed?.title).toBe('General Biology: Organisms');
+    expect(parsed?.units).toBe(5);
+  });
+
+  it('reads a title written before the code', () => {
+    const parsed = parseElumenCourse(
+      antelope('Prerequisite: Completion of MATH 140 or MATH 149 or placement by multiple measures.'),
+      'MATH 150',
+    );
+    expect(parsed?.title).toBe('Calculus and Analytic Geometry');
+    expect(parsed?.units).toBe(5);
+    expect(parsed?.placementAlternative).toBe(true);
   });
 });

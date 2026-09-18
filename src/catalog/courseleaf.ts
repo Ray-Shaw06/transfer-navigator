@@ -1,6 +1,6 @@
 import type { CoursePrereqs } from './types';
 import { normalizeCourseCode, sameCourse } from './normalize';
-import { codesFromText, formerlyCodes, stripHtml } from './text';
+import { codesFromText, formerlyCodes, offersPlacement, stripHtml, unitsFromText } from './text';
 
 // Reads prerequisites out of a CourseLeaf catalog.
 //
@@ -69,16 +69,38 @@ function kindOf(label: string): Kind | null {
   return null;
 }
 
+// The course's title, from whichever template the page uses. The newer puts
+// it in a span classed detail-title; the older runs it on after the code in
+// the title element, "MATH 0010. Problem Solving", with the units sometimes
+// in a span in the middle.
+const DETAIL_TITLE = /detail-title[^>]*>\s*<strong>\s*([^<]+?)\s*<\/strong>/;
+const TITLE_ELEMENT = /courseblocktitle[^>]*>([\s\S]*?)<\/(?:p|div|h[1-6])>/;
+
+function courseLeafTitle(xml: string): string | undefined {
+  const detail = DETAIL_TITLE.exec(xml)?.[1];
+  if (detail) return stripHtml(detail);
+  const element = TITLE_ELEMENT.exec(xml)?.[1];
+  if (!element) return undefined;
+  const text = stripHtml(element.replace(/<span[^>]*>[\s\S]*?<\/span>/g, ' '));
+  // Drop the code at the front and any punctuation between it and the name.
+  const name = text.replace(/^[A-Z][A-Za-z&]{1,9}[ -]?[A-Z]?\d{1,4}[A-Z]{0,2}(?:\s[A-Z])?[.:\s]*/, '').trim();
+  return name || undefined;
+}
+
 export function parseCourseLeafCourse(xml: string): CoursePrereqs | null {
   const code = /<course code="([^"]+)"/.exec(xml);
   if (!code) return null;
 
+  const text = stripHtml(xml);
   const found: CoursePrereqs = {
     code: normalizeCourseCode(code[1]),
     prerequisites: [],
     corequisites: [],
     recommended: [],
-    formerly: formerlyCodes(stripHtml(xml)).map(normalizeCourseCode),
+    formerly: formerlyCodes(text).map(normalizeCourseCode),
+    units: unitsFromText(text),
+    title: courseLeafTitle(xml),
+    placementAlternative: false,
   };
 
   for (const label of xml.matchAll(LABEL)) {
@@ -88,6 +110,9 @@ export function parseCourseLeafCourse(xml: string): CoursePrereqs | null {
     const after = xml.slice(label.index + label[0].length);
     const end = END_OF_LINE.exec(after);
     const section = ['', label[1], after.slice(0, end ? end.index : 600)];
+    if (kind === 'prerequisites' && offersPlacement(stripHtml(section[2]))) {
+      found.placementAlternative = true;
+    }
     // Links where there are links, words where there are not. Never both: a
     // college that links its courses has already said exactly which they are,
     // and re-reading the surrounding prose would only add what it chose to

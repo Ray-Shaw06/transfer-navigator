@@ -6,6 +6,8 @@ import type { Agreement } from '../src/parser/agreement';
 import { buildPlan } from '../src/planner/plan';
 import { buildSchedule, currentTerm, earliestTerm } from '../src/planner/schedule';
 import { clampUnits, limitsFor } from '../src/planner/limits';
+import { canonicalCourseKey } from '../src/catalog/normalize';
+import type { Course } from '../src/parser/types';
 import { geStatus } from '../src/planner/ge';
 import { buildDoubleCountIndex, geScheduleItems } from '../src/planner/doubleCount';
 import {
@@ -205,11 +207,50 @@ export default function Home() {
   // typical otherwise. What the load sliders are held to.
   const limits = useMemo(() => limitsFor(college), [college]);
 
+  //
+  // And the courses those courses require, once known, so that a prerequisite
+  // the plan adds is itself asked about and its own prerequisites can be
+  // added in turn. Each answer can name more courses; the set stops growing
+  // when the catalog stops naming new ones, which is a chain or two deep.
+  const [prereqCodes, setPrereqCodes] = useState<string[]>([]);
   const planCodes = useMemo(
-    () => (plan ? plan.remainingGroups.flatMap((g) => g.courses.map((c) => c.code)) : []),
-    [plan],
+    () => [
+      ...new Set([
+        ...(plan ? plan.remainingGroups.flatMap((g) => g.courses.map((c) => c.code)) : []),
+        ...prereqCodes,
+      ]),
+    ],
+    [plan, prereqCodes],
   );
   const prereqs = usePrereqs(college, planCodes);
+  useEffect(() => {
+    const named = [...prereqs.index.values()].flatMap((e) => e.prerequisites);
+    setPrereqCodes((have) => {
+      const next = [...new Set([...have, ...named])];
+      return next.length === have.length ? have : next;
+    });
+  }, [prereqs.index]);
+  // A new college is a new catalog; nothing named by the old one applies.
+  useEffect(() => setPrereqCodes([]), [college]);
+
+  // How to name a course the catalog mentions but the agreement never did.
+  // The agreement's own option lists and the college's general education
+  // list between them know most courses a student would be sent to take
+  // first, with the title and units the route needs to draw them.
+  const courseInfo = useMemo(() => {
+    const known = new Map<string, Course>();
+    for (const row of agreement?.rows ?? []) {
+      if (row.sending.kind !== 'options') continue;
+      for (const option of row.sending.options) {
+        for (const c of option.courses) known.set(canonicalCourseKey(c.code), c);
+      }
+    }
+    for (const c of ge?.byCourse ?? []) {
+      const key = canonicalCourseKey(c.code);
+      if (!known.has(key)) known.set(key, { code: c.code, title: c.title, units: c.units });
+    }
+    return (code: string) => known.get(canonicalCourseKey(code)) ?? null;
+  }, [agreement, ge]);
 
   const schedule = useMemo(
     () =>
@@ -234,16 +275,17 @@ export default function Home() {
                   : clampUnits(settings.winterUnits, limits.winter),
               target: settings.target,
               prereqs: prereqs.index.size > 0 ? prereqs.index : undefined,
-              // So a prerequisite the student already holds is not reported
-              // back to them as missing.
+              // So a prerequisite the student already holds is neither added
+              // to the plan nor reported back to them as missing.
               held: [...completed, ...cleared],
+              courseInfo,
             },
             // General education fills whatever room each term has left after
             // major preparation, which is the part with sequences to respect.
             geView ? geScheduleItems(geView) : [],
           )
         : null,
-    [plan, settings, geView, prereqs, completed, cleared, limits],
+    [plan, settings, geView, prereqs, completed, cleared, limits, courseInfo],
   );
 
   // Mirror the plan into the address bar. replaceState rather than pushState:
