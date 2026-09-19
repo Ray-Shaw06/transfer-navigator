@@ -1,5 +1,5 @@
 import { prereqsFor } from '../../../src/catalog/client';
-import { badRequest, cached, failed, intParam, DAY } from '../../../src/assist/http';
+import { badRequest, cached, failed, intParam, uncached, DAY } from '../../../src/assist/http';
 
 // A college publishes its catalog once a year and then leaves it alone, so
 // this is cached harder than anything else here. As with the ASSIST routes,
@@ -30,7 +30,11 @@ export async function GET(request: Request) {
   }
 
   try {
-    return cached(await prereqsFor(college, codes), YEAR);
+    const answer = await prereqsFor(college, codes);
+    // An answer with a failed fetch behind it is served, since most of a
+    // catalog beats none, but never cached: the next student to plan this
+    // asks again, instead of inheriting a blip for a year.
+    return answer.complete ? cached(answer, YEAR) : uncached(answer);
   } catch (error) {
     return failed(error);
   }

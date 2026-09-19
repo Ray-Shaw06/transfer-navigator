@@ -23,21 +23,31 @@ const TIMEOUT_MS = 8000;
 // sockets to one college at once. A plan holds ten or so courses.
 const CONCURRENCY = 6;
 
-async function text(url: string): Promise<string | null> {
+// One fetch, and whether its answer can be trusted to stay put. A catalog
+// that answers 404 does not have the course, today or next year, and that
+// is an answer. A catalog that timed out, refused the connection, answered
+// 5xx, or put a bot challenge in front of the page may well answer properly
+// next time, and nothing built on it may be cached as if it were the truth.
+type Fetched = { body: string | null; shaky: boolean };
+
+async function text(url: string): Promise<Fetched> {
   const control = new AbortController();
   const timer = setTimeout(() => control.abort(), TIMEOUT_MS);
   try {
     const response = await fetch(url, { signal: control.signal });
-    return response.ok ? await response.text() : null;
+    if (response.ok && response.status !== 202) return { body: await response.text(), shaky: false };
+    return { body: null, shaky: response.status !== 404 && response.status !== 410 };
   } catch {
     // A catalog that is slow, moved, or down is not an error a student needs
     // to see. The planner falls back to reading order from course numbers,
     // which is what it did before any of this existed.
-    return null;
+    return { body: null, shaky: true };
   } finally {
     clearTimeout(timer);
   }
 }
+
+type Get = (url: string) => Promise<string | null>;
 
 // One course from one catalog, whichever platform it is on. `site` is only
 // meaningful for eLumen, where it names the catalog year being published.
@@ -45,17 +55,18 @@ async function fetchOne(
   source: CatalogSource,
   code: string,
   site: string | null,
+  get: Get,
 ): Promise<CoursePrereqs | null> {
   if (source.platform === 'elumen') {
     if (!site) return null;
     for (const url of elumenCourseUrls(source.host, site, code)) {
-      const body = await text(url);
+      const body = await get(url);
       const parsed = body === null ? null : parseElumenCourse(body, code);
       if (parsed) return parsed;
     }
     return null;
   }
-  const body = await text(courseLeafUrl(source.host, code));
+  const body = await get(courseLeafUrl(source.host, code));
   return body === null ? null : parseCourseLeafCourse(body);
 }
 
@@ -65,12 +76,24 @@ async function fetchOne(
 // Returns an empty result rather than throwing for a college with no catalog
 // entry, so every caller has one code path: order by what came back, and fall
 // back where nothing did.
-export async function prereqsFor(
-  college: number,
-  codes: string[],
-): Promise<{ supported: boolean; courses: CoursePrereqs[] }> {
+// `complete` says whether every fetch behind the answer got a real answer,
+// found or not found. An answer with a failure behind it is still returned,
+// since a plan ordered by most of the catalog beats one ordered by none, but
+// it must not be cached: the route in front of this caches for a year, and
+// one blip during the site lookup would otherwise pin an empty answer to
+// that plan's URL for everyone who plans it.
+export type CatalogAnswer = { supported: boolean; courses: CoursePrereqs[]; complete: boolean };
+
+export async function prereqsFor(college: number, codes: string[]): Promise<CatalogAnswer> {
   const source = catalogFor(college);
-  if (!source) return { supported: false, courses: [] };
+  if (!source) return { supported: false, courses: [], complete: true };
+
+  let shaky = false;
+  const get: Get = async (url) => {
+    const fetched = await text(url);
+    if (fetched.shaky) shaky = true;
+    return fetched.body;
+  };
 
   // Deduplicated on the normalised code so MATH 005A and MATH 5A are asked
   // about once, but FETCHED with the spelling the caller gave, because that is
@@ -90,8 +113,8 @@ export async function prereqsFor(
   const site =
     source.platform !== 'elumen'
       ? null
-      : (source.site ?? parseElumenSite((await text(elumenSiteUrl(source.host))) ?? ''));
-  if (source.platform === 'elumen' && !site) return { supported: true, courses: [] };
+      : (source.site ?? parseElumenSite((await get(elumenSiteUrl(source.host))) ?? ''));
+  if (source.platform === 'elumen' && !site) return { supported: true, courses: [], complete: !shaky };
 
   const found: CoursePrereqs[] = [];
 
@@ -101,7 +124,7 @@ export async function prereqsFor(
   const subjectPage = (code: string): Promise<string | null> => {
     if (source.platform !== 'courseleaf' || !source.subjectPage) return Promise.resolve(null);
     const url = courseLeafSubjectUrl(source.host, source.subjectPage, code);
-    if (!subjectPages.has(url)) subjectPages.set(url, text(url));
+    if (!subjectPages.has(url)) subjectPages.set(url, get(url));
     return subjectPages.get(url)!;
   };
 
@@ -111,7 +134,7 @@ export async function prereqsFor(
   const formerly = async (code: string): Promise<CoursePrereqs | null> => {
     const want = canonicalCourseKey(code);
     for (const candidate of statewideCandidates(code)) {
-      if (!statewide.has(candidate)) statewide.set(candidate, fetchOne(source, candidate, site));
+      if (!statewide.has(candidate)) statewide.set(candidate, fetchOne(source, candidate, site, get));
       const course = await statewide.get(candidate)!;
       if (course?.formerly.some((f) => canonicalCourseKey(f) === want)) {
         return { ...course, code: normalizeCourseCode(code) };
@@ -130,7 +153,7 @@ export async function prereqsFor(
       let course: CoursePrereqs | null = null;
       if (!(source.platform === 'courseleaf' && source.subjectPageOnly)) {
         for (const spelling of catalogSpellings(wanted[i])) {
-          course = await fetchOne(source, spelling, site);
+          course = await fetchOne(source, spelling, site, get);
           if (course) break;
         }
       }
@@ -155,5 +178,5 @@ export async function prereqsFor(
   // Sorted so the same request gives the same bytes, which is what lets the
   // response be cached and compared.
   found.sort((a, b) => a.code.localeCompare(b.code));
-  return { supported: true, courses: found };
+  return { supported: true, courses: found, complete: !shaky };
 }

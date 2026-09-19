@@ -18,6 +18,12 @@ export function cached<T>(body: T, seconds: number): NextResponse {
   });
 }
 
+// A good answer that must not be kept: one that is right for now but rests
+// on something that failed and may not fail next time.
+export function uncached<T>(body: T): NextResponse {
+  return NextResponse.json(body, { headers: { 'Cache-Control': 'no-store' } });
+}
+
 // Every failure is uncached, so a blip does not stick to a URL for a month.
 // The `error` field is a code the UI switches on; `message` is only ever
 // shown as supporting detail.
