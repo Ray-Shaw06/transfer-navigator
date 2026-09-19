@@ -131,16 +131,19 @@ export default function Home() {
   const failure = catalogFailure ?? majorsFailure ?? agreementFailure;
 
   // Keep the chosen year valid for the chosen pair, but only once the pair's
-  // real years have arrived. Running before that would clear a year restored
-  // from a link, because `years` is empty until partners load.
+  // real years have arrived. `years` is the catalog's years filtered by the
+  // partner's, two separate fetches, and is empty until both have landed.
+  // Running on the first alone would clear a year restored from a link, and
+  // with it the major, since the pair effect below fires on every change of
+  // year and its one restore has been spent by then.
   useEffect(() => {
-    if (partners === null) return;
+    if (partners === null || catalog === null) return;
     if (years.length === 0) {
       if (year !== null) setYear(null);
       return;
     }
     if (year === null || !years.some((y) => y.id === year)) setYear(years[0].id);
-  }, [partners, years, year]);
+  }, [partners, catalog, years, year]);
 
   // The pair changed, so the previous major no longer applies.
   useEffect(() => {
