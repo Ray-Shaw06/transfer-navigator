@@ -653,3 +653,116 @@ describe('credit this tool cannot see', () => {
     expect(plan.remainingUnits).toBe(buildPlan(agreement, []).remainingUnits);
   });
 });
+
+describe('an option something else in the plan needs', () => {
+  // Diablo Valley to UCI, as read. MATH 2A takes MATH 182 (business calculus,
+  // four units) or MATH 192 (calculus I, five units). MATH 2B takes only
+  // MATH 193, and the catalog says MATH 193 needs MATH 192. Cheapest by units
+  // is MATH 182, which puts MATH 182, MATH 192 and MATH 193 all on the plan
+  // when MATH 192 alone would have done.
+  const dvc: Agreement = {
+    ...agreement,
+    rows: [
+      {
+        receiving: [course('MATH 2A', 4)],
+        sending: {
+          kind: 'options',
+          options: [
+            { kind: 'and', courses: [course('MATH 182', 4)] },
+            { kind: 'and', courses: [course('MATH 192', 5)] },
+          ],
+        },
+      },
+      {
+        receiving: [course('MATH 2B', 4)],
+        sending: { kind: 'options', options: [{ kind: 'and', courses: [course('MATH 193', 5)] }] },
+      },
+    ],
+  };
+
+  const math193 = [{ code: 'MATH 193', prerequisites: ['MATH 192'] }];
+
+  it('is chosen over a cheaper one nothing needs', () => {
+    const plan = buildPlan(dvc, [], [], math193);
+    expect(plan.statuses[0].cheapestOption.map((c) => c.code)).toEqual(['MATH 192']);
+    expect(plan.remainingUnits).toBe(10);
+  });
+
+  it('is not chosen when nothing says it is needed', () => {
+    const plan = buildPlan(dvc, []);
+    expect(plan.statuses[0].cheapestOption.map((c) => c.code)).toEqual(['MATH 182']);
+  });
+
+  it('is matched however the catalog spells it', () => {
+    const plan = buildPlan(dvc, [], [], [{ code: 'MATH-193', prerequisites: ['math-192'] }]);
+    expect(plan.statuses[0].cheapestOption.map((c) => c.code)).toEqual(['MATH 192']);
+  });
+
+  it('never displaces an option the student has already completed', () => {
+    const plan = buildPlan(dvc, ['MATH 182'], [], math193);
+    expect(plan.statuses[0].state).toBe('satisfied');
+    expect(plan.statuses[0].satisfiedBy.map((c) => c.code)).toEqual(['MATH 182']);
+  });
+
+  it('breaks a tie between two needed options on units', () => {
+    const both: Agreement = {
+      ...dvc,
+      rows: [
+        {
+          receiving: [course('MATH 2A', 4)],
+          sending: {
+            kind: 'options',
+            options: [
+              { kind: 'and', courses: [course('MATH 192', 5)] },
+              { kind: 'and', courses: [course('MATH 182', 4)] },
+            ],
+          },
+        },
+      ],
+    };
+    const plan = buildPlan(both, [], [], [
+      { code: 'MATH 193', prerequisites: ['MATH 192'] },
+      { code: 'ECON 10', prerequisites: ['MATH 182'] },
+    ]);
+    expect(plan.statuses[0].cheapestOption.map((c) => c.code)).toEqual(['MATH 182']);
+  });
+
+  // Pasadena's I&C SCI 31-33 row, as read. CS 003B goes with CS 033 (seven
+  // units) or with CS 002 (eight), and the catalog says CS 033 needs CS 003B
+  // and CS 003A needs CS 002. CS 003A is on the plan for CS 008, a different
+  // row. The first option needing its own member is not a reason to choose
+  // it; CS 002 being needed from outside the row is.
+  const pcc: Agreement = {
+    ...agreement,
+    rows: [
+      {
+        receiving: [course('I&C SCI 31', 4), course('I&C SCI 32', 4)],
+        sending: {
+          kind: 'options',
+          options: [
+            { kind: 'and', courses: [course('CS 003B', 3), course('CS 033', 3), course('CS 003BL', 1)] },
+            { kind: 'and', courses: [course('CS 003B', 3), course('CS 002', 4), course('CS 003BL', 1)] },
+          ],
+        },
+      },
+      {
+        receiving: [course('I&C SCI 46', 4)],
+        sending: { kind: 'options', options: [{ kind: 'and', courses: [course('CS 008', 3)] }] },
+      },
+    ],
+  };
+
+  it('counts only a need from outside the row', () => {
+    const plan = buildPlan(pcc, [], [], [
+      { code: 'CS 033', prerequisites: ['CS 3B'] },
+      { code: 'CS 3A', prerequisites: ['CS 2'] },
+      { code: 'CS 8', prerequisites: ['CS 3A'] },
+    ]);
+    expect(plan.statuses[0].cheapestOption.map((c) => c.code)).toEqual(['CS 003B', 'CS 002', 'CS 003BL']);
+  });
+
+  it('is not swayed by an option vouching for itself', () => {
+    const plan = buildPlan(pcc, [], [], [{ code: 'CS 033', prerequisites: ['CS 3B'] }]);
+    expect(plan.statuses[0].cheapestOption.map((c) => c.code)).toEqual(['CS 003B', 'CS 033', 'CS 003BL']);
+  });
+});

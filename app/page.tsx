@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { parseAgreement, UnrecognisedAgreementError } from '../src/parser/document';
 import type { Agreement } from '../src/parser/agreement';
-import { buildPlan } from '../src/planner/plan';
+import { buildPlan, type Need } from '../src/planner/plan';
 import { buildSchedule, currentTerm, earliestTerm } from '../src/planner/schedule';
 import { clampUnits, limitsFor } from '../src/planner/limits';
 import { canonicalCourseKey } from '../src/catalog/normalize';
@@ -169,9 +169,19 @@ export default function Home() {
     (c) => partners === null || partners.some((p) => p.id === c.id),
   );
 
+  // Everything the college's catalog has so far said about what the courses
+  // on or near the plan need. Two jobs. The courses it names are asked about
+  // in turn, so a prerequisite the plan adds has its own prerequisites added
+  // after it. And it is handed to the plan, which prefers an option something
+  // else already needs: Diablo Valley's MATH 2A is MATH 182 or MATH 192, and
+  // once the catalog says MATH 193 needs MATH 192, MATH 192 is the right
+  // choice though it costs a unit more. Each answer can name more courses;
+  // the list only grows, and stops when the catalog stops naming new ones.
+  const [needs, setNeeds] = useState<Need[]>([]);
+
   const plan = useMemo(
-    () => (agreement ? buildPlan(agreement, [...completed], cleared) : null),
-    [agreement, completed, cleared],
+    () => (agreement ? buildPlan(agreement, [...completed], cleared, needs) : null),
+    [agreement, completed, cleared, needs],
   );
 
 
@@ -203,38 +213,36 @@ export default function Home() {
     );
   }, [ge, plan, completed, activePattern, destination]);
 
-  // Asked for after the plan, because the plan decides which courses are worth
-  // asking the catalog about. Until it answers, and for a college whose
-  // catalog cannot be read at all, the schedule orders by course numbers.
   // The college's unit ceilings, read off its catalog where they were, and
   // typical otherwise. What the load sliders are held to.
   const limits = useMemo(() => limitsFor(college), [college]);
 
-  //
-  // And the courses those courses require, once known, so that a prerequisite
-  // the plan adds is itself asked about and its own prerequisites can be
-  // added in turn. Each answer can name more courses; the set stops growing
-  // when the catalog stops naming new ones, which is a chain or two deep.
-  const [prereqCodes, setPrereqCodes] = useState<string[]>([]);
+  // Asked for after the plan, because the plan decides which courses are worth
+  // asking the catalog about. Until it answers, and for a college whose
+  // catalog cannot be read at all, the schedule orders by course numbers.
   const planCodes = useMemo(
     () => [
       ...new Set([
         ...(plan ? plan.remainingGroups.flatMap((g) => g.courses.map((c) => c.code)) : []),
-        ...prereqCodes,
+        ...needs.flatMap((n) => n.prerequisites),
       ]),
     ],
-    [plan, prereqCodes],
+    [plan, needs],
   );
   const prereqs = usePrereqs(college, planCodes);
   useEffect(() => {
-    const named = [...prereqs.index.values()].flatMap((e) => e.prerequisites);
-    setPrereqCodes((have) => {
-      const next = [...new Set([...have, ...named])];
-      return next.length === have.length ? have : next;
+    const answered = [...prereqs.index.values()].filter((e) => e.prerequisites.length > 0);
+    setNeeds((have) => {
+      const known = new Set(have.map((n) => canonicalCourseKey(n.code)));
+      const fresh = answered.filter((e) => !known.has(canonicalCourseKey(e.code)));
+      return fresh.length === 0
+        ? have
+        : [...have, ...fresh.map((e) => ({ code: e.code, prerequisites: e.prerequisites }))];
     });
   }, [prereqs.index]);
-  // A new college is a new catalog; nothing named by the old one applies.
-  useEffect(() => setPrereqCodes([]), [college]);
+  // A new college is a new catalog, and a new major a new set of courses to
+  // ask about; nothing said about the old one should weigh on this one.
+  useEffect(() => setNeeds([]), [college, major]);
 
   // How to name a course the catalog mentions but the agreement never did.
   // The agreement's own option lists and the college's general education

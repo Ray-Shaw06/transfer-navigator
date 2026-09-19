@@ -1,4 +1,5 @@
 import type { Agreement, ArticulationRow } from '../parser/agreement';
+import { canonicalCourseKey } from '../catalog/normalize';
 import type { AndGroup } from '../parser/groups';
 import { marksAnyAdmission, type SectionRule } from '../parser/sections';
 import type { Course } from '../parser/types';
@@ -118,7 +119,21 @@ const total = (courses: Course[]) => courses.reduce((sum, c) => sum + c.units, 0
 // completed (a course spent on an earlier row when a later row had no other
 // option), but it can never overstate it, since a course is never claimed by
 // more than one row. Understating is the safe direction.
-function baseStatus(row: ArticulationRow, done: Set<string>, consumed: Set<string>): RowStatus {
+// What the college's catalog says one course needs, as buildPlan takes it.
+// Structurally what the catalog reader returns, so its answers pass straight
+// through; nothing else about them is read here.
+export type Need = { code: string; prerequisites: string[] };
+
+// For each course named as a prerequisite, the courses that name it, both as
+// canonical keys.
+type Dependents = ReadonlyMap<string, ReadonlySet<string>>;
+
+function baseStatus(
+  row: ArticulationRow,
+  done: Set<string>,
+  consumed: Set<string>,
+  dependents: Dependents,
+): RowStatus {
   const base = {
     receiving: row.receiving,
     receivingKind: row.receivingKind,
@@ -161,8 +176,27 @@ function baseStatus(row: ArticulationRow, done: Set<string>, consumed: Set<strin
   const openUnits = (option: AndGroup) =>
     total(option.courses.filter((c) => !available(c.code.toUpperCase())));
 
+  // An option that something else on the plan needs comes first, whatever
+  // it costs, because the student is taking it either way. Diablo Valley
+  // articulates MATH 2A as MATH 182 or MATH 192, and MATH 2B as MATH 193,
+  // which its catalog says needs MATH 192. Cheapest by units is MATH 182,
+  // four units to five, and choosing it put MATH 182, MATH 192 and MATH 193
+  // all on the plan when MATH 192 alone would have covered both rows.
+  //
+  // "Something else" means outside this row. Pasadena offers CS 003B with
+  // CS 033 or with CS 002, and its catalog says CS 033 needs CS 003B: that
+  // is the first option vouching for itself, and counting it would tie the
+  // two when only CS 002 is needed by a course the row has no say over.
+  const own = new Set(
+    row.sending.options.flatMap((o) => o.courses.map((c) => canonicalCourseKey(c.code))),
+  );
+  const serves = (option: AndGroup) =>
+    option.courses.filter((c) =>
+      [...(dependents.get(canonicalCourseKey(c.code)) ?? [])].some((d) => !own.has(d)),
+    ).length;
+
   const cheapest = [...row.sending.options].sort(
-    (a, b) => openUnits(a) - openUnits(b),
+    (a, b) => serves(b) - serves(a) || openUnits(a) - openUnits(b),
   )[0];
   const open = cheapest.courses.filter((c) => !available(c.code.toUpperCase()));
 
@@ -482,9 +516,23 @@ export function buildPlan(
   // student who has the credit already knows they have it; what they lacked
   // was any way to say so, so the plan kept scheduling work they had done.
   cleared: Iterable<string> = [],
+  // What the college's catalog says the courses on or near this plan need.
+  // Not a requirement in itself, only a thumb on the scale where a row
+  // offers a choice: see baseStatus. The catalog is read after the plan is
+  // first built, from the courses it chose, so the caller runs this again
+  // once it knows. The caller only ever adds to what it passes, so the
+  // choice settles.
+  needs: Iterable<Need> = [],
 ): Plan {
   const done = new Set(completed.map((c) => c.toUpperCase()));
   const held = new Set(cleared);
+  const dependents = new Map<string, Set<string>>();
+  for (const need of needs) {
+    for (const prerequisite of need.prerequisites) {
+      const key = canonicalCourseKey(prerequisite);
+      dependents.set(key, (dependents.get(key) ?? new Set()).add(canonicalCourseKey(need.code)));
+    }
+  }
 
   // A row in `excluded` keeps whatever status `fixed` already gave it
   // (baseStatus is not re-run for it, and it claims nothing from `consumed`
@@ -540,7 +588,7 @@ export function buildPlan(
       // Ahead of baseStatus, so a student's own claim wins over the walk and
       // the sending courses it would otherwise have spent stay available.
       if (held.has(rowKey(row.receiving))) return clearedStatus(row);
-      return baseStatus(row, done, consumed);
+      return baseStatus(row, done, consumed, dependents);
     });
   };
 
