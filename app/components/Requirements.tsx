@@ -321,7 +321,11 @@ function RuleLine({ section, count }: { section: Plan['sections'][number]; count
       </p>
     );
   }
-  return <p className="section-rule">All {count} are required.</p>;
+  return (
+    <p className="section-rule">
+      {count === 1 ? 'Required.' : count === 2 ? 'Both are required.' : `All ${count} are required.`}
+    </p>
+  );
 }
 
 // Whether this section is one of the campus's stated minimums, said only when
