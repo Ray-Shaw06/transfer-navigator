@@ -46,6 +46,19 @@ function verdictFor(
     (s) => s.state !== 'optional' && s.state !== 'alternative' && s.state !== 'reference',
   );
 
+  // Nothing to plan against. ASSIST publishes some entries with no
+  // requirements at all, only a note: Long Beach's "Business Administration"
+  // says to use the entries for its options, Accountancy and Finance and the
+  // rest. Read as finished, this told a student their major preparation was
+  // done because the page listing it was empty.
+  if (countable.length === 0) {
+    return {
+      tone: 'blocked' as Tone,
+      line: `This agreement lists no requirements.`,
+      sub: `ASSIST publishes this entry without any courses, which usually means it points at more specific entries, the options of this major, and one of those is the agreement to plan against. Read the campus note below and choose that option under Major.`,
+    };
+  }
+
   // Nothing at this college counts toward anything on this agreement.
   if (remaining.length === 0 && satisfied.length === 0 && blocked.length > 0) {
     return {
