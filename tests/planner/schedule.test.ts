@@ -120,9 +120,11 @@ describe('buildSchedule', () => {
       base,
     );
 
+    // BBB 2 does not fit beside AAA 1 and is stepped over; CCC 3 does and
+    // fills the term. BBB 2 opens the next one.
     expect(schedule.terms.map((t) => t.label)).toEqual(['Fall 2026', 'Spring 2027']);
-    expect(schedule.terms[0].courses.map((c) => c.code)).toEqual(['AAA 1']);
-    expect(schedule.terms[1].courses.map((c) => c.code)).toEqual(['BBB 2', 'CCC 3']);
+    expect(schedule.terms[0].courses.map((c) => c.code)).toEqual(['AAA 1', 'CCC 3']);
+    expect(schedule.terms[1].courses.map((c) => c.code)).toEqual(['BBB 2']);
     expect(schedule.totalUnits).toBe(20);
   });
 
@@ -209,8 +211,11 @@ describe('buildSchedule', () => {
   it('places a course larger than a whole term alone rather than looping', () => {
     const schedule = buildSchedule([group(course('BIG 1', 40)), group(course('AAA 2', 3))], base);
 
-    expect(schedule.terms[0].courses.map((c) => c.code)).toEqual(['BIG 1']);
-    expect(schedule.terms[1].courses.map((c) => c.code)).toEqual(['AAA 2']);
+    // Nothing else fits beside it, so it takes a term of its own once the
+    // walk finds a term with nothing in it; the small course goes first.
+    expect(schedule.terms[0].courses.map((c) => c.code)).toEqual(['AAA 2']);
+    expect(schedule.terms[1].courses.map((c) => c.code)).toEqual(['BIG 1']);
+    expect(schedule.terms).toHaveLength(2);
   });
 
   it('says plainly when the work does not fit before the target term', () => {
@@ -1302,5 +1307,59 @@ describe('a corequisite that is also named as a prerequisite', () => {
     expect(at(schedule, 'MATH 181')).toBe(1);
     expect(at(schedule, 'PHYS 4A')).toBe(1);
     expect(at(schedule, 'ENGR 40')).toBe(2);
+  });
+});
+
+describe('a block that does not fit the term', () => {
+  const at = (s: ReturnType<typeof buildSchedule>, code: string) =>
+    s.terms.findIndex((t) => t.courses.some((c) => c.code === code));
+
+  // Mount San Antonio to Cal Poly Pomona at seventeen units, the third term
+  // as it fell: ENGR 40, ENGR 7 and ENGR 24 in for eleven, then the ten-unit
+  // MATH 280 and PHYS 4B block, which does not fit. That ended the term, so
+  // ENGR 285, four units and ready, was never asked, and it was the one
+  // course left past the target while six units of the term sat empty.
+  const mtsac = index([
+    ['MATH 181', { prerequisites: ['MATH 180'] }],
+    ['ENGR 40', { prerequisites: ['MATH 181'] }],
+    ['ENGR 7', { prerequisites: ['MATH 181'] }],
+    ['MATH 280', { prerequisites: ['MATH 181'] }],
+    ['PHYS 4B', { prerequisites: ['MATH 280'], corequisites: ['MATH 280'] }],
+    ['ENGR 285', { prerequisites: ['MATH 181'] }],
+  ]);
+  const groups = [
+    group(course('MATH 180', 4)),
+    group(course('MATH 181', 4)),
+    group(course('ENGR 40', 4)),
+    group(course('ENGR 7', 4)),
+    group(course('MATH 280', 5)),
+    group(course('PHYS 4B', 5)),
+    group(course('ENGR 285', 4)),
+  ];
+
+  it('is stepped over, and a smaller ready block takes the room', () => {
+    // Terms one and two are MATH 180 then MATH 181, alone: nothing else is
+    // ready. Term three: ENGR 40 and ENGR 7 (8), then the ten-unit block,
+    // ready and too big. ENGR 285 is ready and fits, and belongs here.
+    const schedule = buildSchedule(groups, { ...base, unitsPerTerm: 15, prereqs: mtsac });
+    expect(at(schedule, 'ENGR 285')).toBe(2);
+    expect(at(schedule, 'MATH 280')).toBe(3);
+  });
+
+  it('is asked again first thing next term, so it is never starved', () => {
+    // Three small courses ahead of a big one, every term. The big one has to
+    // land in the second term, not be skipped for as long as small ones keep
+    // fitting.
+    const small = [
+      group(course('A 1', 4)),
+      group(course('A 2', 4)),
+      group(course('A 3', 4)),
+      group(course('B 1', 6)),
+      group(course('A 4', 4)),
+      group(course('A 5', 4)),
+      group(course('A 6', 4)),
+    ];
+    const schedule = buildSchedule(small, { ...base, unitsPerTerm: 15, prereqs: index([]) });
+    expect(at(schedule, 'B 1')).toBe(1);
   });
 });

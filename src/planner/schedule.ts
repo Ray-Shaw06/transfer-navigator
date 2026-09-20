@@ -817,16 +817,20 @@ export function buildSchedule(
         ignoreReady = true;
       }
 
-      // A walk down the queue, in the order the agreement lists its
-      // requirements, with one exception: a block held back for its
-      // prerequisite is stepped over rather than allowed to close the term.
-      // CS 008 waiting on CS 003A is no reason to leave the rest of the term
-      // empty when a mathematics course would fit.
+      // A walk down the queue in its order, stepping over what cannot go in
+      // this term: a block held back for its prerequisite, and a block too
+      // big for the room left. CS 008 waiting on CS 003A is no reason to
+      // leave the rest of the term empty when a mathematics course would fit,
+      // and neither is a ten-unit block when a four-unit one behind it would.
       //
-      // Stepping over is all it does. Anything that is ready and still does not
-      // fit ends the term, exactly as before, so a term is filled in the
-      // agreement's own order and not greedily backfilled with whatever
-      // happens to be small.
+      // The second kind used to end the term instead, so that a term was
+      // filled in the queue's order and never backfilled with whatever came
+      // later and happened to be small. On Mount San Antonio's Mechanical
+      // Engineering agreement at seventeen units that left six units of the
+      // third term empty and ENGR 285, ready and four units, past the target.
+      // Stepping over cannot starve the big block: the walk starts from the
+      // front of the queue every term, so a block passed over is asked again
+      // before anything behind it, and gets the first term with room.
       //
       // One pass is enough. Readiness asks for a prerequisite in a STRICTLY
       // earlier term, so placing a block can never make another one ready in
@@ -870,7 +874,8 @@ export function buildSchedule(
               return p.order.number === order.number || p.group === queue[i].group;
             });
           });
-          if (clashes || total(items) + total(block) > budget) break;
+          if (clashes) break;
+          if (total(items) + total(block) > budget) continue;
 
           for (const course of block) {
             const order = courseOrder(course.code);
