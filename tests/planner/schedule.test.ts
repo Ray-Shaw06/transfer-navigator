@@ -1226,3 +1226,81 @@ describe('prerequisites the agreement never named', () => {
     expect(schedule.terms.flatMap((t) => t.courses.map((c) => c.code))).toContain('AAA 1');
   });
 });
+
+describe('a chain listed after the courses that do not chain', () => {
+  const at = (s: ReturnType<typeof buildSchedule>, code: string) =>
+    s.terms.findIndex((t) => t.courses.some((c) => c.code === code));
+
+  // Mount San Antonio to Cal Poly Pomona, Mechanical Engineering, in the
+  // shape it took: the agreement lists engineering courses ahead of
+  // mathematics, the catalog says MATH 180 comes before 181 before 280, and
+  // at fifteen units a term the engineering filled the first term, so the
+  // chain started a term late and its last course fell past the target.
+  const mtsac = index([
+    ['MATH 181', { prerequisites: ['MATH 180'] }],
+    ['MATH 280', { prerequisites: ['MATH 181'] }],
+    ['PHYS 4B', { prerequisites: ['PHYS 4A'] }],
+    ['PHYS 4A', { prerequisites: ['MATH 180'] }],
+  ]);
+  const groups = [
+    group(course('ENGR 1', 5)),
+    group(course('ENGR 7', 5)),
+    group(course('ENGR 24', 5)),
+    group(course('MATH 180', 4)),
+    group(course('MATH 181', 4)),
+    group(course('MATH 280', 4)),
+    group(course('PHYS 4A', 4)),
+    group(course('PHYS 4B', 4)),
+  ];
+
+  it('starts the longest chain in the first term', () => {
+    const schedule = buildSchedule(groups, { ...base, prereqs: mtsac });
+    expect(at(schedule, 'MATH 180')).toBe(0);
+    expect(at(schedule, 'MATH 181')).toBe(1);
+    expect(at(schedule, 'MATH 280')).toBe(2);
+    expect(at(schedule, 'PHYS 4A')).toBe(1);
+    expect(at(schedule, 'PHYS 4B')).toBe(2);
+  });
+
+  it('fits in three terms, where the listed order needed four', () => {
+    const schedule = buildSchedule(groups, { ...base, prereqs: mtsac });
+    expect(schedule.terms).toHaveLength(3);
+  });
+
+  it('keeps the listed order among courses nothing follows', () => {
+    const schedule = buildSchedule(groups, { ...base, prereqs: mtsac });
+    const engineering = schedule.terms.flatMap((t) => t.courses.map((c) => c.code)).filter((c) => c.startsWith('ENGR'));
+    expect(engineering).toEqual(['ENGR 1', 'ENGR 7', 'ENGR 24']);
+  });
+});
+
+describe('a corequisite that is also named as a prerequisite', () => {
+  const at = (s: ReturnType<typeof buildSchedule>, code: string) =>
+    s.terms.findIndex((t) => t.courses.some((c) => c.code === code));
+
+  // Mount San Antonio's PHYS 4A: "Prerequisite: MATH 181 (may be taken
+  // concurrently)" and "Corequisite: MATH 181". The corequisite puts the two
+  // in one block; the prerequisite then asked for MATH 181 in an earlier
+  // term than its own block, which no term can be. The block was never
+  // ready, the packer read that as a cycle and gave up on order, and ENGR
+  // 40 landed beside the two courses it needs.
+  const mtsac = index([
+    ['MATH 181', { prerequisites: ['MATH 180'] }],
+    ['PHYS 4A', { prerequisites: ['PHYS 2AG', 'MATH 181'], corequisites: ['MATH 181'] }],
+    ['ENGR 40', { prerequisites: ['MATH 181', 'PHYS 4A'] }],
+  ]);
+  const groups = [
+    group(course('MATH 180', 4)),
+    group(course('MATH 181', 4)),
+    group(course('PHYS 4A', 5)),
+    group(course('ENGR 40', 3)),
+  ];
+
+  it('is satisfied by the course beside it', () => {
+    const schedule = buildSchedule(groups, { ...base, prereqs: mtsac });
+    expect(at(schedule, 'MATH 180')).toBe(0);
+    expect(at(schedule, 'MATH 181')).toBe(1);
+    expect(at(schedule, 'PHYS 4A')).toBe(1);
+    expect(at(schedule, 'ENGR 40')).toBe(2);
+  });
+});

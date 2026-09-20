@@ -616,6 +616,66 @@ export function buildSchedule(
     });
   }
 
+  // Then bring the head of every chain forward.
+  //
+  // The packer fills a term in queue order and a block that does not fit
+  // ends the term, so whatever the agreement lists first takes the early
+  // terms. Mount San Antonio's Mechanical Engineering agreement lists its
+  // engineering courses ahead of mathematics, and at fifteen units a term
+  // that put MATH 180 in the first term only because a five-unit course did
+  // not fit, MATH 181 two terms later, and MATH 280 past the target. A chain
+  // three courses long needs three terms whatever else is planned, so its
+  // head has to go first: this is the one thing a counselor does with a
+  // plan that a list does not.
+  //
+  // Sorted by how long a chain follows each block, longest first, and
+  // stable, so among blocks nothing follows the agreement's order stands
+  // exactly as it was. What follows what is read from the catalog where it
+  // covers a course, and from the numbering where it does not, the same two
+  // readings the packer orders by.
+  {
+    const keyOf = (b: Block) => b.courses.map((c) => canonicalCourseKey(c.code));
+    const follows = (later: Block, earlier: Block): boolean => {
+      const before = new Set(keyOf(earlier));
+      return later.courses.some((course) => {
+        if (known(course.code)) {
+          return statedPrereqs(course.code).some((need) => before.has(need));
+        }
+        const order = courseOrder(course.code);
+        if (!order) return false;
+        return earlier.courses.some((prior) => {
+          if (known(prior.code)) return false;
+          const p = courseOrder(prior.code);
+          if (!p || p.subject !== order.subject || sameRung(p, order)) return false;
+          return (
+            compareOrder(p, order) < 0 && (p.number === order.number || earlier.group === later.group)
+          );
+        });
+      });
+    };
+    const depth = new Map<Block, number>();
+    const visiting = new Set<Block>();
+    const depthOf = (b: Block): number => {
+      const done = depth.get(b);
+      if (done !== undefined) return done;
+      // A cycle in the catalog is not a chain. Whatever is mid-visit counts
+      // as the end of one.
+      if (visiting.has(b)) return 0;
+      visiting.add(b);
+      let deepest = 0;
+      for (const other of queue) {
+        if (other !== b && follows(other, b)) deepest = Math.max(deepest, 1 + depthOf(other));
+      }
+      visiting.delete(b);
+      depth.set(b, deepest);
+      return deepest;
+    };
+    const ranked = queue.map((b, i) => ({ b, i, d: depthOf(b) }));
+    ranked.sort((x, y) => y.d - x.d || x.i - y.i);
+    queue.length = 0;
+    queue.push(...ranked.map((r) => r.b));
+  }
+
   // One pass of the packer.
   //
   // `order` is the general education to place, in the order it should be
@@ -714,15 +774,23 @@ export function buildSchedule(
     // plan missing a course a student has to take is not.
     let ignoreReady = false;
 
-    const ready = (block: Block, term: number): boolean =>
-      ignoreReady ||
-      block.courses.every((course) =>
+    //
+    // A prerequisite that sits in the same block is taken beside the course,
+    // which is what a block means, and is not asked for earlier. Mount San
+    // Antonio's PHYS 4A names MATH 181 as a prerequisite that "may be taken
+    // concurrently" and as a corequisite; the corequisite put them in one
+    // block, and read strictly the prerequisite made that block impossible.
+    const ready = (block: Block, term: number): boolean => {
+      if (ignoreReady) return true;
+      const beside = new Set(block.courses.map((c) => canonicalCourseKey(c.code)));
+      return block.courses.every((course) =>
         statedPrereqs(course.code).every((need) => {
-          if (!inPlan.has(need)) return true;
+          if (!inPlan.has(need) || beside.has(need)) return true;
           const at = termOf.get(need);
           return at !== undefined && at < term;
         }),
       );
+    };
 
     const done = queue.map(() => false);
     let remaining = queue.length;
