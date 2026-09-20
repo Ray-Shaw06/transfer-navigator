@@ -126,11 +126,13 @@ function sendingRequirement(entry: AssistArticulation | undefined): Requirement 
 // advisory rather than being treated as plain 'all', so a rule that was
 // never applied is visible in the UI instead of silently absent.
 //
-// `sectionCount` is how many content Sections the group holds, which decides
-// what an NFromConjunction quantifier is counting. See below.
+// `sectionCount` is how many content Sections the group holds, and
+// `oneRowEach` whether every one of them holds exactly one row. Between them
+// they decide what an NFromConjunction quantifier is counting. See below.
 export function toSectionRule(
   instruction: AssistInstruction | null | undefined,
   sectionCount = 1,
+  oneRowEach = false,
 ): SectionRule {
   if (!instruction) return { kind: 'all' };
 
@@ -150,17 +152,25 @@ export function toSectionRule(
   // expensive in both directions: counting rows as sections understates a
   // requirement, counting sections as rows overstates it.
   //
-  // One case is not a guess. A group holding exactly one Section has nothing
-  // for a section-level quantifier to choose between, so the amount can only
-  // be counting that section's rows, which is what every other quantifier in
-  // this file already counts. Those are read; the rest stay advisory.
+  // Two cases are not a guess. A group holding exactly one Section has
+  // nothing for a section-level quantifier to choose between, so the amount
+  // can only be counting that section's rows, which is what every other
+  // quantifier in this file already counts. And a group whose every Section
+  // holds exactly one row has sections and rows that are the same members,
+  // so the two readings agree. Those are read; the rest stay advisory.
   //
-  // This is what the "MATHEMATICS AND SCIENCE COURSES" group on a real CSU
-  // agreement is: one section, twenty-five rows of chemistry, physics,
-  // biology and geology, and "complete 12 semester units" over them. Read as
-  // advisory it became "take all twenty-five", which is how that agreement
-  // came back as nineteen terms of work.
-  if (instruction.type === 'NFromArea' || (instruction.type === 'NFromConjunction' && sectionCount === 1)) {
+  // The first is what the "MATHEMATICS AND SCIENCE COURSES" group on a real
+  // CSU agreement is: one section, twenty-five rows of chemistry, physics,
+  // biology and geology, and "complete 12 semester units" over them. Read
+  // as advisory it became "take all twenty-five", which is how that
+  // agreement came back as nineteen terms of work. The second is UC
+  // Irvine's physics for Biological Sciences: two sections, one series in
+  // each, "complete 1 series" with an Or between them. Read as advisory it
+  // asked for both sequences.
+  if (
+    instruction.type === 'NFromArea' ||
+    (instruction.type === 'NFromConjunction' && (sectionCount === 1 || oneRowEach))
+  ) {
     const amount = num(instruction.amount);
     // 'UpTo' is a ceiling, not a floor: it says how much may count, not how
     // much is owed, and this project has no way to decide which of them a
@@ -326,7 +336,13 @@ export function toAgreement(result: AssistResult): Agreement {
       (s): s is AssistSection => s.type === 'Section',
     );
 
-    const stated = toSectionRule(asset.instruction, contentSections.length);
+    const cellsIn = (s: AssistSection) =>
+      (s.rows ?? []).reduce((n, row) => n + (row.cells ?? []).length, 0);
+    const stated = toSectionRule(
+      asset.instruction,
+      contentSections.length,
+      contentSections.length > 0 && contentSections.every((s) => cellsIn(s) === 1),
+    );
     // A group under ASSIST's Articulation Details heading is equivalency
     // information, not work. Guarded twice so this stays narrow: the heading
     // has to be that heading, and the group must carry no quantifier of its

@@ -575,6 +575,55 @@ describe('an NFromConjunction group end to end', () => {
   });
 });
 
+describe('a choice between sections that each hold one requirement', () => {
+  // UC Irvine's physics requirement for Biological Sciences, as ASSIST sends
+  // it: two sections, each one series, under "complete 1 series" joined by
+  // Or. The general two-section case is ambiguous, since the amount might
+  // count sections or the rows inside them. With one row in every section
+  // the two readings are the same reading, so the rule can be applied. Read
+  // as advisory it asked for both physics sequences, thirty units of physics
+  // for a biology major.
+  const series = (id: string, prefix: string, numbers: string[]): AssistCell => ({
+    type: 'Series',
+    id,
+    series: { conjunction: 'And', courses: numbers.map((n) => course(prefix, n, 4)) },
+  });
+  const oneSeries = { type: 'NFromConjunction', conjunction: 'Or', amount: 1, amountUnitType: 'Series', amountQuantifier: 'None' } as const;
+
+  const build = (secondSectionRows: AssistRow[]) =>
+    toAgreement(
+      result(
+        [
+          group(oneSeries, [
+            section([{ cells: [series('phys3', 'PHYSICS', ['3A', '3B'])] }]),
+            section(secondSectionRows),
+          ]),
+        ],
+        [
+          articulated('phys3', 'And', [course('PHYS', '31A', 5), course('PHYS', '31B', 5)]),
+          articulated('phys7', 'And', [course('PHYS', '8A', 5), course('PHYS', '8B', 5), course('PHYS', '8C', 5)]),
+          articulated('extra', 'And', [course('PHYS', '1', 4)]),
+        ],
+      ),
+    );
+
+  it('is read as choose one when every section holds exactly one row', () => {
+    const agreement = build([{ cells: [series('phys7', 'PHYSICS', ['7C', '7D'])] }]);
+    expect(agreement.sections[0].rule).toEqual({ kind: 'choose', least: 1 });
+    const plan = buildPlan(agreement, []);
+    expect(plan.statuses.filter((s) => s.state === 'remaining')).toHaveLength(1);
+    expect(plan.remainingUnits).toBe(10);
+  });
+
+  it('stays advisory when a section holds more than one row', () => {
+    const agreement = build([
+      { cells: [series('phys7', 'PHYSICS', ['7C', '7D'])] },
+      { cells: [courseCell('extra', course('PHYSICS', '1', 4))] },
+    ]);
+    expect(agreement.sections[0].rule.kind).toBe('advisory');
+  });
+});
+
 // ASSIST's Articulation Details section restates combinations already
 // required above it. Counting them charges a student twice for the same
 // courses, which on a real CSU agreement tripled the work reported.
