@@ -13,6 +13,7 @@ export function RouteView({
   pattern,
   target,
   catalog,
+  shared,
 }: {
   schedule: Schedule;
   doubleCount: DoubleCountIndex;
@@ -23,6 +24,9 @@ export function RouteView({
   // The term the student is aiming at, so the route can draw the line they
   // are actually planning against rather than only its own end.
   target: TermRef | null;
+  // A course the agreement lists for more than one requirement, planned
+  // once. See Plan.shared.
+  shared?: { course: Course; receiving: string[] }[];
 }) {
   if (schedule.terms.length === 0) return null;
 
@@ -45,6 +49,27 @@ export function RouteView({
 
   return (
     <>
+      {shared && shared.length > 0 && (
+        <div className="route-block" data-added="true">
+          <b>
+            {shared.length === 1
+              ? 'One course is listed for two requirements.'
+              : `${shared.length} courses are each listed for more than one requirement.`}
+          </b>
+          <ul>
+            {shared.map((s) => (
+              <li key={s.course.code}>
+                <b>{padCourseCode(s.course.code)}</b> for {s.receiving.map((r) => r.replace(/\+/g, ' and ')).join(' and for ')}
+              </li>
+            ))}
+          </ul>
+          <span>
+            The agreement names the same course under each of them. It is planned once, and its
+            units counted once. Whether one course may stand for both is the campus&rsquo;s rule,
+            which this cannot read, so ask before counting on it.
+          </span>
+        </div>
+      )}
       {schedule.addedPrerequisites.length > 0 && (
         <div className="route-block" data-added="true">
           {/* The one thing on this page a student cannot find out from the

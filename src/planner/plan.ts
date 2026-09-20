@@ -94,6 +94,11 @@ export type Plan = {
   remainingGroups: RemainingGroup[];
   notArticulated: Course[];
   sections: SectionStatus[];
+  // A sending course the agreement lists for more than one requirement
+  // still to do. It is in remainingGroups once, under the first, and
+  // counted once. Whether one course may stand for both is the campus's
+  // rule, which this cannot read, so the UI names them and says so.
+  shared: { course: Course; receiving: string[] }[];
   // Page 1 advisory prose, carried through from Agreement.notes untouched.
   // Nothing in this file reads it: it is not parsed, not matched against
   // anything the student has done, and never influences a status, a unit
@@ -631,19 +636,36 @@ export function buildPlan(
     return section?.admission ? 'admission' : 'major';
   };
 
+  // Each course once, under the first requirement that proposes it. Foothill
+  // articulates both PSYC 70 and COGS 14A at UC San Diego with its PSYC 10,
+  // and planning that twice drew the same course in two terms and charged
+  // ten units for five.
+  const proposed = new Map<string, { course: Course; receiving: string[] }>();
   const remainingGroups: RemainingGroup[] = statuses
     .filter((s) => s.state === 'remaining')
     .map((s) => ({
       kind: 'and' as const,
       priority: priorityOf(s),
-      courses: s.cheapestOption.filter((c) => !done.has(c.code.toUpperCase())),
+      courses: s.cheapestOption
+        .filter((c) => !done.has(c.code.toUpperCase()))
+        .filter((c) => {
+          const key = canonicalCourseKey(c.code);
+          const earlier = proposed.get(key);
+          if (earlier) {
+            earlier.receiving.push(rowKey(s.receiving));
+            return false;
+          }
+          proposed.set(key, { course: c, receiving: [rowKey(s.receiving)] });
+          return true;
+        }),
     }))
     .filter((g) => g.courses.length > 0);
 
   return {
     statuses,
-    remainingUnits: statuses.reduce((sum, s) => sum + s.remainingUnits, 0),
+    remainingUnits: remainingGroups.reduce((sum, g) => sum + total(g.courses), 0),
     remainingGroups,
+    shared: [...proposed.values()].filter((p) => p.receiving.length > 1),
     notArticulated: statuses
       .filter((s) => s.state === 'not_articulated')
       .flatMap((s) => s.receiving),

@@ -146,7 +146,11 @@ describe('buildPlan', () => {
 
     expect(plan.statuses[0].state).toBe('satisfied');
     expect(plan.statuses[1].state).toBe('remaining');
-    expect(plan.remainingUnits).toBe(4);
+    // Still owed, but there is no course to take for it: the only one the
+    // agreement lists has been used. Units count courses to take, so none.
+    expect(plan.statuses[1].remainingUnits).toBe(4);
+    expect(plan.remainingUnits).toBe(0);
+    expect(plan.remainingGroups).toEqual([]);
   });
 
   it('still satisfies both when the student took both courses', () => {
@@ -788,5 +792,46 @@ describe('an option something else in the plan needs', () => {
   it('is not swayed by an option vouching for itself', () => {
     const plan = buildPlan(pcc, [], [], [{ code: 'CS 033', prerequisites: ['CS 3B'] }]);
     expect(plan.statuses[0].cheapestOption.map((c) => c.code)).toEqual(['CS 003B', 'CS 033', 'CS 003BL']);
+  });
+});
+
+describe('one sending course listed for two requirements', () => {
+  // Foothill to UC San Diego Psychology, as read: PSYC 70 and COGS 14A are
+  // both articulated by Foothill's PSYC 10, in a section where both are
+  // required. A course is taken once, so it is planned once and its units
+  // counted once, and the student is told the campus decides whether one
+  // course can stand for both.
+  const shared: Agreement = {
+    ...agreement,
+    rows: [
+      {
+        receiving: [course('PSYC 70', 4)],
+        sending: { kind: 'options', options: [{ kind: 'and', courses: [course('PSYC 10', 5)] }] },
+      },
+      {
+        receiving: [course('COGS 14A', 4)],
+        sending: { kind: 'options', options: [{ kind: 'and', courses: [course('PSYC 10', 5)] }] },
+      },
+      {
+        receiving: [course('MATH 20A', 4)],
+        sending: { kind: 'options', options: [{ kind: 'and', courses: [course('MATH 1A', 5)] }] },
+      },
+    ],
+  };
+
+  it('plans the course once and counts its units once', () => {
+    const plan = buildPlan(shared, []);
+    expect(plan.remainingGroups.flatMap((g) => g.courses.map((c) => c.code))).toEqual(['PSYC 10', 'MATH 1A']);
+    expect(plan.remainingUnits).toBe(10);
+  });
+
+  it('says which requirements share it', () => {
+    const plan = buildPlan(shared, []);
+    expect(plan.shared).toEqual([{ course: course('PSYC 10', 5), receiving: ['PSYC 70', 'COGS 14A'] }]);
+  });
+
+  it('leaves both rows remaining, since the agreement lists both', () => {
+    const plan = buildPlan(shared, []);
+    expect(plan.statuses.map((s) => s.state)).toEqual(['remaining', 'remaining', 'remaining']);
   });
 });

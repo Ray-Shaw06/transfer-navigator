@@ -473,6 +473,7 @@ export default function Home() {
                 pattern={patternFor(activePattern).name}
                 target={settings.target}
                 catalog={prereqs.index.size > 0}
+                shared={plan.shared}
               />
             </section>
           )}

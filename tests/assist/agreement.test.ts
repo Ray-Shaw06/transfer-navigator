@@ -694,7 +694,11 @@ describe('the Articulation Details section', () => {
   it('leaves a section alone when the heading is not that heading', () => {
     const agreement = build('ADDITIONAL APPROVED COURSES FOR THE MAJOR');
     expect(agreement.sections[1].rule).toEqual({ kind: 'all' });
-    expect(buildPlan(agreement, []).remainingUnits).toBe(16);
+    // Both rows stay required. The courses are still planned once, since a
+    // course listed for two requirements is one course to take.
+    const plan = buildPlan(agreement, []);
+    expect(plan.statuses.filter((s) => s.state === 'remaining')).toHaveLength(3);
+    expect(plan.remainingUnits).toBe(8);
   });
 
   it('respects a group that states a quantifier of its own', () => {
