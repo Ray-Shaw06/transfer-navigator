@@ -97,12 +97,28 @@ function sendingRequirement(entry: AssistArticulation | undefined): Requirement 
     }
   }
 
+  if (options.length > 0) return { kind: 'options', options };
+
+  // Nothing articulated, and ASSIST says why in a different field: the
+  // college proposed a course and the campus denied it. ASSIST's own page
+  // prints "No Course Articulated" for this, and a student is told which
+  // course not to take for it, since it is the obvious one.
+  const denied = (sending.deniedCourses ?? []).map(toCourse).filter((c): c is Course => c !== null);
+  if (denied.length > 0) {
+    const named = denied.map((c) => c.code);
+    const list =
+      named.length === 1 ? named[0] : `${named.slice(0, -1).join(', ')} and ${named[named.length - 1]}`;
+    return {
+      kind: 'not_articulated',
+      reason: `${list} ${named.length === 1 ? 'was' : 'were'} proposed for this and the campus denied ${named.length === 1 ? 'it' : 'them'}`,
+    };
+  }
+
   // An articulation entry that exists but yielded nothing readable is not the
   // same as no entry at all. Reporting it as not_articulated would tell a
   // student to take the course after transferring when ASSIST may well list
   // something here, so it is unreadable and the UI sends them to check.
-  if (options.length === 0) return { kind: 'unreadable', text: [] };
-  return { kind: 'options', options };
+  return { kind: 'unreadable', text: [] };
 }
 
 // ASSIST's own words for the rule over a group's sections, mapped onto the

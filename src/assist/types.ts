@@ -75,6 +75,10 @@ export type AssistArticulation = {
     sendingArticulation?: {
       noArticulationReason?: string | null;
       items?: AssistSendingItem[];
+      // Courses the college proposed for this and the campus turned down.
+      // Where these are all ASSIST sends, the entry has nothing articulated
+      // and the denial is the reason why.
+      deniedCourses?: AssistCourse[];
     } | null;
   };
 };

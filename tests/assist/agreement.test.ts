@@ -197,6 +197,37 @@ describe('toAgreement', () => {
     });
   });
 
+  it('reads a proposal the campus denied as not articulated, and says so', () => {
+    // Cal Poly Pomona's CS 2520 from Pasadena, as ASSIST sends it: no items,
+    // no reason, and a denied course. ASSIST's own page prints "No Course
+    // Articulated" for it. The denial is the reason, and worth telling the
+    // student, who might otherwise take CS 003C for it.
+    const agreement = toAgreement(
+      result(
+        [group(null, [section([{ cells: [courseCell('a', course('RECV', '10', 4))] }])])],
+        [
+          {
+            templateCellId: 'a',
+            articulation: {
+              sendingArticulation: {
+                noArticulationReason: null,
+                items: [],
+                deniedCourses: [
+                  { prefix: 'CS', courseNumber: '003C', courseTitle: 'Fundamentals of Computer Science (Python)', minUnits: 3, maxUnits: 3 },
+                ],
+              },
+            },
+          },
+        ],
+      ),
+    );
+
+    expect(agreement.rows[0].sending).toEqual({
+      kind: 'not_articulated',
+      reason: 'CS 003C was proposed for this and the campus denied it',
+    });
+  });
+
   it('calls an articulation entry that yields no course unreadable, not unarticulated', () => {
     // The two are different advice. "Nothing articulated" tells a student to
     // take the course after transferring; an entry ASSIST sent that this
