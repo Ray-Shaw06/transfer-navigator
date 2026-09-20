@@ -96,9 +96,10 @@ export type MissingPrereq = {
   //
   //   placement  the catalog says placement can stand in for it, and a
   //              student who placed past it does not owe it
-  //   unlisted   none of what it names is on the agreement or the general
-  //              education pattern, so it is a pre-transfer course or one
-  //              this cannot name, and either way to check rather than take
+  //   unlisted   nothing can name what it needs with a title and units, not
+  //              the agreement, not the general education pattern, not the
+  //              catalog's own page for it, so it is reported to check
+  //              rather than drawn as a course
   reason: 'placement' | 'unlisted';
 };
 

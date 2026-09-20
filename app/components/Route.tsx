@@ -103,10 +103,9 @@ export function RouteView({
             )}
             {schedule.missingPrereqs.some((m) => m.reason === 'unlisted') && (
               <>
-                The others name courses that are on neither this agreement nor the general
-                education pattern, which usually means a pre-transfer course a student places past.
-                Not added for that reason; if you have not placed past it, it is real work, and
-                worth a counselor.
+                The others name courses this could not find a title or units for, in the
+                agreement, the general education pattern or the catalog itself. Not added for that
+                reason; it is real work unless you have placed past it, and worth a counselor.
               </>
             )}
           </span>

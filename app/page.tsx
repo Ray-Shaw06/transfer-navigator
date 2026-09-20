@@ -6,7 +6,7 @@ import type { Agreement } from '../src/parser/agreement';
 import { buildPlan, type Need } from '../src/planner/plan';
 import { buildSchedule, currentTerm, earliestTerm } from '../src/planner/schedule';
 import { clampUnits, limitsFor } from '../src/planner/limits';
-import { canonicalCourseKey } from '../src/catalog/normalize';
+import { canonicalCourseKey, padCourseCode } from '../src/catalog/normalize';
 import type { Course } from '../src/parser/types';
 import { geStatus } from '../src/planner/ge';
 import { buildDoubleCountIndex, geScheduleItems } from '../src/planner/doubleCount';
@@ -246,22 +246,36 @@ export default function Home() {
 
   // How to name a course the catalog mentions but the agreement never did.
   // The agreement's own option lists and the college's general education
-  // list between them know most courses a student would be sent to take
-  // first, with the title and units the route needs to draw them.
+  // list are asked first, since they spell a course the way ASSIST does.
+  // Failing those, the catalog's own page for it: Pasadena's CS 003A needs
+  // CS 002, and on the Cal Poly Pomona agreement nothing lists CS 002, but
+  // the catalog gives its title and units, which is all the route needs to
+  // draw it. Spelled the way this agreement spells its codes, padded to
+  // three digits where it pads, so CS 2 sits beside CS 003A as CS 002.
   const courseInfo = useMemo(() => {
     const known = new Map<string, Course>();
+    let pads = false;
     for (const row of agreement?.rows ?? []) {
       if (row.sending.kind !== 'options') continue;
       for (const option of row.sending.options) {
-        for (const c of option.courses) known.set(canonicalCourseKey(c.code), c);
+        for (const c of option.courses) {
+          known.set(canonicalCourseKey(c.code), c);
+          if (/\s0\d/.test(c.code)) pads = true;
+        }
       }
     }
     for (const c of ge?.byCourse ?? []) {
       const key = canonicalCourseKey(c.code);
       if (!known.has(key)) known.set(key, { code: c.code, title: c.title, units: c.units });
     }
-    return (code: string) => known.get(canonicalCourseKey(code)) ?? null;
-  }, [agreement, ge]);
+    return (code: string): Course | null => {
+      const listed = known.get(canonicalCourseKey(code));
+      if (listed) return listed;
+      const entry = prereqs.index.get(canonicalCourseKey(code));
+      if (!entry || !entry.title || entry.units === undefined) return null;
+      return { code: pads ? padCourseCode(entry.code) : entry.code, title: entry.title, units: entry.units };
+    };
+  }, [agreement, ge, prereqs.index]);
 
   const schedule = useMemo(
     () =>
