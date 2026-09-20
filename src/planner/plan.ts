@@ -195,8 +195,14 @@ function baseStatus(
       [...(dependents.get(canonicalCourseKey(c.code)) ?? [])].some((d) => !own.has(d)),
     ).length;
 
+  // An honours section is the same course with more asked of the student,
+  // so on a tie the plain section is proposed. The student can still tick
+  // the honours one.
+  const honours = (option: AndGroup) => option.courses.filter((c) => /\d[A-Z]*H$/i.test(c.code.trim())).length;
+
   const cheapest = [...row.sending.options].sort(
-    (a, b) => serves(b) - serves(a) || openUnits(a) - openUnits(b),
+    (a, b) =>
+      serves(b) - serves(a) || openUnits(a) - openUnits(b) || honours(a) - honours(b),
   )[0];
   const open = cheapest.courses.filter((c) => !available(c.code.toUpperCase()));
 

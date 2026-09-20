@@ -727,6 +727,30 @@ describe('an option something else in the plan needs', () => {
     expect(plan.statuses[0].cheapestOption.map((c) => c.code)).toEqual(['MATH 182']);
   });
 
+  it('does not send a student to the honours section on a tie', () => {
+    // UC Irvine's mathematics requirement for Biological Sciences from
+    // Pasadena lists MATH 005AH ahead of MATH 005A. Both serve MATH 005B and
+    // both are five units, and document order chose the honours section.
+    const honours: Agreement = {
+      ...dvc,
+      rows: [
+        {
+          receiving: [course('MATH 2A', 4)],
+          sending: {
+            kind: 'options',
+            options: [
+              { kind: 'and', courses: [course('MATH 005AH', 5)] },
+              { kind: 'and', courses: [course('MATH 006A', 3)] },
+              { kind: 'and', courses: [course('MATH 005A', 5)] },
+            ],
+          },
+        },
+      ],
+    };
+    const plan = buildPlan(honours, [], [], [{ code: 'MATH 5B', prerequisites: ['MATH 5A', 'MATH 5AH'] }]);
+    expect(plan.statuses[0].cheapestOption.map((c) => c.code)).toEqual(['MATH 005A']);
+  });
+
   // Pasadena's I&C SCI 31-33 row, as read. CS 003B goes with CS 033 (seven
   // units) or with CS 002 (eight), and the catalog says CS 033 needs CS 003B
   // and CS 003A needs CS 002. CS 003A is on the plan for CS 008, a different
