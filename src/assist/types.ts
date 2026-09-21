@@ -48,7 +48,7 @@ export type AssistSection = {
 // The rule over a group's sections. `Following` and a null instruction both
 // mean everything is required. See toSectionRule in agreement.ts.
 export type AssistInstruction = {
-  type: 'Following' | 'Conjunction' | 'NFromArea' | 'NFromConjunction' | string;
+  type: 'Following' | 'NFromFollowing' | 'Conjunction' | 'NFromArea' | 'NFromConjunction' | string;
   conjunction?: 'And' | 'Or';
   amount?: number;
   amountQuantifier?: string;

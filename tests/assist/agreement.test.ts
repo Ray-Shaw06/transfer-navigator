@@ -575,6 +575,35 @@ describe('an NFromConjunction group end to end', () => {
   });
 });
 
+describe('toSectionRule over an NFromFollowing', () => {
+  // Berkeley's "strongly recommended" statistics for Economics, as ASSIST
+  // sends it: one section, STAT 20 and STAT 21, "complete 1 from the
+  // following" with no unit type stated. ASSIST's own page prints that as
+  // one course. Left advisory, both were counted as required.
+  it('counts courses when no unit type is stated', () => {
+    expect(toSectionRule({ type: 'NFromFollowing', amount: 1 }, 1)).toEqual({ kind: 'choose', least: 1 });
+  });
+
+  it('reads a stated unit type the same way the other quantifiers do', () => {
+    expect(toSectionRule({ type: 'NFromFollowing', amount: 6, amountUnitType: 'SemesterUnit' }, 1)).toEqual({
+      kind: 'choose_units',
+      least: 6,
+      unitLabel: 'semester units',
+    });
+  });
+
+  it('keeps the guards', () => {
+    expect(toSectionRule({ type: 'NFromFollowing', amount: 0 }, 1).kind).toBe('advisory');
+    expect(toSectionRule({ type: 'NFromFollowing', amount: 2, amountQuantifier: 'UpTo' }, 1).kind).toBe('advisory');
+  });
+
+  it('is applied over one section, and over several', () => {
+    // "From the following" names the rows under the rule, wherever the
+    // template put its section breaks.
+    expect(toSectionRule({ type: 'NFromFollowing', amount: 2 }, 3)).toEqual({ kind: 'choose', least: 2 });
+  });
+});
+
 describe('a choice between sections that each hold one requirement', () => {
   // UC Irvine's physics requirement for Biological Sciences, as ASSIST sends
   // it: two sections, each one series, under "complete 1 series" joined by

@@ -167,8 +167,15 @@ export function toSectionRule(
   // Irvine's physics for Biological Sciences: two sections, one series in
   // each, "complete 1 series" with an Or between them. Read as advisory it
   // asked for both sequences.
+  //
+  // An NFromFollowing is "complete N from the following", the rows under the
+  // rule wherever the template put its section breaks, and ASSIST's own page
+  // prints it as courses when no unit type is stated. Berkeley's strongly
+  // recommended statistics for Economics is one of these, and read as
+  // advisory it asked for both.
   if (
     instruction.type === 'NFromArea' ||
+    instruction.type === 'NFromFollowing' ||
     (instruction.type === 'NFromConjunction' && (sectionCount === 1 || oneRowEach))
   ) {
     const amount = num(instruction.amount);
@@ -179,7 +186,9 @@ export function toSectionRule(
       return { kind: 'advisory', text: describeInstruction(instruction) };
     }
 
-    const counted = countedThing(instruction.amountUnitType);
+    const counted = countedThing(
+      instruction.amountUnitType ?? (instruction.type === 'NFromFollowing' ? 'Course' : undefined),
+    );
     if (counted === 'units') {
       return { kind: 'choose_units', least: amount, unitLabel: unitLabelFor(instruction.amountUnitType) };
     }
