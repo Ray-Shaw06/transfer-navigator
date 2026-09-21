@@ -96,7 +96,7 @@ describe('buildPlan', () => {
     expect(plan.remainingUnits).toBe(0);
   });
 
-  it('leaves an or group alone when no route is achievable', () => {
+  it('owes one course after transfer when no route of an or group is achievable', () => {
     const grouped: Agreement = {
       ...agreement,
       rows: [
@@ -107,8 +107,11 @@ describe('buildPlan', () => {
 
     const plan = buildPlan(grouped, []);
 
-    expect(plan.statuses.map((s) => s.state)).toEqual(['not_articulated', 'not_articulated']);
-    expect(plan.notArticulated.map((c) => c.code)).toEqual(['RECV 40', 'RECV 50']);
+    // One requirement with two routes and neither articulated is one course
+    // taken after transfer. The first route stays the visible blocker; the
+    // other is the route not taken.
+    expect(plan.statuses.map((s) => s.state)).toEqual(['not_articulated', 'alternative']);
+    expect(plan.notArticulated.map((c) => c.code)).toEqual(['RECV 40']);
   });
 
   it('reports the work left as the groups it came from, not a flat list', () => {
@@ -334,7 +337,33 @@ describe('buildPlan', () => {
 
     const plan = buildPlan(sectioned, []);
 
-    expect(plan.notArticulated.map((c) => c.code)).toEqual(['RECV 10', 'RECV 20']);
+    // One of the two is owed after transfer, not both: the section asks for
+    // one. The first stays a blocker so the shortfall is visible; the other
+    // is the alternative a student would not also take.
+    expect(plan.notArticulated.map((c) => c.code)).toEqual(['RECV 10']);
+    expect(plan.statuses.map((s) => s.state)).toEqual(['not_articulated', 'optional']);
+  });
+
+  it('keeps as many blockers as the shortfall when some members can be met', () => {
+    // Pick two: one is articulated, two are not. One more is owed after
+    // transfer, so one blocker stays and the other is demoted.
+    const sectioned: Agreement = {
+      ...agreement,
+      sections: [{ label: 'Complete at least 2 courses from the following', rule: { kind: 'choose', least: 2 } }],
+      rows: [
+        { receiving: [course('RECV 10', 4)], section: 0, sending: { kind: 'not_articulated' } },
+        {
+          receiving: [course('RECV 20', 4)],
+          section: 0,
+          sending: { kind: 'options', options: [{ kind: 'and', courses: [course('SEND 20', 4)] }] },
+        },
+        { receiving: [course('RECV 30', 4)], section: 0, sending: { kind: 'not_articulated' } },
+      ],
+    };
+
+    const plan = buildPlan(sectioned, []);
+    expect(plan.statuses.map((s) => s.state)).toEqual(['not_articulated', 'remaining', 'optional']);
+    expect(plan.notArticulated.map((c) => c.code)).toEqual(['RECV 10']);
   });
 
   it('summarises a choose section for the UI', () => {

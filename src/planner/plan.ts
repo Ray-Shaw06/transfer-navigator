@@ -418,10 +418,23 @@ function resolveChooseGroup(group: ChooseGroup, statuses: RowStatus[], demoted: 
   }
 
   // Not enough achievable members exist to meet the quantifier. Demoting
-  // anything here would hide the shortfall behind a tidier-looking plan, so
-  // every member keeps the state it already has and the blockers stay
-  // visible.
-  if (running < group.least) return;
+  // an achievable member here would hide the shortfall behind a
+  // tidier-looking plan, so every one of those keeps the state it has and
+  // the blockers stay visible. But only as many blockers as the shortfall:
+  // "pick one of STAT 20 and STAT 21", neither articulated, is one course
+  // owed after transfer, not two. The first in document order stay
+  // blockers; the surplus become what a member not taken becomes. Member
+  // counts only, since a unit quantifier has no units to count for a member
+  // with nothing articulated.
+  if (running < group.least) {
+    if (group.unitTarget) return;
+    const blockers = members.filter(
+      (m) => !keep.has(m) && m.statuses.every((st) => st.state === 'not_articulated'),
+    );
+    const owed = group.least - running;
+    for (const surplus of blockers.slice(owed)) demote(surplus, false);
+    return;
+  }
 
   for (const m of members) {
     if (keep.has(m)) continue;
