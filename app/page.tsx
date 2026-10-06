@@ -513,7 +513,7 @@ export default function Home() {
                     return (
                       <option key={p.key} value={p.key} disabled={!usable}>
                         {p.name}
-                        {usable ? '' : ` — not offered for ${yearLabel}`}
+                        {usable ? '' : `, not offered for ${yearLabel}`}
                       </option>
                     );
                   })}

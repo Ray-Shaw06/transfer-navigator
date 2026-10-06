@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Inter, JetBrains_Mono } from 'next/font/google';
+import { Public_Sans, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
 import { Nav } from './components/Nav';
 
@@ -9,7 +9,7 @@ import { Nav } from './components/Nav';
 // counsellor, so consistent glyph width is doing real work.
 //
 // next/font self-hosts both at build time. No CDN request, no layout shift.
-const sans = Inter({
+const sans = Public_Sans({
   subsets: ['latin'],
   display: 'swap',
   variable: '--font-sans',

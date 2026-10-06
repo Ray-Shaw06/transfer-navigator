@@ -307,7 +307,7 @@ function groupLabel(group: AssistAsset, heading: string): string {
     .map((s) => (s.content ?? '').trim())
     .filter(Boolean)
     .join(' ');
-  return [heading, header].filter(Boolean).join(' — ');
+  return [heading, header].filter(Boolean).join(': ');
 }
 
 export function toAgreement(result: AssistResult): Agreement {

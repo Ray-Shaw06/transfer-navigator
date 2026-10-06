@@ -61,7 +61,7 @@
   --radius-lg: 14px;
   --radius-sm: 7px;
 
-  --shadow: 0 1px 2px oklch(0.10 0.04 262 / 0.5), 0 10px 30px oklch(0.08 0.04 262 / 0.35);
+  --shadow: 0 1px 0 oklch(0.08 0.04 262 / 0.5);
 
   /* Users are in a task. Fast, exponential ease-out, nothing springy. */
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
@@ -103,7 +103,7 @@
     --caution-soft: oklch(0.955 0.045 85);
     --row-todo: oklch(0.976 0.016 38);
 
-    --shadow: 0 1px 2px oklch(0.3 0.04 262 / 0.07), 0 10px 30px oklch(0.3 0.04 262 / 0.08);
+    --shadow: 0 1px 0 oklch(0.3 0.04 262 / 0.08);
   }
 }
 
@@ -126,7 +126,7 @@
   --caution: oklch(0.48 0.115 85);
   --caution-soft: oklch(0.955 0.045 85);
   --row-todo: oklch(0.976 0.016 38);
-  --shadow: 0 1px 2px oklch(0.3 0.04 262 / 0.07), 0 10px 30px oklch(0.3 0.04 262 / 0.08);
+  --shadow: 0 1px 0 oklch(0.3 0.04 262 / 0.08);
 }
 
 :root[data-theme='dark'] { color-scheme: dark; }
@@ -611,7 +611,6 @@ input::placeholder { color: var(--ink-3); }
    right about what the college asks. A quiet rule and a badge on the chip. */
 .route-block[data-added='true'] {
   border: 1px solid var(--line-strong);
-  border-left: 3px solid var(--signal);
   border-radius: var(--radius-sm);
   padding: 0.75rem 0.875rem;
   margin-bottom: 0.75rem;

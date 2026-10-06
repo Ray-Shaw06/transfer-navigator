@@ -50,9 +50,9 @@ describe('marksAdmission', () => {
   // between them is the whole distinction.
   it('reads the phrase wherever it falls in the campus label', () => {
     expect(
-      marksAdmission('MAJOR PREPARATION COURSES REQUIRED FOR TRANSFER — REQUIRED FOR ADMISSION'),
+      marksAdmission('MAJOR PREPARATION COURSES REQUIRED FOR TRANSFER: REQUIRED FOR ADMISSION'),
     ).toBe(true);
-    expect(marksAdmission('ADDITIONAL APPROVED COURSES FOR THE MAJOR — REQUIRED FOR ADMISSION')).toBe(
+    expect(marksAdmission('ADDITIONAL APPROVED COURSES FOR THE MAJOR: REQUIRED FOR ADMISSION')).toBe(
       true,
     );
     expect(marksAdmission('ADDITIONAL APPROVED COURSES FOR THE MAJOR')).toBe(false);
@@ -75,7 +75,7 @@ describe('marksAnyAdmission', () => {
   it('is true as soon as one section is marked', () => {
     expect(
       marksAnyAdmission([
-        section('MAJOR PREPARATION — REQUIRED FOR ADMISSION', true),
+        section('MAJOR PREPARATION: REQUIRED FOR ADMISSION', true),
         section('ADDITIONAL APPROVED COURSES FOR THE MAJOR', false),
       ]),
     ).toBe(true);
