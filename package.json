@@ -13,6 +13,7 @@
   },
   "license": "ISC",
   "dependencies": {
+    "@vercel/analytics": "^2.0.1",
     "next": "^16.2.12",
     "pdfjs-dist": "^6.1.200",
     "react": "^19.2.8",
