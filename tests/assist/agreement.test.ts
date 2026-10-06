@@ -326,7 +326,7 @@ describe('toAgreement', () => {
       ]),
     );
 
-    expect(agreement.sections[0].label).toBe('PREPARATION FOR THE MAJOR — REQUIRED FOR ADMISSION');
+    expect(agreement.sections[0].label).toBe('PREPARATION FOR THE MAJOR: REQUIRED FOR ADMISSION');
   });
 
   it('drops a section that produced no rows rather than showing an empty heading', () => {
