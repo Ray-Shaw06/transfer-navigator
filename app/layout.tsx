@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Public_Sans, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
 import { Nav } from './components/Nav';
+import { Analytics } from '@vercel/analytics/next';
 
 // One family carries headings, labels, data and prose, which is what product
 // UI wants. The mono is not a second voice: it is used only for course codes,
@@ -71,6 +72,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             </p>
           </footer>
         </div>
+        <Analytics />
       </body>
     </html>
   );
