@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Public_Sans, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
+import { Analytics } from '@vercel/analytics/next';
 import { Nav } from './components/Nav';
 
 // One family carries headings, labels, data and prose, which is what product
@@ -71,6 +72,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             </p>
           </footer>
         </div>
+        <Analytics />
       </body>
     </html>
   );
