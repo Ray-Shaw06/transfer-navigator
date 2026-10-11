@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readPlanUrl, writePlanUrl } from '../../app/lib/urlState';
+import { EXAMPLE_PLAN_QUERY } from '../../app/lib/example';
 
 const settings = {
   start: { kind: 'Fall' as const, year: 2026 },
@@ -129,5 +130,15 @@ describe('plan URL state', () => {
     expect(back.college).toBeNull();
     expect(back.completed.size).toBe(0);
     expect(back.settings).toBeNull();
+  });
+});
+
+describe('example plan link', () => {
+  it('is a valid plan the page can restore', () => {
+    const back = readPlanUrl(EXAMPLE_PLAN_QUERY);
+    expect(back.college).toBe(49);
+    expect(back.campus).toBe(120);
+    expect(back.year).toBe(76);
+    expect(back.major).toBe(KEY);
   });
 });
