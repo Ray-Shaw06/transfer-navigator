@@ -38,6 +38,7 @@ import {
   yearsFor,
 } from './lib/assist';
 import { readPlanUrl, writePlanUrl } from './lib/urlState';
+import { EXAMPLE_PLAN_LABEL, EXAMPLE_PLAN_QUERY } from './lib/example';
 
 function Skeleton({ rows }: { rows: number }) {
   return (
@@ -387,6 +388,15 @@ export default function Home() {
           />
         ) : failure ? null : (
           <Skeleton rows={3} />
+        )}
+
+        {college === null && !agreement && (
+          <p className="field-note example-link">
+            Want to see what you get first?{' '}
+            {/* A plain anchor, not next/link: the plan is read from the URL once
+                at mount, so this has to be a fresh page load to take effect. */}
+            <a href={EXAMPLE_PLAN_QUERY}>Open an example: {EXAMPLE_PLAN_LABEL}</a>
+          </p>
         )}
       </section>
 

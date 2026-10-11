@@ -299,6 +299,7 @@ input:disabled { opacity: 0.55; cursor: not-allowed; }
 
 input::placeholder { color: var(--ink-3); }
 
+.example-link { margin-top: 1rem; }
 .field-note { margin-top: 0.4375rem; font-size: 0.8125rem; color: var(--ink-2); }
 
 .check {
@@ -792,7 +793,7 @@ details.more[open] > summary::before { content: '–'; }
 .bar {
   height: 0.75rem;
   border-radius: 999px;
-  background: linear-gradient(90deg, var(--surface) 25%, var(--surface-2) 50%, var(--surface) 75%);
+  background: linear-gradient(90deg, var(--surface-2) 25%, var(--line) 50%, var(--surface-2) 75%);
   background-size: 200% 100%;
   animation: sweep 1.4s linear infinite;
 }
@@ -878,7 +879,7 @@ details.more[open] > summary::before { content: '–'; }
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
-  .bar { background: var(--surface-2); }
+  .bar { background: var(--line); }
 }
 
 @media (max-width: 34rem) {
