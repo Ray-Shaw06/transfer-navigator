@@ -184,6 +184,10 @@ export default function Home() {
 
       <section className="home-close">
         <h2 className="home-h2">Start with your own agreement.</h2>
+        <p className="home-built">
+          Built by Rehaan Shaw, a computer science student at UC Irvine who made this transfer
+          from Pasadena City College.
+        </p>
         <div className="home-actions">
           <Link href="/plan" className="cta">
             Plan my transfer
