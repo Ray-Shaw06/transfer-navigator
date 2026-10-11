@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { ThemeToggle } from './ThemeToggle';
 
 const LINKS = [
-  { href: '/', label: 'Plan' },
+  { href: '/plan', label: 'Plan' },
   { href: '/compare', label: 'Compare' },
   { href: '/about', label: 'How it works' },
 ];
