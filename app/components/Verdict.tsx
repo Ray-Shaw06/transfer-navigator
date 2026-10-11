@@ -30,7 +30,7 @@ const unitsOf = (items: ScheduleItem[]) => items.reduce((sum, i) => sum + i.unit
 const courseList = (items: ScheduleItem[]) =>
   items.flatMap((i) => (i.kind === 'course' ? [i.course.code] : [])).join(', ');
 
-function verdictFor(
+export function verdictFor(
   plan: Plan,
   schedule: Schedule,
   target: TermRef | null,
