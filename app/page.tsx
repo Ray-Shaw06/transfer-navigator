@@ -1,5 +1,6 @@
 import Link from 'next/link';
-import { EXAMPLE_PLAN_LABEL, EXAMPLE_PLAN_QUERY } from './lib/example';
+import { EXAMPLE_PLAN_QUERY } from './lib/example';
+import { LiveDemo } from './components/LiveDemo';
 
 /*
   THESIS: a planner earns trust by showing a real plan and its own limits on the
@@ -13,44 +14,6 @@ import { EXAMPLE_PLAN_LABEL, EXAMPLE_PLAN_QUERY } from './lib/example';
   plan beside it.
   FORM: the ledger, three columns of reads, works out, will not check.
 */
-
-// Taken from a real run of the planner on the example agreement, so the home
-// page shows output the tool actually produces. It is a snapshot: if the
-// planner's output for this agreement changes, update it from /plan.
-const SAMPLE = {
-  verdict: '5 requirements left, finishing Spring 2029.',
-  detail: '28 semester units: 25 on the agreement, 3 of prerequisites it does not mention.',
-  terms: [
-    {
-      season: 'Spring',
-      year: 2027,
-      units: 15,
-      items: ['English Composition', 'Critical Thinking and Composition', 'CS 002', 'MATH 005A'],
-    },
-    {
-      season: 'Fall',
-      year: 2027,
-      units: 14,
-      items: ['Arts and Humanities', 'Oral Communication', 'CS 003A', 'MATH 005B'],
-    },
-    {
-      season: 'Spring',
-      year: 2028,
-      units: 14,
-      items: ['Arts and Humanities', 'Social and Behavioral Sciences', 'CS 003B', 'CS 003BL', 'MATH 010'],
-    },
-    {
-      season: 'Fall',
-      year: 2028,
-      units: 13,
-      items: ['Social and Behavioral Sciences', 'Physical and Biological Sciences', 'CS 008'],
-    },
-    { season: 'Spring', year: 2029, units: 3, items: ['Ethnic Studies'] },
-  ],
-  check: 'CS 002 and MATH 005A need MATH 008 or MATH 009, or a placement result. Not added to the plan, so check yours.',
-};
-
-const isCode = (item: string) => /^[A-Z]{2,}\s\d/.test(item);
 
 export default function Home() {
   return (
@@ -75,42 +38,7 @@ export default function Home() {
           <p className="home-fine">No account. Nothing you enter leaves your browser.</p>
         </div>
 
-        <aside className="sample" aria-labelledby="sample-title">
-          <h2 id="sample-title" className="sample-title">
-            A real plan, not a mockup
-          </h2>
-          <p className="sample-from">
-            {EXAMPLE_PLAN_LABEL}. 2025-2026 agreement, starting Spring 2027.
-          </p>
-          <p className="sample-verdict">{SAMPLE.verdict}</p>
-          <p className="sample-detail">{SAMPLE.detail}</p>
-
-          <ol className="sample-terms">
-            {SAMPLE.terms.map((term) => (
-              <li key={`${term.season}${term.year}`}>
-                <div className="sample-when">
-                  <span>{term.season}</span>
-                  <span className="sample-year">{term.year}</span>
-                </div>
-                <div className="sample-items">
-                  <p className="sample-units">{term.units} units</p>
-                  <p>
-                    {term.items.map((item, i) => (
-                      <span key={item}>
-                        {i > 0 && ', '}
-                        {isCode(item) ? <span className="code">{item}</span> : item}
-                      </span>
-                    ))}
-                  </p>
-                </div>
-              </li>
-            ))}
-          </ol>
-
-          <p className="sample-check">
-            <strong>To check:</strong> {SAMPLE.check}
-          </p>
-        </aside>
+        <LiveDemo />
       </section>
 
       <section className="home-section" aria-labelledby="ledger-title">
