@@ -69,8 +69,31 @@ const ENDPOINT = 'https://www.ratemyprofessors.com/graphql';
 // requests. It is not a secret and identifies no account.
 const CLIENT_AUTH = 'Basic dGVzdDp0ZXN0';
 
-// Pasadena City College on RateMyProfessors.
-export const PCC_SCHOOL_ID = 'U2Nob29sLTI2NDk=';
+const SCHOOL_QUERY = `query($q:SchoolSearchQuery!){newSearch{schools(query:$q){edges{node{id name state}}}}}`;
+const schoolCache = new Map<string, string | null>();
+
+// RateMyProfessors has no list of California community colleges to join
+// against, so the school is found by its exact name. Not matching exactly means
+// no ratings, never a rating from a similarly named school.
+export async function schoolIdFor(collegeName: string): Promise<string | null> {
+  if (schoolCache.has(collegeName)) return schoolCache.get(collegeName) ?? null;
+  const response = await fetch(ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: CLIENT_AUTH },
+    body: JSON.stringify({ query: SCHOOL_QUERY, variables: { q: { text: collegeName } } }),
+    cache: 'no-store',
+  });
+  if (!response.ok) throw new Error(`school lookup answered ${response.status}`);
+  const body = (await response.json()) as {
+    data?: { newSearch?: { schools?: { edges?: { node: { id: string; name: string; state: string } }[] } } };
+  };
+  const hit = (body.data?.newSearch?.schools?.edges ?? []).find(
+    (e) => e.node.state === 'CA' && e.node.name.toLowerCase() === collegeName.toLowerCase(),
+  );
+  const id = hit?.node.id ?? null;
+  schoolCache.set(collegeName, id);
+  return id;
+}
 
 const QUERY = `query($q:TeacherSearchQuery!){newSearch{teachers(query:$q,first:8){edges{node{legacyId firstName lastName department avgRating avgDifficulty numRatings wouldTakeAgainPercent}}}}}`;
 

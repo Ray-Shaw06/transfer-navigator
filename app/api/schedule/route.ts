@@ -1,9 +1,11 @@
-import { badRequest, cached, failed } from '../../../../src/assist/http';
-import { chooseTerm, sectionsFor, type Season } from '../../../../src/schedule/pccServer';
+import { badRequest, cached, failed, intParam } from '../../../src/assist/http';
+import { SCHEDULE_COVERAGE } from '../../../src/schedule/coverage';
+import { sectionsForCollege, termFor } from '../../../src/schedule/providers';
+import type { Season } from '../../../src/schedule/pccServer';
 
-// A schedule for a term is open seats, which change by the hour once
-// registration opens, so this is cached for minutes, not days. The term itself
-// is read once into the function's memory; see pccServer.ts.
+// Open seats change by the hour once registration opens, so this is cached for
+// minutes, not days. Each provider reads its term into function memory once;
+// see the *Server.ts files.
 export const maxDuration = 30;
 
 const MAX_COURSES = 20;
@@ -12,6 +14,7 @@ const SEASONS = new Set<string>(['Winter', 'Spring', 'Summer', 'Fall']);
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
+  const college = intParam(url, 'college');
   const [season, yearText] = (url.searchParams.get('term') ?? '').split('-');
   const year = Number(yearText);
   const courses = (url.searchParams.get('courses') ?? '')
@@ -19,6 +22,9 @@ export async function GET(request: Request) {
     .map((c) => c.trim())
     .filter(Boolean);
 
+  if (college === null || !SCHEDULE_COVERAGE[college]) {
+    return badRequest('college must be a college whose class schedule is supported.');
+  }
   if (!SEASONS.has(season) || !Number.isInteger(year) || year < 2000 || year > 2100) {
     return badRequest('term must look like Spring-2027.');
   }
@@ -27,9 +33,9 @@ export async function GET(request: Request) {
   }
 
   try {
-    const term = await chooseTerm(season as Season, year);
+    const term = await termFor(college, season as Season, year);
     if (!term) return cached({ term: null, sections: [] }, 600);
-    const sections = await sectionsFor(term.code, courses);
+    const sections = await sectionsForCollege(college, term.code, courses);
     return cached({ term, sections }, 600);
   } catch (error) {
     return failed(error);
