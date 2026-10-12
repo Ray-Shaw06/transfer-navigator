@@ -87,7 +87,13 @@ account login, so it is gated. Not used.
 
 Colleague Self-Service (Chaffey) serves its search page anonymously, but the JSON
 endpoints reject a request without the page's antiforgery token. Whether to replay
-that token is a call for the project owner, so it is parked, not built.
+that token is a call for the project owner, so it is parked, not built. The same
+product also serves San Jose-Evergreen CCD (`selfservice.sjeccd.edu/Student/Courses/Search`,
+linked from evc.edu/schedule), so one Colleague adapter would reach at least
+Chaffey, Cabrillo, Evergreen Valley and San Jose City.
+
+Fresno City, Ohlone and De Anza answer automated visitors with 403 and were not
+examined further.
 
 Santa Rosa Junior College has a Banner 9 host
 (`reg-prod.santarosajc.elluciancloud.com:8103`, note the port) but is **not
