@@ -89,8 +89,14 @@ Colleague Self-Service (Chaffey) serves its search page anonymously, but the JSO
 endpoints reject a request without the page's antiforgery token. Whether to replay
 that token is a call for the project owner, so it is parked, not built.
 
-Not examined yet: Foothill-De Anza's Banner 9, Mt. SAC, Cerritos, Long Beach,
-Santa Monica, El Camino, Canyons.
+Santa Rosa Junior College has a Banner 9 host
+(`reg-prod.santarosajc.elluciancloud.com:8103`, note the port) but is **not
+supported**. Fall 2026 is complete (68 CS sections), yet Spring 2026, the
+fallback for an unpublished Spring 2027, is View Only and exposes 3 subjects, so a
+spring plan would get empty estimates. Revisit when Spring 2027 is published.
+
+Not examined yet: Foothill-De Anza's Banner 9, Cerritos, Long Beach, Santa
+Monica, El Camino, Canyons.
 
 ## A bug the real data found
 
