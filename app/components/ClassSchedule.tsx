@@ -5,9 +5,8 @@ import type { ScheduledTerm } from '../../src/planner/schedule';
 import { alternatives, pickSchedule, type Pick, type Unplaced } from '../../src/schedule/pick';
 import type { Day, SchedulePreferences, Section } from '../../src/schedule/types';
 import type { Rating } from '../../src/schedule/rmp';
+import { scheduleCoverage } from '../../src/schedule/coverage';
 
-// Pasadena City College is the one college whose class schedule is read so far.
-export const SCHEDULE_COLLEGE = 49;
 
 type TermInfo = { code: string; label: string; estimate: boolean };
 type Loaded =
@@ -61,7 +60,7 @@ function seatsText(section: Section) {
 }
 
 const REASON: Record<Unplaced['reason'], string> = {
-  'no-sections': 'PCC lists no sections of this course for the term.',
+  'no-sections': 'The college lists no sections of this course for the term.',
   preferences: 'Every section is ruled out by your limits. Loosen days or hours.',
   conflict: 'Its sections overlap the rest of this schedule. Try the alternates or loosen your limits.',
 };
@@ -189,7 +188,8 @@ export function ClassSchedule({ college, terms }: { college: number | null; term
   const [view, setView] = useState<'list' | 'week'>('list');
   const [overrides, setOverrides] = useState<Record<string, string>>({});
 
-  const enabled = college === SCHEDULE_COLLEGE && term !== undefined && codes.length > 0;
+  const covered = scheduleCoverage(college);
+  const enabled = covered !== null && term !== undefined && codes.length > 0;
 
   useEffect(() => {
     if (!enabled || !term) return;
@@ -197,7 +197,7 @@ export function ClassSchedule({ college, terms }: { college: number | null; term
     setLoaded({ status: 'loading' });
     setRatings(null);
     setOverrides({});
-    fetch(`/api/schedule/pcc?term=${term.ref.kind}-${term.ref.year}&courses=${encodeURIComponent(codeKey)}`, {
+    fetch(`/api/schedule?college=${college}&term=${term.ref.kind}-${term.ref.year}&courses=${encodeURIComponent(codeKey)}`, {
       signal: controller.signal,
     })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
@@ -205,7 +205,7 @@ export function ClassSchedule({ college, terms }: { college: number | null; term
         setLoaded({ status: 'ready', term: body.term, sections: body.sections });
         const names = [...new Set(body.sections.flatMap((s) => (s.instructor ? [s.instructor] : [])))].slice(0, 40);
         if (names.length === 0) return setRatings({});
-        return fetch(`/api/schedule/ratings?names=${encodeURIComponent(names.join('|'))}`, {
+        return fetch(`/api/schedule/ratings?college=${college}&names=${encodeURIComponent(names.join('|'))}`, {
           signal: controller.signal,
         })
           .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
@@ -217,7 +217,7 @@ export function ClassSchedule({ college, terms }: { college: number | null; term
         if ((error as { name?: string }).name !== 'AbortError') setLoaded({ status: 'error' });
       });
     return () => controller.abort();
-  }, [enabled, term?.ref.kind, term?.ref.year, codeKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [enabled, college, term?.ref.kind, term?.ref.year, codeKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const prefs: SchedulePreferences = useMemo(() => {
     const w = WINDOWS[windowKey];
@@ -256,15 +256,15 @@ export function ClassSchedule({ college, terms }: { college: number | null; term
 
   if (college === null || terms.length === 0) return null;
 
-  if (college !== SCHEDULE_COLLEGE) {
+  if (covered === null) {
     return (
       <section className="panel">
         <div className="panel-head">
           <h2>Class schedule</h2>
         </div>
         <p className="field-note">
-          Picking real class sections is only available for Pasadena City College so far. Other colleges
-          publish their schedules in different systems and each one has to be read separately.
+          Picking real class sections is only available for some colleges so far. Each college publishes its
+          schedule in a different system and each one has to be read separately.
         </p>
       </section>
     );
@@ -286,7 +286,7 @@ export function ClassSchedule({ college, terms }: { college: number | null; term
     <section className="panel cs">
       <div className="panel-head">
         <h2>Class schedule</h2>
-        <p>Real sections from Pasadena City College. It never registers you for anything.</p>
+        <p>Real sections from {covered.name}. It never registers you for anything.</p>
       </div>
 
       {terms.length > 1 && (
@@ -415,10 +415,10 @@ export function ClassSchedule({ college, terms }: { college: number | null; term
             </fieldset>
           </div>
 
-          {loaded.status === 'loading' && <p className="field-note">Loading sections from PCC. A cold load takes a few seconds.</p>}
+          {loaded.status === 'loading' && <p className="field-note">Loading sections from {covered.name}. A cold load takes a few seconds.</p>}
           {loaded.status === 'error' && (
             <p role="alert" className="notice" data-tone="error">
-              <strong>Could not load PCC&rsquo;s class schedule</strong>
+              <strong>Could not load the class schedule</strong>
               Try again in a minute. Your plan above is unaffected.
             </p>
           )}
@@ -426,15 +426,15 @@ export function ClassSchedule({ college, terms }: { college: number | null; term
           {loaded.status === 'ready' && (
             <>
               {loaded.term === null ? (
-                <p className="field-note">PCC has no published schedule for this term or the same term last year.</p>
+                <p className="field-note">{covered.name} has no schedule this can read for this term or the same term in the last two years.</p>
               ) : loaded.term.estimate ? (
                 <p className="notice" data-tone="caution">
                   <strong>This is last year&rsquo;s pattern.</strong>
-                  PCC has not published {term.label} yet, so these are the {loaded.term.label} sections. Days, times and
+                  {covered.name} has no {term.label} schedule this can read yet, so these are the {loaded.term.label} sections. Days, times and
                   instructors will differ. Use it to see what usually exists, not what you will register for.
                 </p>
               ) : (
-                <p className="field-note">Sections for {loaded.term.label}, read from PCC. Seats change quickly.</p>
+                <p className="field-note">Sections for {loaded.term.label}, read from {covered.name}. Seats change quickly.</p>
               )}
 
               <div className="cs-view" role="group" aria-label="View">
@@ -518,7 +518,7 @@ export function ClassSchedule({ college, terms }: { college: number | null; term
               <p className="field-note">
                 Ranked on open seats first, then the professor and time of day by the balance you set. Ratings are
                 summaries from RateMyProfessors and are only as good as the reviews behind them. Confirm every section
-                in PCC&rsquo;s own system before you register.
+                in {covered.name}&rsquo;s own system before you register.
               </p>
             </>
           )}

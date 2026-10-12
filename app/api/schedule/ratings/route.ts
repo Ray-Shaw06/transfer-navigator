@@ -1,5 +1,6 @@
-import { badRequest, cached, failed } from '../../../../src/assist/http';
-import { PCC_SCHOOL_ID, ratingFor, type Rating } from '../../../../src/schedule/rmp';
+import { badRequest, cached, failed, intParam } from '../../../../src/assist/http';
+import { SCHEDULE_COVERAGE } from '../../../../src/schedule/coverage';
+import { ratingFor, schoolIdFor, type Rating } from '../../../../src/schedule/rmp';
 
 export const maxDuration = 30;
 
@@ -10,6 +11,10 @@ const DAY = 24 * 60 * 60;
 // Ratings change slowly, so a day at the CDN and a day in memory. A failed
 // lookup for one name leaves that name unrated and does not fail the rest.
 export async function GET(request: Request) {
+  const college = intParam(new URL(request.url), 'college');
+  if (college === null || !SCHEDULE_COVERAGE[college]) {
+    return badRequest('college must be a college whose class schedule is supported.');
+  }
   const names = [
     ...new Set(
       (new URL(request.url).searchParams.get('names') ?? '')
@@ -23,6 +28,9 @@ export async function GET(request: Request) {
   }
 
   try {
+    const schoolId = await schoolIdFor(SCHEDULE_COVERAGE[college].name);
+    // No matching school means no ratings, which the page handles as unrated.
+    if (!schoolId) return cached({ ratings: {} as Record<string, Rating | null> }, DAY);
     const ratings: Record<string, Rating | null> = {};
     const queue = [...names];
     // Four at a time, so a full term of instructors is a few seconds and the
@@ -30,7 +38,7 @@ export async function GET(request: Request) {
     await Promise.all(
       Array.from({ length: 4 }, async () => {
         for (let name = queue.shift(); name; name = queue.shift()) {
-          ratings[name] = await ratingFor(name, PCC_SCHOOL_ID).catch(() => null);
+          ratings[name] = await ratingFor(name, schoolId).catch(() => null);
         }
       }),
     );
