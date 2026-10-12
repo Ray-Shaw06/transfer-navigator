@@ -1,8 +1,8 @@
 # Class schedule coverage
 
-Which colleges this can read class schedules from. Today: **4 of 116**: Pasadena
-City College (`src/schedule/pcc.ts`) and the three San Diego CCD colleges
-(`src/schedule/sdccd.ts`). This file is the working record for the
+Which colleges this can read class schedules from. Today: **6 of 116**: Pasadena
+City College (`pcc.ts`), the three San Diego CCD colleges (`sdccd.ts`) and the two
+North Orange County CCD colleges, Cypress and Fullerton (`nocccd.ts`). This file is the working record for the
 rest, started 2026-10-11.
 
 Catalogs reached 38 of 116 colleges ([catalog-coverage.md](catalog-coverage.md)),
@@ -63,12 +63,14 @@ Looked at with the browser and the pages' own source, 2026-10-11.
 | District (colleges) | Result |
 |---|---|
 | Los Angeles CCD (9) | **Blocked.** laccd.edu answers automated visitors with 403. Not worked around. Needs a different way in, or the colleges' own sites |
-| San Diego CCD (3) | **Supported.** Each term is a static JSON file at `sdccd.edu/docs/StudentServices/schedule/<term>.json`, PeopleSoft rows with class number, caps, enrollment, waitlist, meetings, instructor. Published files stop at Summer 2026. The current term is served only by a token gated proxy built for the college's own page, which is deliberately not used, so the schedule is always a term or more behind and shown as an estimate |
-| Los Rios (4) | Public search at `losrios.edu/academics/search-class-schedules` takes its filters in the query string (`strm=1269,Fall 2026`) and appears to render results on the server. No JSON feed found yet. Would mean reading HTML |
-| Peralta (4) | Class Schedule & Catalog page found, not yet examined |
-| Riverside CCD (3) | Schedules page found (`rccd.edu/schedules`), term PDFs on `docrepo.rccd.edu`. A live search was not found |
-| 4CD (3) | Links to each college's own schedule and a shared page. Not yet examined |
-| Foothill-De Anza (2), North Orange County (2), Coast (3) | District sites show no class search link from the homepage. Not yet examined |
+| San Diego CCD (3) | **Supported, estimates only.** Each term is a static JSON file at `sdccd.edu/docs/StudentServices/schedule/<term>.json`. Published files stop at Summer 2026. The current term is served only by a token gated proxy built for the college's own page, which is deliberately not used |
+| North Orange County CCD (2 credit colleges) | **Supported, real next term.** `schedule.nocccd.edu/data/<term>/sections.json` and `courses.json`, the files its own search page loads. No login or token. Winter/Spring 2027 is already published. Winter and Spring share one term code, split by campus code `NH` |
+| 4CD: Diablo Valley, Los Medanos, Contra Costa (3) | **Decision needed.** Uses Visual Schedule Builder (`vsb.4cd.edu`, a Modern Campus product that other colleges also run). Its `api/class-data` calls carry a client-computed time check (`t` and `e` parameters) and answer a wrong one with "correct your device's timezone". Reproducing it is trivial but it is a request check, so it is not done without a decision. If allowed, one adapter may cover several colleges |
+| Peralta (4) | **Not feasible.** Class schedules are one PDF per college and a HubSpot link. No feed |
+| Los Rios (4) | Public search takes its filters in the query string and appears to render results on the server. No JSON found. Would mean reading HTML |
+| Riverside CCD (3) | Class finder at `rcc.edu/academics/class-finder.html` posts to the site search. Term PDFs on `docrepo.rccd.edu`. No feed found |
+| Foothill-De Anza (2) | De Anza answers automated visitors with 403. Foothill's schedule page found, not examined further |
+| Coast, Orange Coast and others | Not yet examined |
 
 ## What decides whether a district is worth an adapter
 
@@ -82,4 +84,5 @@ rendered HTML is possible but fragile, so it comes after the feeds.
 |---|---|
 | Pasadena City College (49) | Supported |
 | San Diego City (54), Mesa (101), Miramar (45) | Supported, estimates only |
+| Cypress (71), Fullerton (134) | Supported, real next term |
 | Everything else | Not supported |

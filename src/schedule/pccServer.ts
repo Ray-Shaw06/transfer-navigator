@@ -18,6 +18,9 @@ export type TermChoice = {
   // True when the requested term is not published yet and this is the same
   // season a year earlier, shown so the student can see the usual pattern.
   estimate: boolean;
+  // For a feed that covers two seasons in one term (Winter and Spring), which
+  // of them this request is for.
+  part?: Season;
 };
 
 const SEASON_SUFFIX = { Winter: '10', Spring: '30', Summer: '50', Fall: '70' } as const;
