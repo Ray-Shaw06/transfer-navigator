@@ -6,13 +6,15 @@
 // it. The survey, including colleges ruled out and why, is in
 // docs/schedule-coverage.md.
 
-export type ScheduleProviderId = 'pcc' | 'sdccd';
+export type ScheduleProviderId = 'pcc' | 'sdccd' | 'nocccd';
 
 export const SCHEDULE_COVERAGE: Record<number, { provider: ScheduleProviderId; name: string; district: string }> = {
   49: { provider: 'pcc', name: 'Pasadena City College', district: 'Pasadena Area CCD' },
   54: { provider: 'sdccd', name: 'San Diego City College', district: 'San Diego CCD' },
   101: { provider: 'sdccd', name: 'San Diego Mesa College', district: 'San Diego CCD' },
   45: { provider: 'sdccd', name: 'San Diego Miramar College', district: 'San Diego CCD' },
+  71: { provider: 'nocccd', name: 'Cypress College', district: 'North Orange County CCD' },
+  134: { provider: 'nocccd', name: 'Fullerton College', district: 'North Orange County CCD' },
 };
 
 export const scheduleCoverage = (college: number | null) =>

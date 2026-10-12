@@ -9,7 +9,8 @@ import type { Season } from '../../../src/schedule/pccServer';
 export const maxDuration = 30;
 
 const MAX_COURSES = 20;
-const COURSE = /^[A-Za-z&]{1,8}\s?[A-Za-z]?\d{1,4}[A-Za-z]{0,2}$/;
+// Codes as colleges spell them: "MATH 005A", "C1001", "AC/R 036 C", "MATH 151 F".
+const COURSE = /^[A-Za-z&/]{1,8}\s?[A-Za-z]?\d{1,4}\s?[A-Za-z]{0,2}$/;
 const SEASONS = new Set<string>(['Winter', 'Spring', 'Summer', 'Fall']);
 
 export async function GET(request: Request) {
@@ -35,7 +36,7 @@ export async function GET(request: Request) {
   try {
     const term = await termFor(college, season as Season, year);
     if (!term) return cached({ term: null, sections: [] }, 600);
-    const sections = await sectionsForCollege(college, term.code, courses);
+    const sections = await sectionsForCollege(college, term, courses);
     return cached({ term, sections }, 600);
   } catch (error) {
     return failed(error);
