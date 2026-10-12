@@ -95,8 +95,14 @@ supported**. Fall 2026 is complete (68 CS sections), yet Spring 2026, the
 fallback for an unpublished Spring 2027, is View Only and exposes 3 subjects, so a
 spring plan would get empty estimates. Revisit when Spring 2027 is published.
 
-Not examined yet: Foothill-De Anza's Banner 9, Cerritos, Long Beach, Santa
-Monica, El Camino, Canyons.
+Examined 2026-10-11, no feed found, so not built: Cerritos (a CGI form at
+`secure.cerritos.edu/schedule/courses.cgi`), Long Beach (`apps.lbcc.edu/schedule`
+now redirects to a marketing page), Santa Monica (its own PHP page), El Camino and
+Canyons (the schedule URLs on file return 404). Guessed Banner hostnames
+(`ssb.<college>.edu`, `reg-prod.ec.<college>.edu`) did not resolve for any of
+them. Each would mean reading rendered HTML.
+
+Not examined yet: Foothill-De Anza's Banner 9.
 
 ## A bug the real data found
 
