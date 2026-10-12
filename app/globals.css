@@ -1793,3 +1793,42 @@ details.more[open] > summary::before { content: '–'; }
 
 .sample-note { margin-top: var(--space-4); font-size: 0.875rem; color: var(--ink-3); }
 .sample-empty { padding: var(--space-3) 0; border-top: 1px solid var(--line); color: var(--ink-2); }
+
+/* ----------------------------------- class schedule */
+
+.cs { margin-top: var(--space-4); }
+.cs-terms, .cs-row, .cs-view { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.cs-terms { margin-bottom: var(--space-4); }
+.cs-view { margin: var(--space-4) 0; }
+.cs-small { min-height: 2.25rem; padding: var(--space-1) var(--space-3); }
+.cs-controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: var(--space-4); margin: var(--space-4) 0; align-items: start; }
+.cs-controls fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.cs-controls legend, .cs-field label { display: block; font-size: 0.875rem; font-weight: 600; margin-bottom: var(--space-2); padding: 0; }
+.cs-slider label span { color: var(--signal-ink); }
+.cs-slider input { width: 100%; accent-color: var(--signal); }
+.cs-muted { color: var(--ink-3); font-size: 0.875rem; }
+
+.cs-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-4); }
+.cs-list > li { border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-4); background: var(--surface); }
+.cs-pick { display: grid; gap: var(--space-1); }
+.cs-course { font-size: 1.0625rem; }
+.cs-alts { margin-top: var(--space-3); }
+.cs-alts summary { cursor: pointer; font-weight: 600; color: var(--signal-ink); }
+.cs-alts ul { list-style: none; margin: var(--space-3) 0 0; padding: 0; display: grid; gap: var(--space-3); }
+.cs-alts li { display: flex; justify-content: space-between; gap: var(--space-4); align-items: start; padding-top: var(--space-3); border-top: 1px solid var(--line); }
+.cs-unplaced { margin: var(--space-2) 0 0; padding-left: var(--space-4); }
+
+.cs-week { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); overflow-x: auto; margin-bottom: var(--space-4); }
+.cs-week-head, .cs-week-body { display: grid; min-width: 34rem; }
+.cs-week-head { grid-template-columns: 3.25rem repeat(auto-fit, minmax(0, 1fr)); font-size: 0.875rem; font-weight: 600; border-bottom: 1px solid var(--line); }
+.cs-week-head span { padding: var(--space-2); text-align: center; }
+.cs-week-hours, .cs-week-col { position: relative; }
+.cs-week-hours span { position: absolute; right: var(--space-2); transform: translateY(-0.5em); font-size: 0.75rem; color: var(--ink-3); }
+.cs-week-col { border-left: 1px solid var(--line); }
+.cs-week-col i { position: absolute; left: 0; right: 0; border-top: 1px solid var(--line); opacity: 0.6; }
+.cs-block { position: absolute; left: var(--space-1); right: var(--space-1); display: grid; align-content: start; gap: 0; padding: var(--space-1) var(--space-2); border: 1px solid var(--signal); border-radius: var(--radius-sm); background: var(--signal-soft); color: var(--ink); font-size: 0.8125rem; overflow: hidden; }
+.cs-untimed { margin-bottom: var(--space-4); }
+
+@media (max-width: 34rem) {
+  .cs-alts li { flex-direction: column; }
+}

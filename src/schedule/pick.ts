@@ -50,12 +50,34 @@ export function conflicts(a: Section, b: Section): boolean {
   );
 }
 
-// Higher is better. Open seats matter most, since a full section is one the
-// student cannot take, then a waitlist, then fewer days on campus.
-function score(section: Section): number {
-  const seats = section.seatsOpen > 0 ? 100 : section.waitlistCount === 0 ? 10 : 0;
+// Higher is better. Open seats dominate: a full section is one the student
+// cannot take, so no professor or time makes it the better choice over an open
+// one. Then the professor and the time of day, weighted by the student, then
+// fewer days on campus.
+const SEAT_OPEN = 100;
+const SEAT_WAITLIST_EMPTY = 10;
+const SOFT_RANGE = 40;
+
+export function scoreSection(section: Section, prefs: SchedulePreferences = {}): number {
+  const weight = prefs.professorWeight ?? 0.5;
+  const seats = section.seatsOpen > 0 ? SEAT_OPEN : section.waitlistCount === 0 ? SEAT_WAITLIST_EMPTY : 0;
   const days = new Set(section.meetings.flatMap((m) => m.days)).size;
-  return seats - 2 * days;
+
+  // Centred on 2.5, so a rating below that counts against an instructor and
+  // one above counts for them, scaled to at most half of SOFT_RANGE each way.
+  const rating = section.instructor ? prefs.ratings?.[section.instructor] : undefined;
+  const professor = rating === undefined ? 0 : ((rating - 2.5) / 2.5) * SOFT_RANGE * weight;
+
+  // Online and arranged sections have no hour to be wrong, so they take the
+  // time bonus.
+  const { preferredStart, preferredEnd } = prefs;
+  const timed = preferredStart !== undefined && preferredEnd !== undefined;
+  const inWindow =
+    section.meetings.length === 0 ||
+    section.meetings.every((m) => m.start >= preferredStart! && m.end <= preferredEnd!);
+  const time = timed && inWindow ? SOFT_RANGE * (1 - weight) : 0;
+
+  return seats + professor + time - 2 * days;
 }
 
 export function pickSchedule(
@@ -79,7 +101,7 @@ export function pickSchedule(
       unplaced.push({ course, reason: 'no-sections' });
       continue;
     }
-    const allowed = all.filter((s) => withinPreferences(s, prefs)).sort((a, b) => score(b) - score(a));
+    const allowed = all.filter((s) => withinPreferences(s, prefs)).sort((a, b) => scoreSection(b, prefs) - scoreSection(a, prefs));
     if (allowed.length === 0) {
       unplaced.push({ course, reason: 'preferences' });
       continue;
@@ -105,7 +127,7 @@ export function pickSchedule(
     for (const candidate of options[index].sections) {
       if (chosen.some((c) => c && conflicts(c, candidate))) continue;
       chosen[index] = candidate;
-      search(index + 1, placed + 1, total + score(candidate));
+      search(index + 1, placed + 1, total + scoreSection(candidate, prefs));
       chosen[index] = null;
     }
     // Leave this course out, so a clash on one course cannot sink the rest.
@@ -124,4 +146,28 @@ export function pickSchedule(
   const order = new Map(courses.map((c, i) => [c, i]));
   picks.sort((a, b) => order.get(a.course)! - order.get(b.course)!);
   return { picks, unplaced };
+}
+
+// Other sections of the same course that could replace this pick without
+// clashing with the rest of the schedule, best first. The student's hard limits
+// still apply: an alternate they would have ruled out is not offered.
+export function alternatives(
+  pick: Pick,
+  picks: Pick[],
+  sections: Section[],
+  prefs: SchedulePreferences = {},
+  limit = 6,
+): Section[] {
+  const key = canonicalCourseKey(pick.course);
+  const others = picks.filter((p) => p !== pick).map((p) => p.section);
+  return sections
+    .filter(
+      (s) =>
+        canonicalCourseKey(s.course) === key &&
+        s.crn !== pick.section.crn &&
+        withinPreferences(s, prefs) &&
+        !others.some((o) => conflicts(o, s)),
+    )
+    .sort((a, b) => scoreSection(b, prefs) - scoreSection(a, prefs))
+    .slice(0, limit);
 }

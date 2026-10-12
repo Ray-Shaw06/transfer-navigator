@@ -111,3 +111,91 @@ describe('pickSchedule', () => {
     expect(pickSchedule(['CS 3B'], [s]).picks).toHaveLength(1);
   });
 });
+
+import { alternatives, scoreSection } from '../../src/schedule/pick';
+import { matchTeacher, type Candidate } from '../../src/schedule/rmp';
+
+describe('professor and time ranking', () => {
+  const great = section({ crn: 'great', instructor: 'A Good', meetings: [{ days: ['M', 'W'], start: 480, end: 565 }] });
+  const poor = section({ crn: 'poor', instructor: 'B Poor', meetings: [{ days: ['M', 'W'], start: 780, end: 865 }] });
+  const ratings = { 'A Good': 4.8, 'B Poor': 1.7 };
+
+  it('prefers the better-rated instructor when professor weight is high', () => {
+    const r = pickSchedule(['CS 002'], [poor, great], { ratings, professorWeight: 1 });
+    expect(r.picks[0].section.crn).toBe('great');
+  });
+
+  it('prefers the section in the preferred window when time weight is high', () => {
+    const neutral = { professorWeight: 0, preferredStart: 720, preferredEnd: 1020 };
+    const r = pickSchedule(['CS 002'], [great, poor], neutral);
+    expect(r.picks[0].section.crn).toBe('poor');
+  });
+
+  it('never lets a rating beat an open seat over a full section', () => {
+    const fullGreat = { ...great, seatsOpen: 0, waitlistCount: 12 };
+    const openPoor = { ...poor, seatsOpen: 8 };
+    const prefs = { ratings, professorWeight: 1 };
+    expect(scoreSection(openPoor, prefs)).toBeGreaterThan(scoreSection(fullGreat, prefs));
+  });
+
+  it('treats an unrated instructor as neutral, not as bad', () => {
+    const a = section({ instructor: 'Unrated' });
+    const b = section({ instructor: null });
+    expect(scoreSection(a, { ratings })).toBe(scoreSection(b, { ratings }));
+  });
+});
+
+describe('alternatives', () => {
+  it('offers other sections that fit around the rest of the schedule, best first', () => {
+    const cs = section({ crn: 'cs1', course: 'CS 002', meetings: [{ days: ['M'], start: 480, end: 565 }] });
+    const math = section({ crn: 'm1', course: 'MATH 005A', meetings: [{ days: ['T'], start: 480, end: 565 }] });
+    const csAlt = section({ crn: 'cs2', course: 'CS 002', meetings: [{ days: ['W'], start: 480, end: 565 }] });
+    const csClash = section({ crn: 'cs3', course: 'CS 002', meetings: [{ days: ['T'], start: 500, end: 600 }] });
+    const all = [cs, math, csAlt, csClash];
+    const { picks } = pickSchedule(['CS 002', 'MATH 005A'], all);
+    const csPick = picks.find((p) => p.course === 'CS 002')!;
+    const alts = alternatives(csPick, picks, all);
+    expect(alts.map((s) => s.crn)).not.toContain('cs3');
+    expect(alts.map((s) => s.crn)).not.toContain(csPick.section.crn);
+  });
+});
+
+describe('instructor matching', () => {
+  const c = (over: Partial<Candidate>): Candidate => ({
+    legacyId: 1, firstName: 'Juan', lastName: 'Leon', department: 'Computer Science',
+    avgRating: 1.7, avgDifficulty: 4.1, numRatings: 118, wouldTakeAgainPercent: 16.8, ...over,
+  });
+
+  it('matches on first and last name, not on a fuzzy search hit', () => {
+    const hits = [c({ firstName: 'Juan', lastName: 'Mendoza', legacyId: 2 }), c({})];
+    expect(matchTeacher('Juan Leon', hits)?.url).toContain('/professor/1');
+  });
+
+  it('returns nothing rather than a different person', () => {
+    expect(matchTeacher('Juan Leon', [c({ lastName: 'Mendoza' })])).toBeNull();
+  });
+
+  it('ignores a rating built on too few reviews', () => {
+    expect(matchTeacher('Juan Leon', [c({ numRatings: 2 })])).toBeNull();
+  });
+
+  it('picks the better-reviewed of two with the same name', () => {
+    const hits = [c({ legacyId: 5, numRatings: 4 }), c({ legacyId: 6, numRatings: 90 })];
+    expect(matchTeacher('Juan Leon', hits)?.url).toContain('/professor/6');
+  });
+
+  it('ignores accents and a middle name', () => {
+    const hits = [c({ firstName: 'José', lastName: 'Ortíz', legacyId: 9 })];
+    expect(matchTeacher('Jose Luis Ortiz', hits)?.url).toContain('/professor/9');
+  });
+});
+
+import { titleCase } from '../../src/schedule/pcc';
+
+describe('titles', () => {
+  it('title-cases PCC capitals and keeps numerals and languages', () => {
+    expect(titleCase('FUNDAMENTALS OF COMPUTER SCIENCE II (C++)')).toBe('Fundamentals of Computer Science II (C++)');
+    expect(titleCase('FUNDAMENTALS OF COMPUTER SCIENCE (JAVA) LAB')).toBe('Fundamentals of Computer Science (Java) Lab');
+    expect(titleCase('Already Mixed Case')).toBe('Already Mixed Case');
+  });
+});

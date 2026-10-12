@@ -27,6 +27,7 @@ import { RouteView } from '../components/Route';
 import { Requirements } from '../components/Requirements';
 import { GeneralEducation } from '../components/GeneralEducation';
 import { ShareLink } from '../components/ShareLink';
+import { ClassSchedule } from '../components/ClassSchedule';
 import { PlanControls, SchoolPicker, type PlanSettings } from '../components/SchoolPicker';
 import {
   useAgreement,
@@ -487,6 +488,8 @@ export default function Home() {
               />
             </section>
           )}
+
+          <ClassSchedule college={college} terms={schedule.terms} />
 
           <section className="panel" style={{ marginTop: '1rem' }}>
             <div className="panel-head">

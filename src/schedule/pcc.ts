@@ -56,6 +56,24 @@ function minutes(hhmm: string | null): number | null {
   return Number(padded.slice(0, 2)) * 60 + Number(padded.slice(2));
 }
 
+// PCC sends titles in capitals. Small words go back to lower case and anything
+// with a digit, a plus or a roman numeral keeps its capitals, so "II" and
+// "(C++)" survive.
+const SMALL = new Set(['and', 'of', 'the', 'to', 'for', 'in', 'a', 'an', 'on', 'with', 'or']);
+const KEEP = /^(?:[ivx]+|[a-z]*\d[a-z\d]*|\(?c\+\+\)?|\(?java\)?|\(?python\)?)$/i;
+export function titleCase(title: string): string {
+  if (title !== title.toUpperCase()) return title;
+  return title
+    .toLowerCase()
+    .split(' ')
+    .map((word, i) => {
+      if (KEEP.test(word)) return word.toUpperCase().replace('JAVA', 'Java').replace('PYTHON', 'Python');
+      if (i > 0 && SMALL.has(word)) return word;
+      return word.charAt(0).toUpperCase() + word.slice(1);
+    })
+    .join(' ');
+}
+
 const isoDate = (value: string | null) => (value ? value.slice(0, 10) : null);
 
 const toInt = (value: string | null | undefined) => {
@@ -97,7 +115,7 @@ export function normalizePcc(rows: PccRow[]): Section[] {
     sections.push({
       crn,
       course: `${first.subjCode} ${first.courseNumbDisplay}`,
-      title: first.courseTitle,
+      title: titleCase(first.courseTitle),
       units: Number(first.creditHrLow) || 0,
       instructor: first.pfaName,
       campus: first.campDesc ?? '',

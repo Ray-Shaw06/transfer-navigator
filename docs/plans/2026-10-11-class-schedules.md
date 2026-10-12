@@ -16,8 +16,24 @@ schedule system is different, so each gets an adapter that maps its rows to
   the student's days, hours and online or in-person limits. Pure, college
   independent.
 
-Still to build: a cached server route per college, the plan page panel, and
-adapters for other colleges.
+Built for PCC: the server routes (`app/api/schedule/pcc`, `app/api/schedule/ratings`),
+the term fetcher with its last-year fallback (`pccServer.ts`), instructor ratings
+(`rmp.ts`), and the plan page panel (`app/components/ClassSchedule.tsx`) with
+limits, a professor-versus-time balance, alternates and a week view.
+
+Still to build: adapters for other colleges, and general education course
+choices (an area is scheduled as units, not as a section).
+
+## Instructor ratings
+
+`rmp.ts` reads the public GraphQL endpoint RateMyProfessors' own site uses. It is
+not a documented or licensed API and the site's terms restrict automated access,
+so it can break or be withdrawn at any time. Only summary numbers are kept, with
+a link to the professor's page, and no review text is read. A section with no
+rating is neutral, so the schedule still works without it. If it is ever
+withdrawn, deleting `rmp.ts` and the ratings route leaves everything else intact.
+Matching requires the same first and last name and at least 3 ratings, so a
+fuzzy search hit is never shown as someone else's rating.
 
 ## Coverage is not 116
 

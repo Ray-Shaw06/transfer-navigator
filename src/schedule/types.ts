@@ -49,4 +49,13 @@ export type SchedulePreferences = {
   // Both default to true.
   allowOnline?: boolean;
   allowInPerson?: boolean;
+  // Soft preferences, which rank sections but never rule one out. Where the
+  // student would like class to fall, in minutes after midnight.
+  preferredStart?: number;
+  preferredEnd?: number;
+  // Instructor ratings out of 5, by instructor name. An instructor with no
+  // entry is neutral: neither helped nor hurt.
+  ratings?: Record<string, number>;
+  // 0 ranks purely on time, 1 purely on professor. Default 0.5.
+  professorWeight?: number;
 };
