@@ -28,6 +28,7 @@ export const BANNER9_HOSTS: Record<number, HostConfig> = {
   97: { host: 'ssb.citruscollege.edu' },
   72: { host: 'reg-prod.ec.gavilan.edu' },
   110: { host: 'ssb.hancockcollege.edu' },
+  62: { host: 'prodrg.mtsac.edu' },
 };
 
 const TTL_MS = 10 * 60 * 1000;
