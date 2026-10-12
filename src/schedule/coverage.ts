@@ -30,6 +30,7 @@ export const SCHEDULE_COVERAGE: Record<number, { provider: ScheduleProviderId; n
   97: { provider: 'banner9', name: 'Citrus College', district: 'Citrus CCD' },
   72: { provider: 'banner9', name: 'Gavilan College', district: 'Gavilan CCD' },
   110: { provider: 'banner9', name: 'Allan Hancock College', district: 'Allan Hancock CCD' },
+  62: { provider: 'banner9', name: 'Mt. San Antonio College', district: 'Mt. San Antonio CCD' },
 };
 
 export const scheduleCoverage = (college: number | null) =>

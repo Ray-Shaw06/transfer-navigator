@@ -1,8 +1,8 @@
 # Class schedule coverage
 
-Which colleges this can read class schedules from. Today: **19 of 116**: Pasadena
+Which colleges this can read class schedules from. Today: **20 of 116**: Pasadena
 City College (`pcc.ts`), the three San Diego CCD colleges (`sdccd.ts`), the two
-North Orange County CCD colleges (`nocccd.ts`), and 13 colleges on Ellucian
+North Orange County CCD colleges (`nocccd.ts`), and 14 colleges on Ellucian
 Banner 9 (`banner9.ts`). This file is the working record for the
 rest, started 2026-10-11.
 
@@ -20,7 +20,7 @@ results, not verified reads, and none of them is a promise of coverage.
 |---|---|
 | Pasadena City College | Custom React search over a public JSON API. **Read end to end.** |
 | Santa Monica | Its own "Search for Classes" at smc.edu/academics/classes, says it refreshes every two hours |
-| Mt. San Antonio | Its own "New Class Search" and a standard search at mtsac.edu/schedule |
+| Mt. San Antonio | **Supported (Banner 9)** at `prodrg.mtsac.edu`, found in the page source of mtsac.edu/schedule. Fall 2026 and Winter 2027 are listed, Spring 2027 is not yet, so it falls back to an estimate. Uses its own subject codes (`CSCI`, `MATH 100`) |
 | Long Beach City | "Searchable Class Schedule" at apps.lbcc.edu/schedule, tied to the Viking Student System |
 | Cerritos | MyCerritos live schedule and a separate "Schedule Plus" |
 | Fullerton | North Orange County CCD "Searchable Class Schedule", one system for the district |
@@ -114,5 +114,5 @@ rendered HTML is possible but fragile, so it comes after the feeds.
 | Pasadena City College (49) | Supported |
 | San Diego City (54), Mesa (101), Miramar (45) | Supported, estimates only |
 | Cypress (71), Fullerton (134) | Supported, real next term |
-| Moorpark, Oxnard, Ventura, Bakersfield, Cerro Coso, Porterville, Orange Coast, Golden West, Coastline, Antelope Valley, Citrus, Gavilan, Hancock | Supported (Banner 9) |
+| Moorpark, Oxnard, Ventura, Bakersfield, Cerro Coso, Porterville, Orange Coast, Golden West, Coastline, Antelope Valley, Citrus, Gavilan, Hancock, Mt. San Antonio | Supported (Banner 9) |
 | Everything else | Not supported |
