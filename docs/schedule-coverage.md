@@ -81,8 +81,15 @@ district domains I could think of, so it is a lower bound. Colleges on other
 products are separate work: Colleague Self-Service (Chaffey, Cabrillo) has a
 public course search of its own, and Glendale runs a PeopleSoft guest search that
 is HTML. Santa Barbara City publishes a Banner schedule page that renders HTML.
-Not examined yet: Foothill-De Anza's Banner 9, SOCCCD's SmartSchedule (Saddleback,
-Irvine Valley, with Spring 2027 already listed), Mt. SAC, Cerritos, Long Beach,
+SOCCCD's SmartSchedule (Saddleback, Irvine Valley) is not usable: its API
+(`classesapi.socccd.edu/smartscheduleapi/api/`) answers every route with a 302 to an
+account login, so it is gated. Not used.
+
+Colleague Self-Service (Chaffey) serves its search page anonymously, but the JSON
+endpoints reject a request without the page's antiforgery token. Whether to replay
+that token is a call for the project owner, so it is parked, not built.
+
+Not examined yet: Foothill-De Anza's Banner 9, Mt. SAC, Cerritos, Long Beach,
 Santa Monica, El Camino, Canyons.
 
 ## A bug the real data found
