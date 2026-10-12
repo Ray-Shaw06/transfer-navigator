@@ -5,8 +5,54 @@ major. It reads the ASSIST articulation agreement and builds the route: which
 courses to take, in which term, and whether you make the term you are aiming
 for. Tick what you have already finished and the plan updates around it.
 
+**[Live site](https://transfer-navigator.vercel.app)** &nbsp;|&nbsp;
+**[Open an example plan](https://transfer-navigator.vercel.app/plan?college=49&campus=120&year=76&major=76%2F49%2Fto%2F120%2FMajor%2F7752acca-2b16-46d0-fb90-08dda2ee8889)**
+
+<p align="center">
+  <img src="docs/home.png" alt="The home page. A headline on the left. On the right, a working demo of the planner on a real Pasadena City College to UC Irvine Computer Science agreement: two courses are ticked as finished and the verdict reads 4 requirements left, finishing Fall 2028." width="760" />
+</p>
+
+The demo on the home page is not a recording. It runs the same planner as the
+app, in your browser, on the real agreement: tick a course and the route
+recomputes.
+
 Not affiliated with ASSIST or any college. [assist.org](https://assist.org)
 is the official source; this is a reading of it.
+
+## What is worth a look
+
+The parts of this that took real decisions, with where to find them:
+
+- **It lives inside someone else's rate limit.** ASSIST allows 50 API calls per
+  five minutes per IP and sends no CORS header, so on a hosted site one user's
+  budget becomes the whole site's. Responses are cached at the CDN for a week to a
+  month, an outbound token bucket stops the site before ASSIST does, and a PDF
+  upload path works with no ASSIST call at all. See [How it works](#how-it-works)
+  and [Reading ASSIST](docs/reading-assist.md).
+- **Prerequisites come from the college, not the agreement.** Agreements carry
+  none. The planner reads them from the college's own catalog, for 38
+  colleges across several catalog platforms, and orders the route around them
+  where it can. Coverage and the reasons the rest are out are in
+  [docs/catalog-coverage.md](docs/catalog-coverage.md).
+- **Nothing about the student leaves the browser.** The whole plan is in the URL,
+  so a link is the plan, and an uploaded agreement PDF is parsed in the tab.
+  There is no account and no database.
+- **Every number it applies has a source.** General education counts are
+  transcribed from the ICAS standards and CSU Executive Order 1100, graded
+  Primary, Derived or Practical in [docs/rule-sources.md](docs/rule-sources.md),
+  and asserted by tests so a mistyped table fails the build.
+- **Double-counting is a matching problem.** A course listed under two general
+  education areas may be applied to only one, so the planner assigns courses to
+  areas to satisfy the most requirements instead of crediting every area.
+- **It says what it cannot check.** Where ASSIST states a rule this tool does
+  not evaluate, the section says so and the item counts as required. That
+  overstates the work rather than hiding a requirement.
+- **The parser is tested against data the repo cannot carry.** A synthetic
+  agreement PDF with invented institutions is built from scratch in the tests
+  and run through the whole pipeline, including pdfjs.
+
+437 tests pass, with 46 more that run only against live services or saved ASSIST
+responses and skip with a warning instead of passing silently.
 
 ## What it covers
 
@@ -58,8 +104,9 @@ Three things keep the site inside it:
 3. When it does run out, the UI says so plainly and points at the upload
    path, which does not touch ASSIST at all.
 
-## Three surfaces
+## Surfaces
 
+- **Home** explains what it does and runs the example above.
 - **Plan** builds the route for one college, campus and major.
 - **Compare** puts several campuses side by side for the same college, so
   "where should I aim" gets an answer in units rather than in vibes.
@@ -190,8 +237,11 @@ the same term, while MATH 005A and MATH 005B do not.
 
 ## What it will not do
 
-- **It does not know prerequisites.** Agreements do not carry them. The
-  suggested order is grouped by unit load, nothing more.
+- **It only knows prerequisites it can read.** Agreements carry none, so they
+  come from the college's own catalog, for the 38 colleges in
+  [docs/catalog-coverage.md](docs/catalog-coverage.md). For any other college
+  the order is a reading of course numbers and says so. Neither reads a
+  placement result, a corequisite waiver or an instructor's consent.
 - **It will not guess.** Where ASSIST states a rule this tool does not
   evaluate, the section says so and every item under it is counted as
   required. That overstates the work rather than hiding a requirement.
@@ -251,7 +301,7 @@ section, a receiving-side OR, and a section spanning a page break.
 | `src/planner/` | `buildPlan` (section rules, routes, unit totals), `buildSchedule` (named terms), `catalog` (the courses you can tick) |
 | `app/api/assist/` | Cached server routes; the only code that talks to ASSIST |
 | `src/assist/ge.ts` | The Cal-GETC certification list, mapped into areas |
-| `app/` | The three pages, shared data hooks in `app/lib/` |
+| `app/` | The pages (home, plan, compare, how it works) and shared data hooks in `app/lib/` |
 | `docs/plans/` | The plans this was built from, including what was left out |
 
 ## Where the rules come from
